@@ -32,3 +32,8 @@ Format:
 - [x] Updated `darkpool/AGENT_CONTEXT.md` to reflect the Option B dark pool ETF analysis plan and execution flow.
 - [x] Updated `darkpool/AGENT_INSTRUCTIONS.md` with inference rules, table requirements, outputs, and error handling.
 - [x] Logged this session entry in `darkpool/AGENT_CHANGELOG.md`.
+## 2025-12-21 Session Summary (Codex)
+- [x] Created `darkpool_analysis/` project structure with config and DuckDB scaffolding.
+- [x] Implemented FINRA/Polygon ingestion, lit inference, analytics, and plotting modules.
+- [x] Added `darkpool_analysis/README.md`, `darkpool_analysis/requirements.txt`, and `darkpool_analysis/.env` template.
+- [x] Wired `darkpool_analysis/orchestrator.py` end-to-end and exported tables/plots.
