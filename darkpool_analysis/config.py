@@ -10,7 +10,7 @@ from typing import Optional
 import pytz
 from dotenv import load_dotenv
 
-DEFAULT_TICKERS = ["TQQQ", "SPY", "QQQ", "IWM"]  # actual ETFs ["XLK", "SMH", "XLF", "KRE", "XLE", "XLI", "XLY", "XLP", "XLV", "XLU"]
+DEFAULT_TICKERS = ["TQQQ", "SPY", "QQQ", "IWM", "NVDA"]  # actual ETFs ["XLK", "SMH", "XLF", "KRE", "XLE", "XLI", "XLY", "XLP", "XLV", "XLU"]
 EXCLUDED_FINRA_TICKERS = {"SPXW"}
 
 
@@ -77,7 +77,8 @@ class Config:
 
 def load_config() -> Config:
     root_dir = Path(__file__).resolve().parent
-    load_dotenv(root_dir / ".env")
+    project_root = root_dir.parent  # Go up one level to darkpool/
+    load_dotenv(project_root / ".env")
 
     market_tz = os.getenv("MARKET_TZ", "US/Eastern")
     tz = pytz.timezone(market_tz)
