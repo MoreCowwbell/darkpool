@@ -37,3 +37,13 @@ Format:
 - [x] Implemented FINRA/Polygon ingestion, lit inference, analytics, and plotting modules.
 - [x] Added `darkpool_analysis/README.md`, `darkpool_analysis/requirements.txt`, and `darkpool_analysis/.env` template.
 - [x] Wired `darkpool_analysis/orchestrator.py` end-to-end and exported tables/plots.
+
+## 2025-12-21 Session Summary (Claude Code)
+- [x] Added root `main.py` entry point for running from project root.
+- [x] Created `darkpool_analysis/__init__.py` for proper package structure.
+- [x] Fixed imports to use relative imports with `try/except ImportError` fallback.
+- [x] Fixed DuckDB connection leak by wrapping in `try/finally` with `conn.close()`.
+- [x] Added parallel Polygon API fetching using `ThreadPoolExecutor` (configurable via `POLYGON_MAX_WORKERS`).
+- [x] Fixed `iterrows()` performance in plotter using vectorized mask operations.
+- [x] Fixed `buy_ratio` formula inconsistency: now `bought/(bought+sold)` matching `lit_buy_ratio`.
+- [x] Updated `AGENT_CONTEXT.md`, `AGENT_INSTRUCTIONS.md`, and `AGENT_CHANGELOG.md`.

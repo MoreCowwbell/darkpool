@@ -6,23 +6,26 @@
 - Persist all raw and derived data in DuckDB and save outputs locally.
 
 ## Current Capabilities
-- Requirements and plan captured; implementation is pending.
+- Full implementation complete with performance optimizations.
+- Parallel Polygon API fetching, proper connection management, and consistent buy-ratio formulas.
 
-## Where Things Live (intended layout)
-- `darkpool_analysis/`
-- `darkpool_analysis/orchestrator.py`
-- `darkpool_analysis/config.py`
-- `darkpool_analysis/db.py`
-- `darkpool_analysis/fetch_finra.py`
-- `darkpool_analysis/fetch_polygon_equity.py`
-- `darkpool_analysis/infer_buy_sell.py`
-- `darkpool_analysis/analytics.py`
-- `darkpool_analysis/plotter.py`
-- `darkpool_analysis/data/darkpool.duckdb`
-- `darkpool_analysis/output/tables/`
-- `darkpool_analysis/output/plots/`
-- `darkpool_analysis/.env`
-- `darkpool_analysis/README.md`
+## Where Things Live
+- `main.py` — Root entry point (can run from project root)
+- `darkpool_analysis/` — Package directory
+- `darkpool_analysis/__init__.py` — Package init (v0.1.0)
+- `darkpool_analysis/orchestrator.py` — Main orchestration logic
+- `darkpool_analysis/config.py` — Configuration loader from .env
+- `darkpool_analysis/db.py` — DuckDB connection and upsert helpers
+- `darkpool_analysis/fetch_finra.py` — FINRA OTC data fetcher
+- `darkpool_analysis/fetch_polygon_equity.py` — Polygon trades fetcher (parallel)
+- `darkpool_analysis/infer_buy_sell.py` — Lit trade classification (NBBO/TICK)
+- `darkpool_analysis/analytics.py` — Darkpool estimates and summary builders
+- `darkpool_analysis/plotter.py` — Buy ratio time-series plots
+- `darkpool_analysis/data/darkpool.duckdb` — Persistent storage
+- `darkpool_analysis/output/tables/` — CSV exports
+- `darkpool_analysis/output/plots/` — PNG plots
+- `darkpool_analysis/.env` — Environment configuration
+- `darkpool_analysis/requirements.txt` — Python dependencies
 
 ## Execution Flow (per scheduler tick)
 - Load config and environment variables (tickers, date ranges, MIN_LIT_VOLUME, RTH filter).
@@ -44,8 +47,11 @@
 - Options flow is out of scope; no inferred trade direction from options or short-sale files.
 
 ## Deployment and Operations
-- Local setup: `python -m pip install -r requirements.txt`, copy `.env`, then run `python orchestrator.py`.
+- Local setup: `pip install -r darkpool_analysis/requirements.txt`, copy `.env`, then run from root.
+- Run from root: `python main.py`
+- Run from subdirectory: `cd darkpool_analysis && python orchestrator.py`
 - Daily run after market close; weekly run Sunday after FINRA settlement.
+- Set `POLYGON_MAX_WORKERS` env var to control parallel API threads (default: 4).
 
 ## Known Gaps and Watchouts
 - SPXW is not an equity ticker and must be excluded from FINRA volume tables.

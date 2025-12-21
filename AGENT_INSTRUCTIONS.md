@@ -44,15 +44,19 @@
 
 ## Code Style, Layout, and Dependencies
 - Target Python 3.11+ with explicit imports.
+- Use relative imports within the package (with `try/except ImportError` fallback for direct execution).
 - Keep `orchestrator.py` thin; delegate API, persistence, analytics, and plotting to dedicated modules.
 - Keep `requirements.txt` aligned with actual imports (requests, duckdb, matplotlib, pytz, python-dotenv, pandas, etc.).
+- Use `ThreadPoolExecutor` for parallel API fetching; control via `POLYGON_MAX_WORKERS` env var.
+- Always wrap DuckDB connections in `try/finally` to ensure `conn.close()` on exit.
 
 ## Testing, Validation, and Logging
 - Keep console logging informative (`print` or `logging`) so Windows Task Scheduler logs are useful during failures.
 
 ## Documentation and Runbooks
-- Keep `README.md` synchronized with the module layout, CLI usage (`python orchestrator.py`), configuration requirements, and deployment steps.
-- Document new env vars or config toggles in both `README.md`.
+- Keep `README.md` synchronized with the module layout and deployment steps.
+- CLI usage: `python main.py` (from root) or `python orchestrator.py` (from darkpool_analysis/).
+- Document new env vars or config toggles in both `README.md` and `AGENT_CONTEXT.md`.
 - Mandatory disclaimer must appear in README and code:
   "FINRA does not publish trade direction for off-exchange volume. Buy/Sell values are inferred estimates derived from lit-market equity trades and applied proportionally to FINRA OTC volume."
 
