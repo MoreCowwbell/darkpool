@@ -1,0 +1,53 @@
+# Secrets & local config
+.env
+*.env
+
+# Python junk
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+spx_flow/__pycache__/
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# DuckDB database files
+*.duckdb
+*.duckdb.wal
+*.db
+data/spx.db 
+
+# Generated charts
+charts/
+spx_flow/charts/
+
+# Editor/OS cruft
+.claude/
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Dropbox metadata (if any)
+.dropbox*
+
+# Data archives and outputs
+archives/
+data/
+logs/
+spx_flow/archives/
+spx_flow/data/
+
+# Logs and test caches
+logs/
+*.log
+.pytest_cache/
+.coverage
