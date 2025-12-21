@@ -10,7 +10,7 @@ from typing import Optional
 import pytz
 from dotenv import load_dotenv
 
-DEFAULT_TICKERS = ["TQQQ", "SPY", "SPXW"]
+DEFAULT_TICKERS = ["TQQQ", "SPY", "QQQ", "IWM"]  # actual ETFs ["XLK", "SMH", "XLF", "KRE", "XLE", "XLI", "XLY", "XLP", "XLV", "XLU"]
 EXCLUDED_FINRA_TICKERS = {"SPXW"}
 
 
