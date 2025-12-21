@@ -7,7 +7,10 @@ from typing import Iterable
 import pandas as pd
 import pytz
 
-from config import Config
+try:
+    from .config import Config
+except ImportError:
+    from config import Config
 
 logger = logging.getLogger(__name__)
 

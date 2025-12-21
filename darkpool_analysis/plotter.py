@@ -41,12 +41,13 @@ def plot_buy_ratio_series(db_path: Path, output_dir: Path, symbols: list[str]) -
             ax.set_xlabel("Date")
             ax.grid(True, alpha=0.3)
 
-            for idx, row in df.iterrows():
-                ratio = row["buy_ratio"]
-                if ratio > 1.25:
-                    ax.annotate("BOT", (row["date"], ratio), xytext=(0, 8), textcoords="offset points")
-                elif ratio < 0.80:
-                    ax.annotate("SELL", (row["date"], ratio), xytext=(0, -12), textcoords="offset points")
+            # Vectorized annotation: filter once, then annotate
+            bot_mask = df["buy_ratio"] > 1.25
+            sell_mask = df["buy_ratio"] < 0.80
+            for d, r in zip(df.loc[bot_mask, "date"], df.loc[bot_mask, "buy_ratio"]):
+                ax.annotate("BOT", (d, r), xytext=(0, 8), textcoords="offset points")
+            for d, r in zip(df.loc[sell_mask, "date"], df.loc[sell_mask, "buy_ratio"]):
+                ax.annotate("SELL", (d, r), xytext=(0, -12), textcoords="offset points")
 
             fig.tight_layout()
             output_path = output_dir / f"{symbol.lower()}_buy_ratio.png"

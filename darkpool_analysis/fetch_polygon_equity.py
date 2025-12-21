@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta, timezone
 import json
 import logging
@@ -9,7 +10,10 @@ from typing import Tuple
 import pandas as pd
 import requests
 
-from config import Config
+try:
+    from .config import Config
+except ImportError:
+    from config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -150,17 +154,27 @@ def fetch_polygon_trades(
         logger.info("Loading Polygon trades from file: %s", config.polygon_trades_file)
         return _load_trades_from_file(config.polygon_trades_file), []
 
+    max_workers = int(os.getenv("POLYGON_MAX_WORKERS", "4"))
     failures = []
     frames = []
-    for symbol in symbols:
+
+    def fetch_one(symbol: str) -> Tuple[str, pd.DataFrame | None, Exception | None]:
         try:
             logger.info("Fetching Polygon trades for %s on %s", symbol, trade_date.isoformat())
             df = _fetch_trades_for_symbol(config, symbol, trade_date)
-            if not df.empty:
-                frames.append(df)
+            return symbol, df if not df.empty else None, None
         except Exception as exc:  # pylint: disable=broad-except
-            logger.warning("Polygon fetch failed for %s: %s", symbol, exc)
-            failures.append(symbol)
+            return symbol, None, exc
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(fetch_one, sym): sym for sym in symbols}
+        for future in as_completed(futures):
+            symbol, df, exc = future.result()
+            if exc:
+                logger.warning("Polygon fetch failed for %s: %s", symbol, exc)
+                failures.append(symbol)
+            elif df is not None:
+                frames.append(df)
 
     if not frames:
         return pd.DataFrame(columns=["symbol", "timestamp", "price", "size", "bid", "ask"]), failures

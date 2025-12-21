@@ -9,7 +9,10 @@ from typing import Optional, Tuple
 import pandas as pd
 import requests
 
-from config import Config
+try:
+    from .config import Config
+except ImportError:
+    from config import Config
 
 logger = logging.getLogger(__name__)
 
