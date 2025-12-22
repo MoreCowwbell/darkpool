@@ -69,3 +69,8 @@ Format:
 - [x] Reverted to single FINRA endpoint, now extracting tier from `tierIdentifier` as `source` column.
 - [x] Added `source` column to `finra_otc_volume_raw` table for tier tracking.
 - [x] Updated upsert key to `["symbol", "week_start_date", "source"]` for proper deduplication.
+- [x] Added symbol filtering to FINRA API request (`orFilters`) to fetch only configured tickers.
+- [x] Changed `buy_ratio` formula from percentage (bought/(bought+sold)) to ratio (bought/sold).
+- [x] Added `EXPORT_CSV` config option (default: False) to control CSV table exports.
+- [x] Created dark-theme table renderer (`table_renderer.py`) with HTML/PNG output.
+- [x] Improved `plotter.py` with dark mode styling, 300 DPI, colored thresholds, and better annotations.

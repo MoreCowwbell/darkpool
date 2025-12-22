@@ -19,6 +19,7 @@ try:
     from .fetch_polygon_equity import fetch_polygon_trades
     from .infer_buy_sell import compute_lit_directional_flow
     from .plotter import plot_buy_ratio_series
+    from .table_renderer import render_darkpool_table
 except ImportError:
     from analytics import build_darkpool_estimates, build_daily_summary
     from config import load_config
@@ -27,6 +28,7 @@ except ImportError:
     from fetch_polygon_equity import fetch_polygon_trades
     from infer_buy_sell import compute_lit_directional_flow
     from plotter import plot_buy_ratio_series
+    from table_renderer import render_darkpool_table
 
 
 def _ensure_dirs(config) -> None:
@@ -85,20 +87,23 @@ def _process_single_date(config, conn, run_date: date) -> list[str]:
     upsert_dataframe(conn, "darkpool_daily_summary", summary_df, ["symbol", "date"])
 
     date_tag = snapshot_date.strftime("%Y%m%d")
-    _export_table(
-        lit_flow_df,
-        config.table_dir / f"equity_lit_directional_flow_{date_tag}.csv",
-    )
-    _export_table(
-        estimated_flow_df,
-        config.table_dir / f"darkpool_estimated_flow_{date_tag}.csv",
-    )
-    _export_table(
-        summary_df,
-        config.table_dir / f"darkpool_daily_summary_{date_tag}.csv",
-    )
 
-    return eligible_symbols
+    # Export CSVs if enabled
+    if config.export_csv:
+        _export_table(
+            lit_flow_df,
+            config.table_dir / f"equity_lit_directional_flow_{date_tag}.csv",
+        )
+        _export_table(
+            estimated_flow_df,
+            config.table_dir / f"darkpool_estimated_flow_{date_tag}.csv",
+        )
+        _export_table(
+            summary_df,
+            config.table_dir / f"darkpool_daily_summary_{date_tag}.csv",
+        )
+
+    return eligible_symbols, snapshot_date
 
 
 def main() -> None:
@@ -112,14 +117,16 @@ def main() -> None:
     logging.info("Fetch mode: %s, dates to process: %d", config.fetch_mode, len(config.target_dates))
 
     all_symbols = set()
+    processed_dates = []
     conn = get_connection(config.db_path)
     try:
         init_db(conn)
 
         for run_date in config.target_dates:
             try:
-                symbols = _process_single_date(config, conn, run_date)
+                symbols, snapshot_date = _process_single_date(config, conn, run_date)
                 all_symbols.update(symbols)
+                processed_dates.append(snapshot_date)
             except Exception as exc:
                 logging.error("Failed to process %s: %s", run_date.isoformat(), exc)
                 continue
@@ -128,7 +135,22 @@ def main() -> None:
         conn.close()
 
     if all_symbols:
+        # Generate buy ratio plots
         plot_buy_ratio_series(config.db_path, config.plot_dir, sorted(all_symbols))
+
+        # Render dark pool table for each processed date
+        for snapshot_date in processed_dates:
+            try:
+                render_darkpool_table(
+                    db_path=config.db_path,
+                    output_dir=config.table_dir,
+                    target_date=snapshot_date,
+                    tickers=config.tickers,
+                    title="Dark Pool Volume",
+                )
+            except Exception as exc:
+                logging.error("Failed to render table for %s: %s", snapshot_date.isoformat(), exc)
+
     logging.info("Dark pool analysis complete. Processed %d dates.", len(config.target_dates))
 
 

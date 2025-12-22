@@ -4,3 +4,8 @@ pandas
 python-dotenv
 pytz
 requests
+
+# Optional: For table PNG rendering (install one of these)
+# playwright  # Recommended: pip install playwright && playwright install chromium
+# imgkit      # Alternative: requires wkhtmltopdf system install
+# selenium    # Alternative: requires chromedriver

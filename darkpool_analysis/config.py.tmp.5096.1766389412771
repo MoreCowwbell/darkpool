@@ -179,7 +179,6 @@ def load_config() -> Config:
         rth_start=rth_start,
         rth_end=rth_end,
         inference_version=os.getenv("INFERENCE_VERSION", DEFAULT_INFERENCE_VERSION),
-        export_csv=os.getenv("EXPORT_CSV", str(DEFAULT_EXPORT_CSV)).lower() in ("true", "1", "yes"),
         polygon_api_key=os.getenv("POLYGON_API_KEY"),
         polygon_base_url=os.getenv("POLYGON_BASE_URL", DEFAULT_POLYGON_BASE_URL),
         polygon_trades_file=os.getenv("POLYGON_TRADES_FILE"),
