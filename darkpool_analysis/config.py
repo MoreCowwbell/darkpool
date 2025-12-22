@@ -13,14 +13,13 @@ from dotenv import load_dotenv
 # =============================================================================
 # Default Configuration (can be overridden via .env)
 # =============================================================================
-DEFAULT_TICKERS = ["NVDA"]
+DEFAULT_TICKERS = ["RGTI"]
 EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 
 # Analysis defaults
-DEFAULT_RUN_MODE = "daily"
 DEFAULT_TARGET_DATE = "2025-12-19"  # Last trading day (Friday)
-DEFAULT_FETCH_MODE = "single"  # "single" or "backfill"
-DEFAULT_BACKFILL_FRIDAYS = 8  # Number of past Fridays to fetch in backfill mode
+DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
+DEFAULT_BACKFILL_COUNT = 8  # Number of periods to fetch (days for daily, weeks for weekly)
 DEFAULT_MIN_LIT_VOLUME = 10000
 DEFAULT_MARKET_TZ = "US/Eastern"
 DEFAULT_RTH_START = "09:30"
@@ -29,7 +28,15 @@ DEFAULT_INFERENCE_VERSION = "OptionB_v1"
 
 # API endpoints (not secrets)
 DEFAULT_POLYGON_BASE_URL = "https://api.polygon.io"
-DEFAULT_FINRA_OTC_URL = "https://api.finra.org/data/group/otcMarket/name/weeklySummary"
+
+# FINRA endpoints for complete off-exchange coverage
+DEFAULT_FINRA_ENDPOINTS = {
+    "ats": "https://api.finra.org/data/group/otcMarket/name/weeklySummary",
+    "nms_tier1": "https://api.finra.org/data/group/otcNonAts/name/nmsNonAtsTier1WeeklySummary",
+    "nms_tier2": "https://api.finra.org/data/group/otcNonAts/name/nmsNonAtsTier2WeeklySummary",
+    "otc": "https://api.finra.org/data/group/otcNonAts/name/otcNonAtsWeeklySummary",
+}
+DEFAULT_FINRA_SOURCES = ["ats", "nms_tier1", "nms_tier2", "otc"]  # Fetch from all sources
 DEFAULT_FINRA_TOKEN_URL = ""  # Empty = use direct API key auth (no OAuth needed)
 DEFAULT_FINRA_REQUEST_METHOD = "POST"
 
@@ -79,6 +86,20 @@ def _get_past_fridays(count: int, from_date: date) -> list[date]:
     return fridays  # Most recent first
 
 
+def _get_past_trading_days(count: int, from_date: date) -> list[date]:
+    """Return the last N trading days (excludes weekends)."""
+    days = []
+    current = from_date
+
+    while len(days) < count:
+        # Skip weekends (Saturday=5, Sunday=6)
+        if current.weekday() < 5:
+            days.append(current)
+        current -= timedelta(days=1)
+
+    return days  # Most recent first
+
+
 @dataclass(frozen=True)
 class Config:
     root_dir: Path
@@ -90,9 +111,8 @@ class Config:
     tickers: list[str]
     finra_tickers: list[str]
     min_lit_volume: float
-    run_mode: str
     fetch_mode: str
-    backfill_fridays: int
+    backfill_count: int
     target_date: date
     target_dates: list[date]
     market_tz: str
@@ -102,7 +122,8 @@ class Config:
     polygon_api_key: Optional[str]
     polygon_base_url: str
     polygon_trades_file: Optional[str]
-    finra_otc_url: Optional[str]
+    finra_endpoints: dict[str, str]
+    finra_sources: list[str]
     finra_otc_file: Optional[str]
     finra_api_key: Optional[str]
     finra_api_secret: Optional[str]
@@ -128,11 +149,13 @@ def load_config() -> Config:
         target_date = datetime.now(tz).date()
 
     fetch_mode = os.getenv("FETCH_MODE", DEFAULT_FETCH_MODE).lower()
-    backfill_fridays = int(os.getenv("BACKFILL_FRIDAYS", str(DEFAULT_BACKFILL_FRIDAYS)))
+    backfill_count = int(os.getenv("BACKFILL_COUNT", str(DEFAULT_BACKFILL_COUNT)))
 
-    if fetch_mode == "backfill":
-        target_dates = _get_past_fridays(backfill_fridays, target_date)
-    else:
+    if fetch_mode == "weekly":
+        target_dates = _get_past_fridays(backfill_count, target_date)
+    elif fetch_mode == "daily":
+        target_dates = _get_past_trading_days(backfill_count, target_date)
+    else:  # "single"
         target_dates = [target_date]
 
     tickers = _parse_csv_env("TICKERS") or DEFAULT_TICKERS
@@ -151,9 +174,8 @@ def load_config() -> Config:
         tickers=tickers,
         finra_tickers=finra_tickers,
         min_lit_volume=float(os.getenv("MIN_LIT_VOLUME", str(DEFAULT_MIN_LIT_VOLUME))),
-        run_mode=os.getenv("RUN_MODE", DEFAULT_RUN_MODE).lower(),
         fetch_mode=fetch_mode,
-        backfill_fridays=backfill_fridays,
+        backfill_count=backfill_count,
         target_date=target_date,
         target_dates=target_dates,
         market_tz=market_tz,
@@ -163,7 +185,8 @@ def load_config() -> Config:
         polygon_api_key=os.getenv("POLYGON_API_KEY"),
         polygon_base_url=os.getenv("POLYGON_BASE_URL", DEFAULT_POLYGON_BASE_URL),
         polygon_trades_file=os.getenv("POLYGON_TRADES_FILE"),
-        finra_otc_url=os.getenv("FINRA_OTC_URL", DEFAULT_FINRA_OTC_URL),
+        finra_endpoints=DEFAULT_FINRA_ENDPOINTS,
+        finra_sources=_parse_csv_env("FINRA_SOURCES") or DEFAULT_FINRA_SOURCES,
         finra_otc_file=os.getenv("FINRA_OTC_FILE"),
         finra_api_key=os.getenv("FINRA_API_KEY"),
         finra_api_secret=os.getenv("FINRA_API_SECRET"),

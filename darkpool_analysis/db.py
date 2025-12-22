@@ -19,7 +19,8 @@ def init_db(conn: duckdb.DuckDBPyConnection) -> None:
             symbol TEXT,
             week_start_date DATE,
             off_exchange_volume DOUBLE,
-            trade_count DOUBLE
+            trade_count DOUBLE,
+            source TEXT
         )
         """
     )
