@@ -25,6 +25,10 @@
 - Exclude NEUTRAL trades.
 - If `lit_buy_volume + lit_sell_volume < MIN_LIT_VOLUME`, set `lit_buy_ratio` to NULL and persist coverage metadata.
 
+## Ratio Formulas
+- `lit_buy_ratio` = buy_volume / (buy_volume + sell_volume) — percentage (0-1 scale), used internally for volume estimation
+- `buy_ratio` (in summary) = estimated_bought / estimated_sold — ratio scale (1.0 = neutral, >1 = net buying, <1 = net selling)
+
 ## Required Tables (must materialize)
 - `finra_otc_volume_raw`: symbol, week_start_date, off_exchange_volume, trade_count, source (tier: T1/T2/OTC)
 - `equity_trades_raw`: symbol, timestamp, price, size, bid (if available), ask (if available)

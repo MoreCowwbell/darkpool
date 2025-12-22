@@ -48,10 +48,9 @@ def build_daily_summary(
     summary["estimated_sold"] = summary["estimated_dark_sell_volume"]
     summary["total_off_exchange_volume"] = summary["finra_off_exchange_volume"]
     summary["finra_period_type"] = finra_period_type
-    # buy_ratio = bought / (bought + sold), consistent with lit_buy_ratio formula
-    total = summary["estimated_bought"] + summary["estimated_sold"]
-    summary["buy_ratio"] = summary["estimated_bought"] / total
-    summary.loc[total <= 0, "buy_ratio"] = pd.NA
+    # buy_ratio = bought / sold (ratio scale: 1.0 = neutral, >1 = net buying, <1 = net selling)
+    summary["buy_ratio"] = summary["estimated_bought"] / summary["estimated_sold"]
+    summary.loc[summary["estimated_sold"] <= 0, "buy_ratio"] = pd.NA
 
     return summary[
         [

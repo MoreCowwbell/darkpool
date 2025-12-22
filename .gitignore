@@ -45,6 +45,10 @@ data/
 logs/
 spx_flow/archives/
 spx_flow/data/
+output/
+output/plots/
+output/tables/
+tables/
 
 # Logs and test caches
 logs/

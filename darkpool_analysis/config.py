@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 # =============================================================================
 # Default Configuration (can be overridden via .env)
 # =============================================================================
-DEFAULT_TICKERS = ["ACN"]
+DEFAULT_TICKERS = ["AMZN"]
 EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 
 # Analysis defaults
