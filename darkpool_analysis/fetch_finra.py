@@ -71,14 +71,28 @@ def _load_finra_from_file(path: str) -> pd.DataFrame:
     return pd.read_csv(path)
 
 
-def _load_finra_from_api(config: Config, url: str) -> pd.DataFrame:
+def _load_finra_from_api(config: Config, symbols: list[str] | None = None) -> pd.DataFrame:
+    if not config.finra_otc_url:
+        raise ValueError("FINRA_OTC_URL is required when FINRA_OTC_FILE is not set.")
     headers = _build_finra_headers(config)
     method = config.finra_request_method
     params = config.finra_request_params or {}
-    payload = config.finra_request_json
+
+    # Build request payload with symbol filter and higher limit
+    payload = config.finra_request_json.copy() if config.finra_request_json else {}
+    payload.setdefault("limit", 10000)  # Increase default limit
+
+    # Add symbol filter if symbols provided
+    if symbols:
+        symbol_filters = [
+            {"fieldName": "issueSymbolIdentifier", "fieldValue": sym, "compareType": "EQUAL"}
+            for sym in symbols
+        ]
+        payload["orFilters"] = symbol_filters
+
     if method == "POST":
         response = requests.post(
-            url,
+            config.finra_otc_url,
             headers=headers,
             params=params,
             json=payload,
@@ -86,7 +100,7 @@ def _load_finra_from_api(config: Config, url: str) -> pd.DataFrame:
         )
     else:
         response = requests.get(
-            url,
+            config.finra_otc_url,
             headers=headers,
             params=params,
             timeout=60,
@@ -151,9 +165,17 @@ def _normalize_finra_columns(df: pd.DataFrame, config: Config) -> pd.DataFrame:
     else:
         normalized["trade_count"] = pd.NA
 
-    # Preserve source column if present
-    if "source" in df.columns:
-        normalized["source"] = df["source"].values
+    # Extract tier from tierIdentifier field (T1, T2, OTC)
+    tier_candidates = ["tierIdentifier", "tier_identifier", "tier"]
+    tier_col = None
+    for candidate in tier_candidates:
+        if candidate in df.columns:
+            tier_col = candidate
+            break
+    if tier_col:
+        normalized["source"] = df[tier_col].astype(str).str.upper()
+    else:
+        normalized["source"] = "unknown"
 
     normalized = normalized.dropna(subset=["symbol", "week_start_date", "off_exchange_volume"])
     return normalized
@@ -165,29 +187,10 @@ def fetch_finra_otc_volume(
     if config.finra_otc_file:
         logger.info("Loading FINRA OTC data from file: %s", config.finra_otc_file)
         raw_df = _load_finra_from_file(config.finra_otc_file)
-        raw_df["source"] = "file"
     else:
-        # Fetch from all configured FINRA sources
-        all_frames = []
-        for source_name in config.finra_sources:
-            if source_name not in config.finra_endpoints:
-                logger.warning("Unknown FINRA source: %s, skipping", source_name)
-                continue
-            url = config.finra_endpoints[source_name]
-            logger.info("Fetching FINRA data from %s: %s", source_name, url)
-            try:
-                df = _load_finra_from_api(config, url)
-                df["source"] = source_name
-                all_frames.append(df)
-                logger.info("Fetched %d rows from %s", len(df), source_name)
-            except Exception as exc:
-                logger.error("Failed to fetch from %s: %s", source_name, exc)
-                continue
-
-        if not all_frames:
-            raise RuntimeError("No FINRA data fetched from any source.")
-        raw_df = pd.concat(all_frames, ignore_index=True)
-        logger.info("Combined %d total rows from %d sources", len(raw_df), len(all_frames))
+        logger.info("Fetching FINRA OTC data from API for symbols: %s", config.finra_tickers)
+        raw_df = _load_finra_from_api(config, symbols=config.finra_tickers)
+        logger.info("Fetched %d rows from FINRA API", len(raw_df))
 
     normalized = _normalize_finra_columns(raw_df, config)
     normalized = normalized[normalized["symbol"].isin(config.finra_tickers)].copy()

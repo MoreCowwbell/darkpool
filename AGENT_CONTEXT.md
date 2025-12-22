@@ -10,6 +10,8 @@
 - Parallel Polygon API fetching with aggregates fallback (when trades API returns 403).
 - Proper connection management and consistent buy-ratio formulas.
 - FINRA direct API key authentication (no OAuth token needed).
+- Multi-date fetch modes: "single", "daily" (last N trading days), "weekly" (last N Fridays).
+- FINRA tier tracking via `tierIdentifier` field (T1=NMS Tier 1, T2=NMS Tier 2, OTC).
 
 ## Where Things Live
 - `main.py` — Root entry point (can run from project root)
@@ -40,7 +42,7 @@
 
 ## Data and Storage Details
 - DuckDB is the single source of truth: `darkpool_analysis/data/darkpool.duckdb`.
-- Raw tables: `finra_otc_volume_raw`, `equity_trades_raw`.
+- Raw tables: `finra_otc_volume_raw` (includes `source` column for tier: T1/T2/OTC), `equity_trades_raw`.
 - Derived tables: `equity_lit_directional_flow`, `darkpool_estimated_flow`, `darkpool_daily_summary`.
 - Store float64 values; round only for display/export.
 
@@ -58,7 +60,11 @@
 
 ## Configuration Structure
 - **`.env` (project root)**: Only secrets (POLYGON_API_KEY, FINRA_API_KEY, FINRA_API_SECRET).
-- **`config.py`**: All defaults (DEFAULT_TICKERS, DEFAULT_TARGET_DATE, URLs, etc.).
+- **`config.py`**: All defaults (DEFAULT_TICKERS, DEFAULT_TARGET_DATE, DEFAULT_FETCH_MODE, URLs, etc.).
+- **Fetch modes**: `FETCH_MODE` controls both date selection and snapshot behavior:
+  - `"single"`: Process only target_date, snapshot keyed by target_date.
+  - `"daily"`: Process last N trading days (BACKFILL_COUNT), snapshot keyed by target_date.
+  - `"weekly"`: Process last N Fridays (BACKFILL_COUNT), snapshot keyed by FINRA week.
 - Polygon trades API requires paid tier; code auto-falls back to aggregates (minute bars) on 403.
 - DEFAULT_TARGET_DATE should be set to a trading day (not weekend/holiday).
 

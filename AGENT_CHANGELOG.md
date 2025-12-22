@@ -58,4 +58,14 @@ Format:
 - [x] Simplified DEFAULT_TICKERS to just NVDA for initial testing.
 - [x] Added `DEFAULT_TARGET_DATE = "2025-12-19"` to handle weekend runs.
 - [x] Successfully ran end-to-end analysis with plot output.
-- [x] Updated all AGENT*.md files with config structure and new features.
+
+## 2025-12-21 Session Summary (Claude Code) - Fetch Mode & FINRA Tier Tracking
+- [x] Consolidated `RUN_MODE` and `FETCH_MODE` into single `FETCH_MODE` setting.
+- [x] Added multi-date fetch modes: "single", "daily" (last N trading days), "weekly" (last N Fridays).
+- [x] Renamed `DEFAULT_BACKFILL_FRIDAYS` to `DEFAULT_BACKFILL_COUNT`.
+- [x] Added `_get_past_trading_days()` helper for daily mode.
+- [x] Attempted multi-endpoint FINRA approach (ats, nms_tier1, nms_tier2, otc) - discovered 401 errors.
+- [x] Researched FINRA API: single endpoint returns all tiers via `tierIdentifier` field (T1, T2, OTC).
+- [x] Reverted to single FINRA endpoint, now extracting tier from `tierIdentifier` as `source` column.
+- [x] Added `source` column to `finra_otc_volume_raw` table for tier tracking.
+- [x] Updated upsert key to `["symbol", "week_start_date", "source"]` for proper deduplication.

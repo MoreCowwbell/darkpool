@@ -26,7 +26,7 @@
 - If `lit_buy_volume + lit_sell_volume < MIN_LIT_VOLUME`, set `lit_buy_ratio` to NULL and persist coverage metadata.
 
 ## Required Tables (must materialize)
-- `finra_otc_volume_raw`: symbol, trade_date or week_start_date, off_exchange_volume, trade_count (if available)
+- `finra_otc_volume_raw`: symbol, week_start_date, off_exchange_volume, trade_count, source (tier: T1/T2/OTC)
 - `equity_trades_raw`: symbol, timestamp, price, size, bid (if available), ask (if available)
 - `equity_lit_directional_flow`: symbol, date, lit_buy_volume, lit_sell_volume, lit_buy_ratio, classification_method, lit_coverage_pct
 - `darkpool_estimated_flow`: symbol, date, finra_off_exchange_volume, estimated_dark_buy_volume, estimated_dark_sell_volume, applied_lit_buy_ratio, inference_version
@@ -45,8 +45,13 @@
 
 ## Configuration Structure
 - **`.env` (project root)**: Only API secrets (POLYGON_API_KEY, FINRA_API_KEY, FINRA_API_SECRET).
-- **`config.py`**: All defaults including DEFAULT_TICKERS, DEFAULT_TARGET_DATE, API URLs.
+- **`config.py`**: All defaults including DEFAULT_TICKERS, DEFAULT_TARGET_DATE, DEFAULT_FETCH_MODE, API URLs.
+- **Fetch modes** (`FETCH_MODE` env var or DEFAULT_FETCH_MODE):
+  - `"single"`: Process only target_date.
+  - `"daily"`: Process last BACKFILL_COUNT trading days.
+  - `"weekly"`: Process last BACKFILL_COUNT Fridays, snapshot keyed by FINRA week.
 - FINRA uses direct X-API-KEY/X-API-SECRET headers (no OAuth token flow).
+- FINRA data includes `tierIdentifier` field (T1=NMS Tier 1, T2=NMS Tier 2, OTC) stored as `source` column.
 - Set DEFAULT_TARGET_DATE to a trading day; weekends/holidays will have no Polygon data.
 
 ## Code Style, Layout, and Dependencies

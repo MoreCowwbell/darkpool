@@ -13,13 +13,13 @@ from dotenv import load_dotenv
 # =============================================================================
 # Default Configuration (can be overridden via .env)
 # =============================================================================
-DEFAULT_TICKERS = ["RGTI"]
+DEFAULT_TICKERS = ["ACN"]
 EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 
 # Analysis defaults
 DEFAULT_TARGET_DATE = "2025-12-19"  # Last trading day (Friday)
-DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
-DEFAULT_BACKFILL_COUNT = 8  # Number of periods to fetch (days for daily, weeks for weekly)
+DEFAULT_FETCH_MODE = "single"  # "single", "daily", or "weekly"
+DEFAULT_BACKFILL_COUNT = 10  # Number of periods to fetch (days for daily, weeks for weekly)
 DEFAULT_MIN_LIT_VOLUME = 10000
 DEFAULT_MARKET_TZ = "US/Eastern"
 DEFAULT_RTH_START = "09:30"
@@ -29,14 +29,8 @@ DEFAULT_INFERENCE_VERSION = "OptionB_v1"
 # API endpoints (not secrets)
 DEFAULT_POLYGON_BASE_URL = "https://api.polygon.io"
 
-# FINRA endpoints for complete off-exchange coverage
-DEFAULT_FINRA_ENDPOINTS = {
-    "ats": "https://api.finra.org/data/group/otcMarket/name/weeklySummary",
-    "nms_tier1": "https://api.finra.org/data/group/otcNonAts/name/nmsNonAtsTier1WeeklySummary",
-    "nms_tier2": "https://api.finra.org/data/group/otcNonAts/name/nmsNonAtsTier2WeeklySummary",
-    "otc": "https://api.finra.org/data/group/otcNonAts/name/otcNonAtsWeeklySummary",
-}
-DEFAULT_FINRA_SOURCES = ["ats", "nms_tier1", "nms_tier2", "otc"]  # Fetch from all sources
+# FINRA OTC endpoint (returns all tiers: T1, T2, OTC via tierIdentifier field)
+DEFAULT_FINRA_OTC_URL = "https://api.finra.org/data/group/otcMarket/name/weeklySummary"
 DEFAULT_FINRA_TOKEN_URL = ""  # Empty = use direct API key auth (no OAuth needed)
 DEFAULT_FINRA_REQUEST_METHOD = "POST"
 
@@ -122,8 +116,7 @@ class Config:
     polygon_api_key: Optional[str]
     polygon_base_url: str
     polygon_trades_file: Optional[str]
-    finra_endpoints: dict[str, str]
-    finra_sources: list[str]
+    finra_otc_url: Optional[str]
     finra_otc_file: Optional[str]
     finra_api_key: Optional[str]
     finra_api_secret: Optional[str]
@@ -185,8 +178,7 @@ def load_config() -> Config:
         polygon_api_key=os.getenv("POLYGON_API_KEY"),
         polygon_base_url=os.getenv("POLYGON_BASE_URL", DEFAULT_POLYGON_BASE_URL),
         polygon_trades_file=os.getenv("POLYGON_TRADES_FILE"),
-        finra_endpoints=DEFAULT_FINRA_ENDPOINTS,
-        finra_sources=_parse_csv_env("FINRA_SOURCES") or DEFAULT_FINRA_SOURCES,
+        finra_otc_url=os.getenv("FINRA_OTC_URL", DEFAULT_FINRA_OTC_URL),
         finra_otc_file=os.getenv("FINRA_OTC_FILE"),
         finra_api_key=os.getenv("FINRA_API_KEY"),
         finra_api_secret=os.getenv("FINRA_API_SECRET"),
