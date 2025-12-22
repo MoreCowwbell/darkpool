@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import logging
 import math
 from pathlib import Path
@@ -149,8 +150,8 @@ def plot_buy_ratio_series(db_path: Path, output_dir: Path, symbols: list[str]) -
 
             # Title and labels
             ax.set_title(
-                f"{symbol} Dark Pool Log Buy/Sell Ratio",
-                fontsize=18,
+                f"{symbol} DarkPool Buy/Sell Ratio",
+                fontsize=12,
                 fontweight="bold",
                 color=COLORS["title"],
                 pad=20,
@@ -235,3 +236,55 @@ def plot_buy_ratio_series(db_path: Path, output_dir: Path, symbols: list[str]) -
             logger.info("Saved plot: %s", output_path)
     finally:
         conn.close()
+
+
+def main() -> None:
+    """CLI entry point for plotter."""
+    parser = argparse.ArgumentParser(
+        description="Generate dark pool log ratio plots"
+    )
+    parser.add_argument(
+        "--symbols",
+        type=str,
+        default=None,
+        help="Comma-separated list of symbols (default: from config)",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default=None,
+        help="Output directory (default: from config)",
+    )
+
+    args = parser.parse_args()
+
+    # Setup logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+    )
+
+    # Load config
+    try:
+        from .config import load_config
+    except ImportError:
+        from config import load_config
+
+    config = load_config()
+
+    # Get symbols
+    if args.symbols:
+        symbols = [s.strip().upper() for s in args.symbols.split(",")]
+    else:
+        symbols = config.tickers
+
+    # Get output dir
+    output_dir = Path(args.output_dir) if args.output_dir else config.plot_dir
+
+    # Generate plots
+    plot_buy_ratio_series(config.db_path, output_dir, symbols)
+    print(f"Plots saved to: {output_dir}")
+
+
+if __name__ == "__main__":
+    main()

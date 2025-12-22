@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 # =============================================================================
 # Default Configuration (can be overridden via .env)
 # =============================================================================
-DEFAULT_TICKERS = ["AMZN"]
+DEFAULT_TICKERS = ["TQQQ"]
 EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 # ["XLK", "SMH", "XLF", "KRE", "XLE", "XLI", "XLY", "XLP", "XLV", "XLU"]
 
