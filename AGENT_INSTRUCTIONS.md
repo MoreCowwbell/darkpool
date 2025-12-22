@@ -39,8 +39,15 @@
 
 ## Error Handling
 - FINRA failure: abort run.
-- Polygon partial failure: proceed with warning; no silent fallbacks.
+- Polygon trades 403: auto-fallback to aggregates (minute bars) with log message.
+- Polygon complete failure: proceed with warning; persist empty lit flow.
 - Always persist coverage metadata when inference is limited.
+
+## Configuration Structure
+- **`.env` (project root)**: Only API secrets (POLYGON_API_KEY, FINRA_API_KEY, FINRA_API_SECRET).
+- **`config.py`**: All defaults including DEFAULT_TICKERS, DEFAULT_TARGET_DATE, API URLs.
+- FINRA uses direct X-API-KEY/X-API-SECRET headers (no OAuth token flow).
+- Set DEFAULT_TARGET_DATE to a trading day; weekends/holidays will have no Polygon data.
 
 ## Code Style, Layout, and Dependencies
 - Target Python 3.11+ with explicit imports.

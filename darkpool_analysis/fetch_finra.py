@@ -112,7 +112,7 @@ def _normalize_finra_columns(df: pd.DataFrame, config: Config) -> pd.DataFrame:
     symbol_col = _resolve_column(
         df,
         config.finra_symbol_field,
-        ["symbol", "issueSymbol", "issue_symbol", "Symbol"],
+        ["symbol", "issueSymbolIdentifier", "issueSymbol", "issue_symbol", "Symbol"],
     )
     date_col = _resolve_column(
         df,

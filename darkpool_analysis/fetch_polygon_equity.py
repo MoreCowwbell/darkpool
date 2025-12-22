@@ -95,6 +95,69 @@ def _build_time_params(trade_date: date, fmt: str) -> dict:
     }
 
 
+def _fetch_aggregates_for_symbol(
+    config: Config, symbol: str, trade_date: date
+) -> pd.DataFrame:
+    """Fetch minute aggregates as fallback when trades endpoint is unavailable."""
+    if not config.polygon_api_key:
+        raise ValueError("POLYGON_API_KEY is required to fetch Polygon data.")
+
+    url = f"{config.polygon_base_url.rstrip('/')}/v2/aggs/ticker/{symbol}/range/1/minute/{trade_date.isoformat()}/{trade_date.isoformat()}"
+    params = {
+        "adjusted": "true",
+        "sort": "asc",
+        "limit": 50000,
+        "apiKey": config.polygon_api_key,
+    }
+
+    response = requests.get(url, params=params, timeout=60)
+    response.raise_for_status()
+    payload = response.json()
+    results = payload.get("results", [])
+
+    if not results:
+        return pd.DataFrame(columns=["symbol", "timestamp", "price", "size", "bid", "ask"])
+
+    records = []
+    for bar in results:
+        # Use VWAP as representative price, volume as size
+        # Estimate directional flow: if close > open, bullish; else bearish
+        open_price = bar.get("o", 0)
+        close_price = bar.get("c", 0)
+        high_price = bar.get("h", 0)
+        low_price = bar.get("l", 0)
+        volume = bar.get("v", 0)
+        vwap = bar.get("vw", close_price)
+        timestamp = bar.get("t")  # Unix ms
+
+        if not timestamp or not volume:
+            continue
+
+        # Estimate bid/ask from bar range for directional inference
+        # If close > open: price action was bullish, use close as "ask" hit
+        # If close < open: price action was bearish, use close as "bid" hit
+        if close_price >= open_price:
+            # Bullish bar - treat as buy at ask
+            bid = low_price
+            ask = close_price
+        else:
+            # Bearish bar - treat as sell at bid
+            bid = close_price
+            ask = high_price
+
+        records.append({
+            "symbol": symbol,
+            "timestamp": timestamp,
+            "price": vwap,
+            "size": volume,
+            "bid": bid,
+            "ask": ask,
+        })
+
+    df = pd.DataFrame(records)
+    return _normalize_trades_dataframe(df)
+
+
 def _fetch_trades_for_symbol(
     config: Config, symbol: str, trade_date: date
 ) -> pd.DataFrame:
@@ -163,6 +226,15 @@ def fetch_polygon_trades(
             logger.info("Fetching Polygon trades for %s on %s", symbol, trade_date.isoformat())
             df = _fetch_trades_for_symbol(config, symbol, trade_date)
             return symbol, df if not df.empty else None, None
+        except requests.HTTPError as exc:
+            if exc.response is not None and exc.response.status_code == 403:
+                logger.info("Trades 403 for %s, falling back to aggregates", symbol)
+                try:
+                    df = _fetch_aggregates_for_symbol(config, symbol, trade_date)
+                    return symbol, df if not df.empty else None, None
+                except Exception as agg_exc:
+                    return symbol, None, agg_exc
+            return symbol, None, exc
         except Exception as exc:  # pylint: disable=broad-except
             return symbol, None, exc
 

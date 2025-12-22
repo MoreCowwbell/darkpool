@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 import json
 import os
 from pathlib import Path
@@ -10,8 +10,28 @@ from typing import Optional
 import pytz
 from dotenv import load_dotenv
 
-DEFAULT_TICKERS = ["TQQQ", "SPY", "QQQ", "IWM", "NVDA"]  # actual ETFs ["XLK", "SMH", "XLF", "KRE", "XLE", "XLI", "XLY", "XLP", "XLV", "XLU"]
-EXCLUDED_FINRA_TICKERS = {"SPXW"}
+# =============================================================================
+# Default Configuration (can be overridden via .env)
+# =============================================================================
+DEFAULT_TICKERS = ["NVDA"]
+EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
+
+# Analysis defaults
+DEFAULT_RUN_MODE = "daily"
+DEFAULT_TARGET_DATE = "2025-12-19"  # Last trading day (Friday)
+DEFAULT_FETCH_MODE = "single"  # "single" or "backfill"
+DEFAULT_BACKFILL_FRIDAYS = 8  # Number of past Fridays to fetch in backfill mode
+DEFAULT_MIN_LIT_VOLUME = 10000
+DEFAULT_MARKET_TZ = "US/Eastern"
+DEFAULT_RTH_START = "09:30"
+DEFAULT_RTH_END = "16:00"
+DEFAULT_INFERENCE_VERSION = "OptionB_v1"
+
+# API endpoints (not secrets)
+DEFAULT_POLYGON_BASE_URL = "https://api.polygon.io"
+DEFAULT_FINRA_OTC_URL = "https://api.finra.org/data/group/otcMarket/name/weeklySummary"
+DEFAULT_FINRA_TOKEN_URL = ""  # Empty = use direct API key auth (no OAuth needed)
+DEFAULT_FINRA_REQUEST_METHOD = "POST"
 
 
 def _parse_date(value: Optional[str]) -> Optional[date]:
@@ -41,6 +61,24 @@ def _parse_csv_env(name: str) -> Optional[list[str]]:
     return [item.strip().upper() for item in raw.split(",") if item.strip()]
 
 
+def _get_past_fridays(count: int, from_date: date) -> list[date]:
+    """Return the last N Fridays up to and including from_date."""
+    fridays = []
+    current = from_date
+
+    # Find the most recent Friday (or from_date if it's Friday)
+    days_since_friday = (current.weekday() - 4) % 7
+    if days_since_friday > 0:
+        current = current - timedelta(days=days_since_friday)
+
+    # Collect N Fridays going backwards
+    while len(fridays) < count:
+        fridays.append(current)
+        current -= timedelta(days=7)
+
+    return fridays  # Most recent first
+
+
 @dataclass(frozen=True)
 class Config:
     root_dir: Path
@@ -53,7 +91,10 @@ class Config:
     finra_tickers: list[str]
     min_lit_volume: float
     run_mode: str
+    fetch_mode: str
+    backfill_fridays: int
     target_date: date
+    target_dates: list[date]
     market_tz: str
     rth_start: time
     rth_end: time
@@ -80,17 +121,25 @@ def load_config() -> Config:
     project_root = root_dir.parent  # Go up one level to darkpool/
     load_dotenv(project_root / ".env")
 
-    market_tz = os.getenv("MARKET_TZ", "US/Eastern")
+    market_tz = os.getenv("MARKET_TZ", DEFAULT_MARKET_TZ)
     tz = pytz.timezone(market_tz)
-    target_date = _parse_date(os.getenv("TARGET_DATE"))
+    target_date = _parse_date(os.getenv("TARGET_DATE")) or _parse_date(DEFAULT_TARGET_DATE)
     if not target_date:
         target_date = datetime.now(tz).date()
+
+    fetch_mode = os.getenv("FETCH_MODE", DEFAULT_FETCH_MODE).lower()
+    backfill_fridays = int(os.getenv("BACKFILL_FRIDAYS", str(DEFAULT_BACKFILL_FRIDAYS)))
+
+    if fetch_mode == "backfill":
+        target_dates = _get_past_fridays(backfill_fridays, target_date)
+    else:
+        target_dates = [target_date]
 
     tickers = _parse_csv_env("TICKERS") or DEFAULT_TICKERS
     finra_tickers = [ticker for ticker in tickers if ticker not in EXCLUDED_FINRA_TICKERS]
 
-    rth_start = _parse_time(os.getenv("RTH_START"), time(9, 30))
-    rth_end = _parse_time(os.getenv("RTH_END"), time(16, 0))
+    rth_start = _parse_time(os.getenv("RTH_START", DEFAULT_RTH_START), time(9, 30))
+    rth_end = _parse_time(os.getenv("RTH_END", DEFAULT_RTH_END), time(16, 0))
 
     return Config(
         root_dir=root_dir,
@@ -101,22 +150,25 @@ def load_config() -> Config:
         db_path=root_dir / "data" / "darkpool.duckdb",
         tickers=tickers,
         finra_tickers=finra_tickers,
-        min_lit_volume=float(os.getenv("MIN_LIT_VOLUME", "10000")),
-        run_mode=os.getenv("RUN_MODE", "daily").lower(),
+        min_lit_volume=float(os.getenv("MIN_LIT_VOLUME", str(DEFAULT_MIN_LIT_VOLUME))),
+        run_mode=os.getenv("RUN_MODE", DEFAULT_RUN_MODE).lower(),
+        fetch_mode=fetch_mode,
+        backfill_fridays=backfill_fridays,
         target_date=target_date,
+        target_dates=target_dates,
         market_tz=market_tz,
         rth_start=rth_start,
         rth_end=rth_end,
-        inference_version=os.getenv("INFERENCE_VERSION", "OptionB_v1"),
+        inference_version=os.getenv("INFERENCE_VERSION", DEFAULT_INFERENCE_VERSION),
         polygon_api_key=os.getenv("POLYGON_API_KEY"),
-        polygon_base_url=os.getenv("POLYGON_BASE_URL", "https://api.polygon.io"),
+        polygon_base_url=os.getenv("POLYGON_BASE_URL", DEFAULT_POLYGON_BASE_URL),
         polygon_trades_file=os.getenv("POLYGON_TRADES_FILE"),
-        finra_otc_url=os.getenv("FINRA_OTC_URL"),
+        finra_otc_url=os.getenv("FINRA_OTC_URL", DEFAULT_FINRA_OTC_URL),
         finra_otc_file=os.getenv("FINRA_OTC_FILE"),
         finra_api_key=os.getenv("FINRA_API_KEY"),
         finra_api_secret=os.getenv("FINRA_API_SECRET"),
-        finra_token_url=os.getenv("FINRA_TOKEN_URL"),
-        finra_request_method=os.getenv("FINRA_REQUEST_METHOD", "GET").upper(),
+        finra_token_url=os.getenv("FINRA_TOKEN_URL", DEFAULT_FINRA_TOKEN_URL),
+        finra_request_method=os.getenv("FINRA_REQUEST_METHOD", DEFAULT_FINRA_REQUEST_METHOD).upper(),
         finra_request_json=_parse_json_env("FINRA_REQUEST_JSON"),
         finra_request_params=_parse_json_env("FINRA_REQUEST_PARAMS"),
         finra_date_field=os.getenv("FINRA_DATE_FIELD"),

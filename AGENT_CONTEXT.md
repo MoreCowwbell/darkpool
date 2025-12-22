@@ -7,7 +7,9 @@
 
 ## Current Capabilities
 - Full implementation complete with performance optimizations.
-- Parallel Polygon API fetching, proper connection management, and consistent buy-ratio formulas.
+- Parallel Polygon API fetching with aggregates fallback (when trades API returns 403).
+- Proper connection management and consistent buy-ratio formulas.
+- FINRA direct API key authentication (no OAuth token needed).
 
 ## Where Things Live
 - `main.py` — Root entry point (can run from project root)
@@ -24,7 +26,8 @@
 - `darkpool_analysis/data/darkpool.duckdb` — Persistent storage
 - `darkpool_analysis/output/tables/` — CSV exports
 - `darkpool_analysis/output/plots/` — PNG plots
-- `darkpool_analysis/.env` — Environment configuration
+- `.env` — Environment secrets (API keys only, at project root)
+- `darkpool_analysis/config.py` — All default configuration (URLs, tickers, dates)
 - `darkpool_analysis/requirements.txt` — Python dependencies
 
 ## Execution Flow (per scheduler tick)
@@ -47,11 +50,17 @@
 - Options flow is out of scope; no inferred trade direction from options or short-sale files.
 
 ## Deployment and Operations
-- Local setup: `pip install -r darkpool_analysis/requirements.txt`, copy `.env`, then run from root.
+- Local setup: `pip install -r darkpool_analysis/requirements.txt`, configure `.env` with API keys, then run from root.
 - Run from root: `python main.py`
 - Run from subdirectory: `cd darkpool_analysis && python orchestrator.py`
 - Daily run after market close; weekly run Sunday after FINRA settlement.
 - Set `POLYGON_MAX_WORKERS` env var to control parallel API threads (default: 4).
+
+## Configuration Structure
+- **`.env` (project root)**: Only secrets (POLYGON_API_KEY, FINRA_API_KEY, FINRA_API_SECRET).
+- **`config.py`**: All defaults (DEFAULT_TICKERS, DEFAULT_TARGET_DATE, URLs, etc.).
+- Polygon trades API requires paid tier; code auto-falls back to aggregates (minute bars) on 403.
+- DEFAULT_TARGET_DATE should be set to a trading day (not weekend/holiday).
 
 ## Known Gaps and Watchouts
 - SPXW is not an equity ticker and must be excluded from FINRA volume tables.

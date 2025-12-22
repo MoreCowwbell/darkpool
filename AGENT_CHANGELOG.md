@@ -47,3 +47,15 @@ Format:
 - [x] Fixed `iterrows()` performance in plotter using vectorized mask operations.
 - [x] Fixed `buy_ratio` formula inconsistency: now `bought/(bought+sold)` matching `lit_buy_ratio`.
 - [x] Updated `AGENT_CONTEXT.md`, `AGENT_INSTRUCTIONS.md`, and `AGENT_CHANGELOG.md`.
+
+## 2025-12-21 Session Summary (Claude Code) - Debugging & Config Cleanup
+- [x] Consolidated `.env` files: moved secrets to project root, deleted `darkpool_analysis/.env`.
+- [x] Moved non-secret config (URLs, methods, tickers) to `config.py` constants.
+- [x] Fixed FINRA auth: set `DEFAULT_FINRA_TOKEN_URL = ""` to use direct API key auth (no OAuth).
+- [x] Added `issueSymbolIdentifier` to FINRA column resolution candidates.
+- [x] Fixed DuckDB connection leak in orchestrator: moved `plot_buy_ratio_series` after `conn.close()`.
+- [x] Added Polygon aggregates fallback when trades API returns 403.
+- [x] Simplified DEFAULT_TICKERS to just NVDA for initial testing.
+- [x] Added `DEFAULT_TARGET_DATE = "2025-12-19"` to handle weekend runs.
+- [x] Successfully ran end-to-end analysis with plot output.
+- [x] Updated all AGENT*.md files with config structure and new features.
