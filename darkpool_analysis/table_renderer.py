@@ -43,26 +43,27 @@ COLORS = {
 
 def fetch_summary_df(
     conn: duckdb.DuckDBPyConnection,
-    target_date: date,
+    dates: list[date],
     tickers: list[str],
 ) -> pd.DataFrame:
     """
-    Fetch darkpool_daily_summary data for a specific date and tickers.
+    Fetch darkpool_daily_summary data for multiple dates and tickers.
 
     Args:
         conn: DuckDB connection (read-only preferred)
-        target_date: The date to fetch data for
+        dates: List of dates to fetch data for
         tickers: List of ticker symbols to include
 
     Returns:
         DataFrame with columns: symbol, estimated_bought, estimated_sold,
         buy_ratio, total_off_exchange_volume, finra_period_type
     """
-    if not tickers:
+    if not tickers or not dates:
         return pd.DataFrame()
 
     # Build parameterized query with placeholders
-    placeholders = ", ".join(["?" for _ in tickers])
+    ticker_placeholders = ", ".join(["?" for _ in tickers])
+    date_placeholders = ", ".join(["?" for _ in dates])
     query = f"""
         SELECT
             date,
@@ -73,10 +74,11 @@ def fetch_summary_df(
             total_off_exchange_volume,
             finra_period_type
         FROM darkpool_daily_summary
-        WHERE date = ? AND symbol IN ({placeholders})
+        WHERE date IN ({date_placeholders}) AND symbol IN ({ticker_placeholders})
+        ORDER BY date DESC, symbol
     """
 
-    params = [target_date] + list(tickers)
+    params = list(dates) + list(tickers)
     df = conn.execute(query, params).df()
 
     return df
@@ -142,59 +144,67 @@ def _get_ratio_color(buy_ratio: float) -> str:
 def format_display_df(
     df: pd.DataFrame,
     tickers: list[str],
-    target_date: date,
+    dates: list[date],
 ) -> pd.DataFrame:
     """
-    Format DataFrame for display, preserving ticker order.
+    Format DataFrame for display, organized by date then ticker.
 
     Args:
         df: Raw DataFrame from fetch_summary_df
         tickers: Ordered list of tickers (display order)
-        target_date: Date being displayed
+        dates: List of dates (sorted newest first)
 
     Returns:
         Formatted DataFrame with display strings and additional columns
     """
-    # Create base structure with all tickers in order
     display_data = []
 
-    for ticker in tickers:
-        ticker_data = df[df["symbol"] == ticker]
+    # Convert df dates to Python date objects for comparison
+    if not df.empty and "date" in df.columns:
+        df = df.copy()
+        df["date"] = pd.to_datetime(df["date"]).dt.date
 
-        if ticker_data.empty:
-            # Missing data row
-            display_data.append({
-                "date": target_date.strftime("%Y%m%d"),
-                "symbol": ticker,
-                "estimated_bought": "—",
-                "estimated_sold": "—",
-                "buy_pct": "—",
-                "buy_ratio": "—",
-                "total_volume": "—",
-                "signal": "",
-                "_buy_ratio_raw": None,
-                "_status": "missing",
-            })
-        else:
-            row = ticker_data.iloc[0]
-            bought = row.get("estimated_bought", 0) or 0
-            sold = row.get("estimated_sold", 0) or 0
-            total = bought + sold
-            buy_pct = (bought / total * 100) if total > 0 else None
-            buy_ratio_raw = row.get("buy_ratio")
+    # Sort dates descending (newest first)
+    sorted_dates = sorted(dates, reverse=True)
 
-            display_data.append({
-                "date": target_date.strftime("%Y%m%d"),
-                "symbol": ticker,
-                "estimated_bought": _format_volume(bought),
-                "estimated_sold": _format_volume(sold),
-                "buy_pct": _format_pct(buy_pct),
-                "buy_ratio": _format_ratio(buy_ratio_raw),
-                "total_volume": _format_volume(row.get("total_off_exchange_volume", 0)),
-                "signal": _get_signal(buy_ratio_raw),
-                "_buy_ratio_raw": buy_ratio_raw,
-                "_status": "ok",
-            })
+    for target_date in sorted_dates:
+        for ticker in tickers:
+            ticker_data = df[(df["symbol"] == ticker) & (df["date"] == target_date)]
+
+            if ticker_data.empty:
+                # Missing data row
+                display_data.append({
+                    "date": target_date.strftime("%Y-%m-%d"),
+                    "symbol": ticker,
+                    "estimated_bought": "—",
+                    "estimated_sold": "—",
+                    "buy_pct": "—",
+                    "buy_ratio": "—",
+                    "total_volume": "—",
+                    "signal": "",
+                    "_buy_ratio_raw": None,
+                    "_status": "missing",
+                })
+            else:
+                row = ticker_data.iloc[0]
+                bought = row.get("estimated_bought", 0) or 0
+                sold = row.get("estimated_sold", 0) or 0
+                total = bought + sold
+                buy_pct = (bought / total * 100) if total > 0 else None
+                buy_ratio_raw = row.get("buy_ratio")
+
+                display_data.append({
+                    "date": target_date.strftime("%Y-%m-%d"),
+                    "symbol": ticker,
+                    "estimated_bought": _format_volume(bought),
+                    "estimated_sold": _format_volume(sold),
+                    "buy_pct": _format_pct(buy_pct),
+                    "buy_ratio": _format_ratio(buy_ratio_raw),
+                    "total_volume": _format_volume(row.get("total_off_exchange_volume", 0)),
+                    "signal": _get_signal(buy_ratio_raw),
+                    "_buy_ratio_raw": buy_ratio_raw,
+                    "_status": "ok",
+                })
 
     return pd.DataFrame(display_data)
 
@@ -479,8 +489,12 @@ def build_styled_html(
 
         <div class="summary">
             <div class="summary-item">
-                <span class="summary-label">Symbols</span>
+                <span class="summary-label">Rows</span>
                 <span class="summary-value">{len(df)}</span>
+            </div>
+            <div class="summary-item">
+                <span class="summary-label">Dates</span>
+                <span class="summary-value">{df['date'].nunique() if not df.empty else 0}</span>
             </div>
             <div class="summary-item">
                 <span class="summary-label">Avg Buy Ratio</span>
@@ -609,17 +623,17 @@ def render_html_to_png(
 def render_darkpool_table(
     db_path: Path,
     output_dir: Path,
-    target_date: date,
+    dates: list[date],
     tickers: list[str],
     title: str = "Dark Pool Volume",
 ) -> tuple[Path, Path]:
     """
-    Main entry point: render darkpool table as HTML and PNG.
+    Main entry point: render combined darkpool table as HTML and PNG.
 
     Args:
         db_path: Path to DuckDB database
         output_dir: Output directory for generated files
-        target_date: Date to render
+        dates: List of dates to include (will be sorted newest first)
         tickers: List of ticker symbols (in display order)
         title: Table title
 
@@ -627,34 +641,42 @@ def render_darkpool_table(
         Tuple of (html_path, png_path)
     """
     output_dir.mkdir(parents=True, exist_ok=True)
-    date_str = target_date.strftime("%Y-%m-%d")
+
+    # Sort dates for display
+    sorted_dates = sorted(dates, reverse=True)
+    if len(sorted_dates) == 1:
+        subtitle = f"Date: {sorted_dates[0].strftime('%Y-%m-%d')}"
+        file_suffix = sorted_dates[0].strftime("%Y-%m-%d")
+    else:
+        subtitle = f"{sorted_dates[-1].strftime('%Y-%m-%d')} to {sorted_dates[0].strftime('%Y-%m-%d')}"
+        file_suffix = "combined"
 
     # Connect to database
     conn = duckdb.connect(str(db_path), read_only=True)
     try:
-        # Fetch data
-        df = fetch_summary_df(conn, target_date, tickers)
+        # Fetch data for all dates
+        df = fetch_summary_df(conn, dates, tickers)
 
         if df.empty:
-            logger.warning("No data found for date %s", date_str)
+            logger.warning("No data found for dates %s", [d.strftime("%Y-%m-%d") for d in dates])
 
         # Format for display
-        display_df = format_display_df(df, tickers, target_date)
+        display_df = format_display_df(df, tickers, dates)
 
         # Build HTML
         html_content = build_styled_html(
             display_df,
             title=title,
-            subtitle=f"Date: {date_str}",
+            subtitle=subtitle,
         )
 
         # Save HTML
-        html_path = output_dir / f"darkpool_table_{date_str}.html"
+        html_path = output_dir / f"darkpool_table_{file_suffix}.html"
         html_path.write_text(html_content, encoding="utf-8")
         logger.info("Saved HTML: %s", html_path)
 
         # Render PNG
-        png_path = output_dir / f"darkpool_table_{date_str}.png"
+        png_path = output_dir / f"darkpool_table_{file_suffix}.png"
         render_html_to_png(html_path, png_path)
 
         return html_path, png_path
@@ -674,10 +696,10 @@ def main() -> None:
         description="Render dark pool analysis table as HTML/PNG"
     )
     parser.add_argument(
-        "--date",
+        "--dates",
         type=str,
         required=True,
-        help="Target date in YYYY-MM-DD format",
+        help="Comma-separated dates in YYYY-MM-DD format (e.g., 2025-12-19,2025-12-18)",
     )
     parser.add_argument(
         "--output-dir",
@@ -708,8 +730,8 @@ def main() -> None:
 
     config = load_config()
 
-    # Parse date
-    target_date = date.fromisoformat(args.date)
+    # Parse dates
+    dates = [date.fromisoformat(d.strip()) for d in args.dates.split(",")]
 
     # Get tickers
     if args.tickers:
@@ -724,7 +746,7 @@ def main() -> None:
     html_path, png_path = render_darkpool_table(
         db_path=config.db_path,
         output_dir=output_dir,
-        target_date=target_date,
+        dates=dates,
         tickers=tickers,
     )
 

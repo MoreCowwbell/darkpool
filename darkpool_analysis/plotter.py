@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import logging
+import math
 from pathlib import Path
 
 import duckdb
 import matplotlib.pyplot as plt
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +26,32 @@ COLORS = {
     "spine": "#30363d",
 }
 
+# Thresholds in log space
+LOG_BOT_THRESHOLD = math.log(1.25)   # ≈ +0.223
+LOG_SELL_THRESHOLD = math.log(0.80)  # ≈ -0.223
+
+# Marker size range for volume scaling
+MARKER_SIZE_MIN = 30
+MARKER_SIZE_MAX = 300
+
+
+def _compute_log_ratio(bought: float, sold: float) -> float | None:
+    """Compute ln(bought/sold), returning None for invalid inputs."""
+    if bought is None or sold is None or bought <= 0 or sold <= 0:
+        return None
+    return math.log(bought / sold)
+
+
+def _scale_marker_sizes(volumes: np.ndarray) -> np.ndarray:
+    """Scale marker sizes based on volume (min-max normalization)."""
+    if len(volumes) == 0:
+        return np.array([])
+    v_min, v_max = volumes.min(), volumes.max()
+    if v_max == v_min:
+        return np.full(len(volumes), (MARKER_SIZE_MIN + MARKER_SIZE_MAX) / 2)
+    normalized = (volumes - v_min) / (v_max - v_min)
+    return MARKER_SIZE_MIN + normalized * (MARKER_SIZE_MAX - MARKER_SIZE_MIN)
+
 
 def plot_buy_ratio_series(db_path: Path, output_dir: Path, symbols: list[str]) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -36,7 +64,7 @@ def plot_buy_ratio_series(db_path: Path, output_dir: Path, symbols: list[str]) -
         for symbol in symbols:
             df = conn.execute(
                 """
-                SELECT date, buy_ratio
+                SELECT date, estimated_bought, estimated_sold, total_off_exchange_volume
                 FROM darkpool_daily_summary
                 WHERE symbol = ?
                 ORDER BY date
@@ -44,80 +72,101 @@ def plot_buy_ratio_series(db_path: Path, output_dir: Path, symbols: list[str]) -
                 [symbol],
             ).df()
             if df.empty:
-                logger.warning("No buy ratio data available for %s.", symbol)
+                logger.warning("No estimated flow data available for %s.", symbol)
                 continue
 
-            df = df.dropna(subset=["buy_ratio"])
+            # Compute log ratio: ln(bought / sold)
+            df["log_ratio"] = df.apply(
+                lambda row: _compute_log_ratio(row["estimated_bought"], row["estimated_sold"]),
+                axis=1,
+            )
+            df = df.dropna(subset=["log_ratio"])
             if df.empty:
-                logger.warning("No non-null buy ratio values for %s.", symbol)
+                logger.warning("No valid log ratio values for %s.", symbol)
                 continue
+
+            # Scale marker sizes by volume
+            volumes = df["total_off_exchange_volume"].fillna(0).values.astype(float)
+            marker_sizes = _scale_marker_sizes(volumes)
 
             # Create figure with dark background
             fig, ax = plt.subplots(figsize=(12, 6), facecolor=COLORS["background"])
             ax.set_facecolor(COLORS["background"])
 
-            # Subtle fill for neutral zone
-            ax.axhspan(0.80, 1.25, alpha=0.08, color=COLORS["fill"], zorder=1)
+            # Subtle fill for neutral zone (between log thresholds)
+            ax.axhspan(LOG_SELL_THRESHOLD, LOG_BOT_THRESHOLD, alpha=0.08, color=COLORS["fill"], zorder=1)
 
-            # Threshold lines
+            # Threshold lines in log space
             ax.axhline(
-                1.25,
+                LOG_BOT_THRESHOLD,
                 color=COLORS["bot_line"],
                 linestyle="--",
                 linewidth=1.5,
                 alpha=0.7,
-                label="BOT (>1.25)",
+                label="BOT threshold (+0.22)",
                 zorder=2,
             )
             ax.axhline(
-                1.0,
+                0.0,
                 color=COLORS["neutral"],
                 linestyle=":",
                 linewidth=1,
                 alpha=0.5,
-                label="Neutral (1.0)",
+                label="Neutral (0)",
                 zorder=2,
             )
             ax.axhline(
-                0.80,
+                LOG_SELL_THRESHOLD,
                 color=COLORS["sell_line"],
                 linestyle="--",
                 linewidth=1.5,
                 alpha=0.7,
-                label="SELL (<0.80)",
+                label="SELL threshold (-0.22)",
                 zorder=2,
             )
 
-            # Main data line with styled markers
+            # Line connecting data points
             ax.plot(
                 df["date"],
-                df["buy_ratio"],
+                df["log_ratio"],
                 color=COLORS["line"],
-                linewidth=2.5,
-                marker="o",
-                markersize=8,
-                markerfacecolor=COLORS["line"],
-                markeredgecolor=COLORS["marker_edge"],
-                markeredgewidth=1.5,
+                linewidth=2,
+                alpha=0.6,
+                zorder=2,
+            )
+
+            # Scatter with volume-scaled markers
+            ax.scatter(
+                df["date"],
+                df["log_ratio"],
+                s=marker_sizes,
+                c=COLORS["line"],
+                edgecolors=COLORS["marker_edge"],
+                linewidths=1.5,
                 zorder=3,
-                label="Buy Ratio",
+                label="Log ratio (size ∝ volume)",
             )
 
             # Title and labels
             ax.set_title(
-                f"{symbol} Dark Pool Buy Ratio",
+                f"{symbol} Dark Pool Log Buy/Sell Ratio",
                 fontsize=18,
                 fontweight="bold",
                 color=COLORS["title"],
                 pad=20,
             )
             ax.set_ylabel(
-                "Buy Ratio (bought ÷ sold)",
+                "log(Buy / Sell)",
                 fontsize=12,
                 color=COLORS["label"],
                 labelpad=10,
             )
             ax.set_xlabel("Date", fontsize=12, color=COLORS["label"], labelpad=10)
+
+            # Set y-axis range: default ±1.0, expand symmetrically if data exceeds
+            max_abs = max(abs(df["log_ratio"].min()), abs(df["log_ratio"].max()))
+            y_limit = max(1.0, max_abs * 1.1)  # 10% padding if beyond ±1.0
+            ax.set_ylim(-y_limit, y_limit)
 
             # Grid styling
             ax.grid(True, alpha=0.3, color=COLORS["grid"], linestyle="-", linewidth=0.5)
@@ -131,11 +180,11 @@ def plot_buy_ratio_series(db_path: Path, output_dir: Path, symbols: list[str]) -
                 spine.set_color(COLORS["spine"])
                 spine.set_linewidth(0.5)
 
-            # Colored annotations for threshold crossings
-            bot_mask = df["buy_ratio"] > 1.25
-            sell_mask = df["buy_ratio"] < 0.80
+            # Colored annotations for threshold crossings (using log thresholds)
+            bot_mask = df["log_ratio"] > LOG_BOT_THRESHOLD
+            sell_mask = df["log_ratio"] < LOG_SELL_THRESHOLD
 
-            for d, r in zip(df.loc[bot_mask, "date"], df.loc[bot_mask, "buy_ratio"]):
+            for d, r in zip(df.loc[bot_mask, "date"], df.loc[bot_mask, "log_ratio"]):
                 ax.annotate(
                     "BOT",
                     (d, r),
@@ -148,7 +197,7 @@ def plot_buy_ratio_series(db_path: Path, output_dir: Path, symbols: list[str]) -
                     va="bottom",
                 )
 
-            for d, r in zip(df.loc[sell_mask, "date"], df.loc[sell_mask, "buy_ratio"]):
+            for d, r in zip(df.loc[sell_mask, "date"], df.loc[sell_mask, "log_ratio"]):
                 ax.annotate(
                     "SELL",
                     (d, r),
@@ -174,7 +223,7 @@ def plot_buy_ratio_series(db_path: Path, output_dir: Path, symbols: list[str]) -
 
             # Tight layout and save
             fig.tight_layout()
-            output_path = output_dir / f"{symbol.lower()}_buy_ratio.png"
+            output_path = output_dir / f"{symbol.lower()}_log_ratio.png"
             fig.savefig(
                 output_path,
                 dpi=300,

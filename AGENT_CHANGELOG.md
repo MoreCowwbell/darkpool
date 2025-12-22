@@ -74,3 +74,12 @@ Format:
 - [x] Added `EXPORT_CSV` config option (default: False) to control CSV table exports.
 - [x] Created dark-theme table renderer (`table_renderer.py`) with HTML/PNG output.
 - [x] Improved `plotter.py` with dark mode styling, 300 DPI, colored thresholds, and better annotations.
+
+## 2025-12-21 Session Summary (Claude Code) - Log Ratio Visualization
+- [x] Updated `plotter.py` to use symmetric log-ratio: y = ln(Buy/Sell) instead of raw buy_ratio.
+- [x] Added log-space thresholds: LOG_BOT_THRESHOLD = ln(1.25) ≈ +0.223, LOG_SELL_THRESHOLD = ln(0.80) ≈ -0.223.
+- [x] Implemented volume-scaled marker sizes using scatter plot (MARKER_SIZE_MIN=30, MARKER_SIZE_MAX=300).
+- [x] Added helper functions: `_compute_log_ratio()` for safe log calculation, `_scale_marker_sizes()` for normalization.
+- [x] Uses `darkpool_daily_summary` table for `estimated_bought`, `estimated_sold`, `total_off_exchange_volume`.
+- [x] Updated y-axis label to "log(Buy / Sell)" and title to include "Log".
+- [x] Output filename changed from `*_buy_ratio.png` to `*_log_ratio.png`.

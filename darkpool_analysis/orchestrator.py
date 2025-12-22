@@ -138,18 +138,18 @@ def main() -> None:
         # Generate buy ratio plots
         plot_buy_ratio_series(config.db_path, config.plot_dir, sorted(all_symbols))
 
-        # Render dark pool table for each processed date
-        for snapshot_date in processed_dates:
+        # Render combined dark pool table for all processed dates
+        if processed_dates:
             try:
                 render_darkpool_table(
                     db_path=config.db_path,
                     output_dir=config.table_dir,
-                    target_date=snapshot_date,
+                    dates=processed_dates,
                     tickers=config.tickers,
                     title="Dark Pool Volume",
                 )
             except Exception as exc:
-                logging.error("Failed to render table for %s: %s", snapshot_date.isoformat(), exc)
+                logging.error("Failed to render table: %s", exc)
 
     logging.info("Dark pool analysis complete. Processed %d dates.", len(config.target_dates))
 
