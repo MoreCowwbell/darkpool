@@ -6,8 +6,10 @@ import math
 from pathlib import Path
 
 import duckdb
+import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.interpolate import make_interp_spline
 
 logger = logging.getLogger(__name__)
 
@@ -156,15 +158,35 @@ def plot_buy_ratio_series(db_path: Path, output_dir: Path, symbols: list[str], p
                 zorder=2,
             )
 
-            # Line connecting data points
-            ax.plot(
-                df["date"],
-                df["plot_value"],
-                color=COLORS["line"],
-                linewidth=2,
-                alpha=0.6,
-                zorder=2,
-            )
+            # Smooth spline line connecting data points
+            if len(df) >= 4:
+                # Convert dates to numeric for interpolation
+                date_nums = mdates.date2num(df["date"])
+                values = df["plot_value"].values
+
+                # Create smooth curve with 300 interpolation points
+                x_smooth = np.linspace(date_nums.min(), date_nums.max(), 300)
+                spline = make_interp_spline(date_nums, values, k=3)  # Cubic spline
+                y_smooth = spline(x_smooth)
+
+                ax.plot(
+                    mdates.num2date(x_smooth),
+                    y_smooth,
+                    color=COLORS["line"],
+                    linewidth=2,
+                    alpha=0.6,
+                    zorder=2,
+                )
+            else:
+                # Fall back to straight lines for small datasets (< 4 points)
+                ax.plot(
+                    df["date"],
+                    df["plot_value"],
+                    color=COLORS["line"],
+                    linewidth=2,
+                    alpha=0.6,
+                    zorder=2,
+                )
 
             # Scatter with volume-scaled markers
             scatter_label = "Buy ratio (size ∝ volume)" if plot_mode == "absolute" else "Log ratio (size ∝ volume)"
