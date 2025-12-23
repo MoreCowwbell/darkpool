@@ -53,6 +53,7 @@ DEFAULT_RTH_START = "09:30"
 DEFAULT_RTH_END = "16:15"
 DEFAULT_INFERENCE_VERSION = "OptionB_v1"
 DEFAULT_EXPORT_CSV = False  # Export tables to CSV files
+DEFAULT_PLOT_MODE = "log"  # "log" or "absolute"
 
 # API endpoints (not secrets)
 DEFAULT_POLYGON_BASE_URL = "https://api.polygon.io"
@@ -142,6 +143,7 @@ class Config:
     rth_end: time
     inference_version: str
     export_csv: bool
+    plot_mode: str
     polygon_api_key: Optional[str]
     polygon_base_url: str
     polygon_trades_file: Optional[str]
@@ -205,6 +207,7 @@ def load_config() -> Config:
         rth_end=rth_end,
         inference_version=os.getenv("INFERENCE_VERSION", DEFAULT_INFERENCE_VERSION),
         export_csv=os.getenv("EXPORT_CSV", str(DEFAULT_EXPORT_CSV)).lower() in ("true", "1", "yes"),
+        plot_mode=os.getenv("PLOT_MODE", DEFAULT_PLOT_MODE).lower(),
         polygon_api_key=os.getenv("POLYGON_API_KEY"),
         polygon_base_url=os.getenv("POLYGON_BASE_URL", DEFAULT_POLYGON_BASE_URL),
         polygon_trades_file=os.getenv("POLYGON_TRADES_FILE"),

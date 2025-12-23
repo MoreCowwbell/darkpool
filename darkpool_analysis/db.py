@@ -70,6 +70,7 @@ def init_db(conn: duckdb.DuckDBPyConnection) -> None:
             estimated_bought DOUBLE,
             estimated_sold DOUBLE,
             buy_ratio DOUBLE,
+            sell_ratio DOUBLE,
             total_off_exchange_volume DOUBLE,
             finra_period_type TEXT
         )

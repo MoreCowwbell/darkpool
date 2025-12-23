@@ -71,6 +71,7 @@ def fetch_summary_df(
             estimated_bought,
             estimated_sold,
             buy_ratio,
+            sell_ratio,
             total_off_exchange_volume,
             finra_period_type
         FROM darkpool_daily_summary
@@ -120,13 +121,13 @@ def _format_pct(value: float) -> str:
 
 
 def _get_signal(buy_ratio: float) -> str:
-    """Determine BOT/SELL signal based on buy_ratio."""
+    """Determine Accumulation/Distribution signal based on buy_ratio."""
     if pd.isna(buy_ratio) or buy_ratio is None:
         return ""
     if buy_ratio > 1.25:
-        return "BOT"
+        return "Accumulation"
     elif buy_ratio < 0.80:
-        return "SELL"
+        return "Distribution"
     return ""
 
 
@@ -138,6 +139,17 @@ def _get_ratio_color(buy_ratio: float) -> str:
         return COLORS["green"]
     elif buy_ratio < 0.80:
         return COLORS["red"]
+    return COLORS["text"]
+
+
+def _get_sell_ratio_color(sell_ratio: float) -> str:
+    """Get color for sell_ratio (inverse logic of buy_ratio)."""
+    if pd.isna(sell_ratio) or sell_ratio is None:
+        return COLORS["text_muted"]
+    if sell_ratio > 1.25:  # High selling pressure
+        return COLORS["red"]
+    elif sell_ratio < 0.80:  # Low selling pressure
+        return COLORS["green"]
     return COLORS["text"]
 
 
@@ -180,9 +192,11 @@ def format_display_df(
                     "estimated_sold": "—",
                     "buy_pct": "—",
                     "buy_ratio": "—",
+                    "sell_ratio": "—",
                     "total_volume": "—",
                     "signal": "",
                     "_buy_ratio_raw": None,
+                    "_sell_ratio_raw": None,
                     "_status": "missing",
                 })
             else:
@@ -192,6 +206,7 @@ def format_display_df(
                 total = bought + sold
                 buy_pct = (bought / total * 100) if total > 0 else None
                 buy_ratio_raw = row.get("buy_ratio")
+                sell_ratio_raw = row.get("sell_ratio")
 
                 display_data.append({
                     "date": target_date.strftime("%Y-%m-%d"),
@@ -200,9 +215,11 @@ def format_display_df(
                     "estimated_sold": _format_volume(sold),
                     "buy_pct": _format_pct(buy_pct),
                     "buy_ratio": _format_ratio(buy_ratio_raw),
+                    "sell_ratio": _format_ratio(sell_ratio_raw),
                     "total_volume": _format_volume(row.get("total_off_exchange_volume", 0)),
                     "signal": _get_signal(buy_ratio_raw),
                     "_buy_ratio_raw": buy_ratio_raw,
+                    "_sell_ratio_raw": sell_ratio_raw,
                     "_status": "ok",
                 })
 
@@ -246,15 +263,17 @@ def build_styled_html(
     # Build table rows
     rows_html = ""
     for idx, row in df.iterrows():
-        ratio_raw = row["_buy_ratio_raw"]
-        ratio_color = _get_ratio_color(ratio_raw)
+        buy_ratio_raw = row["_buy_ratio_raw"]
+        sell_ratio_raw = row["_sell_ratio_raw"]
+        buy_ratio_color = _get_ratio_color(buy_ratio_raw)
+        sell_ratio_color = _get_sell_ratio_color(sell_ratio_raw)
         signal = row["signal"]
 
         # Signal styling
-        if signal == "BOT":
-            signal_html = f'<span class="signal signal-bot">BOT</span>'
-        elif signal == "SELL":
-            signal_html = f'<span class="signal signal-sell">SELL</span>'
+        if signal == "Accumulation":
+            signal_html = f'<span class="signal signal-accum">Accumulation</span>'
+        elif signal == "Distribution":
+            signal_html = f'<span class="signal signal-dist">Distribution</span>'
         else:
             signal_html = ""
 
@@ -268,7 +287,8 @@ def build_styled_html(
             <td class="col-numeric col-bought">{row['estimated_bought']}</td>
             <td class="col-numeric col-sold">{row['estimated_sold']}</td>
             <td class="col-numeric col-pct">{row['buy_pct']}</td>
-            <td class="col-numeric col-ratio" style="color: {ratio_color};">{row['buy_ratio']}</td>
+            <td class="col-numeric col-ratio" style="color: {buy_ratio_color};">{row['buy_ratio']}</td>
+            <td class="col-numeric col-ratio" style="color: {sell_ratio_color};">{row['sell_ratio']}</td>
             <td class="col-numeric col-volume">{row['total_volume']}</td>
             <td class="col-signal">{signal_html}</td>
         </tr>
@@ -414,12 +434,12 @@ def build_styled_html(
             letter-spacing: 0.5px;
         }}
 
-        .signal-bot {{
+        .signal-accum {{
             background-color: {COLORS['green_bg']};
             color: {COLORS['green']};
         }}
 
-        .signal-sell {{
+        .signal-dist {{
             background-color: {COLORS['red_bg']};
             color: {COLORS['red']};
         }}
@@ -478,6 +498,7 @@ def build_styled_html(
                     <th class="col-numeric">Sold</th>
                     <th class="col-numeric">% Avg</th>
                     <th class="col-numeric">Buy Ratio</th>
+                    <th class="col-numeric">Sell Ratio</th>
                     <th class="col-numeric">Total Volume</th>
                     <th>Signal</th>
                 </tr>

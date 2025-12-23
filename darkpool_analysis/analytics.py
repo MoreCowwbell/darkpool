@@ -52,6 +52,10 @@ def build_daily_summary(
     summary["buy_ratio"] = summary["estimated_bought"] / summary["estimated_sold"]
     summary.loc[summary["estimated_sold"] <= 0, "buy_ratio"] = pd.NA
 
+    # sell_ratio = sold / bought (inverse of buy_ratio)
+    summary["sell_ratio"] = summary["estimated_sold"] / summary["estimated_bought"]
+    summary.loc[summary["estimated_bought"] <= 0, "sell_ratio"] = pd.NA
+
     return summary[
         [
             "date",
@@ -59,6 +63,7 @@ def build_daily_summary(
             "estimated_bought",
             "estimated_sold",
             "buy_ratio",
+            "sell_ratio",
             "total_off_exchange_volume",
             "finra_period_type",
         ]

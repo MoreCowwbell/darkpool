@@ -112,3 +112,18 @@ Format:
 - [x] Added "Trading Hours Consideration" section:
   - RTH vs extended hours trade-offs.
   - FINRA all-hours vs Polygon RTH mismatch explanation.
+
+## 2025-12-23 Session Summary (Claude Code) - Plot Mode & Sell Ratio
+- [x] Added `PLOT_MODE` config setting ("log" or "absolute") to `config.py`.
+- [x] Added `sell_ratio` column to `darkpool_daily_summary` table schema in `db.py`.
+- [x] Added `sell_ratio = sold / bought` computation in `analytics.py`.
+- [x] Updated `plotter.py` to support both Log and Absolute plot modes:
+  - Absolute mode: Y-axis 0.0 to 2.0+ (dynamic expansion), neutral line at 1.0.
+  - Log mode: unchanged symmetric Y-axis around 0.
+  - Mode-dependent thresholds, labels, and output filenames (`*_abs_ratio.png` vs `*_log_ratio.png`).
+  - Added `--mode` CLI argument.
+- [x] Updated `table_renderer.py`:
+  - Added Sell Ratio column next to Buy Ratio.
+  - Changed signal labels from "BOT"/"SELL" to "Accumulation"/"Distribution".
+  - Added `_get_sell_ratio_color()` helper with inverse color logic.
+- [x] Updated `orchestrator.py` to pass `config.plot_mode` to plotter.

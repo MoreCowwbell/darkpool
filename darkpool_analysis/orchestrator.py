@@ -136,7 +136,7 @@ def main() -> None:
 
     if all_symbols:
         # Generate buy ratio plots
-        plot_buy_ratio_series(config.db_path, config.plot_dir, sorted(all_symbols))
+        plot_buy_ratio_series(config.db_path, config.plot_dir, sorted(all_symbols), config.plot_mode)
 
         # Render combined dark pool table for all processed dates
         if processed_dates:
