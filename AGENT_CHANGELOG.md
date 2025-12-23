@@ -83,3 +83,32 @@ Format:
 - [x] Uses `darkpool_daily_summary` table for `estimated_bought`, `estimated_sold`, `total_off_exchange_volume`.
 - [x] Updated y-axis label to "log(Buy / Sell)" and title to include "Log".
 - [x] Output filename changed from `*_buy_ratio.png` to `*_log_ratio.png`.
+
+## 2025-12-23 Session Summary (Claude Code) - Documentation Audit & Update
+- [x] Analyzed all 11 Python source files in darkpool_analysis package.
+- [x] Updated `AGENT_CONTEXT.md` with accurate current state:
+  - Corrected DEFAULT_RTH_END from "16:00" to "16:15" (matches config.py).
+  - Added CLI entry points for plotter.py and table_renderer.py.
+  - Added PNG rendering dependency note (playwright/imgkit/selenium).
+  - Updated execution flow to show multi-date processing loop.
+- [x] Updated `AGENT_INSTRUCTIONS.md` with accurate rules:
+  - Added Signal Thresholds section (BOT > 1.25, SELL < 0.80).
+  - Fixed RTH end time to 16:15.
+  - Added CLI usage examples for all entry points.
+  - Clarified NBBO vs TICK classification conditions.
+  - Added logging level guidance.
+- [x] Logged this session entry in `AGENT_CHANGELOG.md`.
+
+## 2025-12-23 Session Summary (Claude Code) - Context Enrichment
+- [x] Added "Data Sources Explained" section to `AGENT_CONTEXT.md`:
+  - FINRA OTC data fields (volume only, no direction).
+  - Polygon equity trades fields (tick-level with NBBO).
+- [x] Added "Inference Methodology (Option B)" section:
+  - Comparison of Option A (options flow), Option B (lit proxy), Option C (short sale).
+  - Detailed NBBO vs TICK classification logic.
+- [x] Added "Polygon API Subscription Tiers" section:
+  - Free tier (403 on trades, falls back to aggregates).
+  - Paid tier (tick-level trades with NBBO).
+- [x] Added "Trading Hours Consideration" section:
+  - RTH vs extended hours trade-offs.
+  - FINRA all-hours vs Polygon RTH mismatch explanation.
