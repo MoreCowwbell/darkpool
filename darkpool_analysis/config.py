@@ -19,13 +19,13 @@ EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 
 
 # Analysis defaults
-DEFAULT_TARGET_DATE = "2025-12-19"  # Last trading day (Friday)
+DEFAULT_TARGET_DATE = "2025-12-22"  # Last trading day (Friday)
 DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
 DEFAULT_BACKFILL_COUNT = 10  # Number of periods to fetch (days for daily, weeks for weekly)
 DEFAULT_MIN_LIT_VOLUME = 10000
 DEFAULT_MARKET_TZ = "US/Eastern"
 DEFAULT_RTH_START = "09:30"
-DEFAULT_RTH_END = "16:00"
+DEFAULT_RTH_END = "16:15"
 DEFAULT_INFERENCE_VERSION = "OptionB_v1"
 DEFAULT_EXPORT_CSV = False  # Export tables to CSV files
 
