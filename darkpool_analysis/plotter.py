@@ -10,6 +10,7 @@ import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.interpolate import make_interp_spline
+from scipy.interpolate import PchipInterpolator
 
 logger = logging.getLogger(__name__)
 
@@ -164,19 +165,23 @@ def plot_buy_ratio_series(db_path: Path, output_dir: Path, symbols: list[str], p
                 date_nums = mdates.date2num(df["date"])
                 values = df["plot_value"].values
 
-                # Create smooth curve with 300 interpolation points
-                x_smooth = np.linspace(date_nums.min(), date_nums.max(), 300)
-                spline = make_interp_spline(date_nums, values, k=3)  # Cubic spline
-                y_smooth = spline(x_smooth)
+                # Smooth shape-preserving curve through points
+                if len(df) >= 3:
+                    date_nums = mdates.date2num(df["date"])
+                    values = df["plot_value"].to_numpy()
 
-                ax.plot(
-                    mdates.num2date(x_smooth),
-                    y_smooth,
-                    color=COLORS["line"],
-                    linewidth=2,
-                    alpha=0.6,
-                    zorder=2,
-                )
+                    x_smooth = np.linspace(date_nums.min(), date_nums.max(), 150)  # 120–180 is plenty
+                    interp = PchipInterpolator(date_nums, values)
+                    y_smooth = interp(x_smooth)
+
+                    ax.plot(
+                        mdates.num2date(x_smooth),
+                        y_smooth,
+                        color=COLORS["line"],
+                        linewidth=2,
+                        alpha=0.6,
+                        zorder=2,
+                    )
             else:
                 # Fall back to straight lines for small datasets (< 4 points)
                 ax.plot(

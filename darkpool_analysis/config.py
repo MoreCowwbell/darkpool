@@ -53,7 +53,7 @@ DEFAULT_RTH_START = "09:30"
 DEFAULT_RTH_END = "16:15"
 DEFAULT_INFERENCE_VERSION = "OptionB_v1"
 DEFAULT_EXPORT_CSV = False  # Export tables to CSV files
-DEFAULT_PLOT_MODE = "log"  # "log" or "absolute"
+DEFAULT_PLOT_MODE = "absolute"  # "log" or "absolute"
 
 # API endpoints (not secrets)
 DEFAULT_POLYGON_BASE_URL = "https://api.polygon.io"
