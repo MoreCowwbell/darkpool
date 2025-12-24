@@ -4,6 +4,7 @@ from datetime import date, timedelta
 import io
 import json
 import logging
+from pathlib import Path
 from typing import Optional, Tuple
 
 import pandas as pd
@@ -27,6 +28,16 @@ def _resolve_column(df: pd.DataFrame, preferred: Optional[str], candidates: list
         if candidate.lower() in lower_map:
             return lower_map[candidate.lower()]
     raise ValueError(f"Missing required column. Tried: {candidates}")
+
+
+def _resolve_optional_column(df: pd.DataFrame, candidates: list[str]) -> Optional[str]:
+    lower_map = {col.lower(): col for col in df.columns}
+    for candidate in candidates:
+        if candidate in df.columns:
+            return candidate
+        if candidate.lower() in lower_map:
+            return lower_map[candidate.lower()]
+    return None
 
 
 def _fetch_finra_token(config: Config) -> str:
@@ -60,7 +71,8 @@ def _build_finra_headers(config: Config) -> dict:
 
 
 def _load_finra_from_file(path: str) -> pd.DataFrame:
-    if path.lower().endswith(".json"):
+    file_path = Path(path)
+    if file_path.suffix.lower() == ".json":
         with open(path, "r", encoding="utf-8") as handle:
             payload = json.load(handle)
         if isinstance(payload, dict) and "data" in payload:
@@ -68,21 +80,25 @@ def _load_finra_from_file(path: str) -> pd.DataFrame:
         if isinstance(payload, list):
             return pd.DataFrame(payload)
         raise ValueError("Unsupported FINRA JSON file structure.")
-    return pd.read_csv(path)
+
+    sep = "|" if file_path.suffix.lower() in {".txt", ".pipe"} else ","
+    return pd.read_csv(path, sep=sep)
 
 
-def _load_finra_from_api(config: Config, symbols: list[str] | None = None, target_date: date | None = None) -> pd.DataFrame:
+def _load_finra_from_api(
+    config: Config,
+    symbols: list[str] | None = None,
+    target_date: date | None = None,
+) -> pd.DataFrame:
     if not config.finra_otc_url:
         raise ValueError("FINRA_OTC_URL is required when FINRA_OTC_FILE is not set.")
     headers = _build_finra_headers(config)
     method = config.finra_request_method
     params = config.finra_request_params or {}
 
-    # Build request payload with symbol filter and higher limit
     payload = config.finra_request_json.copy() if config.finra_request_json else {}
-    payload.setdefault("limit", 10000)  # Increase default limit
+    payload.setdefault("limit", 10000)
 
-    # Add symbol filter if symbols provided
     if symbols:
         symbol_filters = [
             {"fieldName": "issueSymbolIdentifier", "fieldValue": sym, "compareType": "EQUAL"}
@@ -90,10 +106,9 @@ def _load_finra_from_api(config: Config, symbols: list[str] | None = None, targe
         ]
         payload["orFilters"] = symbol_filters
 
-    # Add date range filter if target_date provided
     if target_date:
         week_start = target_date - timedelta(days=target_date.weekday())
-        start_date = week_start - timedelta(weeks=4)  # Past 4 weeks for coverage
+        start_date = week_start - timedelta(weeks=8)
         payload["dateRangeFilters"] = [
             {
                 "fieldName": "weekStartDate",
@@ -132,7 +147,7 @@ def _load_finra_from_api(config: Config, symbols: list[str] | None = None, targe
     return pd.read_csv(io.StringIO(response.text))
 
 
-def _normalize_finra_columns(df: pd.DataFrame, config: Config) -> pd.DataFrame:
+def _normalize_finra_columns(df: pd.DataFrame, config: Config, source_file: Optional[str]) -> pd.DataFrame:
     symbol_col = _resolve_column(
         df,
         config.finra_symbol_field,
@@ -141,7 +156,16 @@ def _normalize_finra_columns(df: pd.DataFrame, config: Config) -> pd.DataFrame:
     date_col = _resolve_column(
         df,
         config.finra_date_field,
-        ["week_start_date", "weekStartDate", "week_start", "weekStart", "tradeDate", "trade_date", "date"],
+        [
+            "week_start_date",
+            "weekStartDate",
+            "week_start",
+            "weekStart",
+            "tradeDate",
+            "trade_date",
+            "date",
+            "lastUpdateDate",
+        ],
     )
     volume_col = _resolve_column(
         df,
@@ -172,43 +196,72 @@ def _normalize_finra_columns(df: pd.DataFrame, config: Config) -> pd.DataFrame:
             "off_exchange_volume": pd.to_numeric(df[volume_col], errors="coerce"),
         }
     )
-    if trade_count_col:
-        normalized["trade_count"] = pd.to_numeric(df[trade_count_col], errors="coerce")
-    else:
-        normalized["trade_count"] = pd.NA
+    normalized["trade_count"] = (
+        pd.to_numeric(df[trade_count_col], errors="coerce")
+        if trade_count_col
+        else pd.NA
+    )
 
-    # Extract tier from tierIdentifier field (T1, T2, OTC)
-    tier_candidates = ["tierIdentifier", "tier_identifier", "tier"]
-    tier_col = None
-    for candidate in tier_candidates:
-        if candidate in df.columns:
-            tier_col = candidate
-            break
-    if tier_col:
-        normalized["source"] = df[tier_col].astype(str).str.upper()
-    else:
-        normalized["source"] = "unknown"
+    tier_identifier_col = _resolve_optional_column(df, ["tierIdentifier", "tier_identifier", "tier"])
+    tier_description_col = _resolve_optional_column(df, ["tierDescription", "tier_description"])
+    issue_name_col = _resolve_optional_column(df, ["issueName", "issue_name"])
+    mp_name_col = _resolve_optional_column(df, ["marketParticipantName", "market_participant_name"])
+    mpid_col = _resolve_optional_column(df, ["MPID", "mpid"])
+    last_update_col = _resolve_optional_column(df, ["lastUpdateDate", "last_update_date"])
 
-    normalized = normalized.dropna(subset=["symbol", "week_start_date", "off_exchange_volume"])
-    return normalized
+    normalized["tier_identifier"] = (
+        df[tier_identifier_col].astype(str).str.upper() if tier_identifier_col else pd.NA
+    )
+    normalized["tier_description"] = (
+        df[tier_description_col].astype(str) if tier_description_col else pd.NA
+    )
+    normalized["issue_name"] = df[issue_name_col].astype(str) if issue_name_col else pd.NA
+    normalized["market_participant_name"] = (
+        df[mp_name_col].astype(str) if mp_name_col else pd.NA
+    )
+    normalized["mpid"] = df[mpid_col].astype(str).str.upper() if mpid_col else pd.NA
+    normalized["last_update_date"] = (
+        pd.to_datetime(df[last_update_col]).dt.date if last_update_col else pd.NA
+    )
+    normalized["source_file"] = source_file
+
+    normalized = normalized.dropna(
+        subset=["symbol", "week_start_date", "off_exchange_volume"]
+    )
+    return normalized[
+        [
+            "symbol",
+            "week_start_date",
+            "off_exchange_volume",
+            "trade_count",
+            "tier_identifier",
+            "tier_description",
+            "issue_name",
+            "market_participant_name",
+            "mpid",
+            "last_update_date",
+            "source_file",
+        ]
+    ]
 
 
-def fetch_finra_otc_volume(
+def fetch_finra_otc_weekly(
     config: Config, target_date: date
-) -> Tuple[pd.DataFrame, pd.DataFrame, date]:
+) -> Tuple[pd.DataFrame, pd.DataFrame, Optional[date]]:
     if config.finra_otc_file:
         logger.info("Loading FINRA OTC data from file: %s", config.finra_otc_file)
         raw_df = _load_finra_from_file(config.finra_otc_file)
+        source_file = Path(config.finra_otc_file).name
     else:
         logger.info("Fetching FINRA OTC data from API for symbols: %s", config.finra_tickers)
         raw_df = _load_finra_from_api(config, symbols=config.finra_tickers, target_date=target_date)
+        source_file = None
         logger.info("Fetched %d rows from FINRA API", len(raw_df))
 
-    normalized = _normalize_finra_columns(raw_df, config)
+    normalized = _normalize_finra_columns(raw_df, config, source_file)
     normalized = normalized[normalized["symbol"].isin(config.finra_tickers)].copy()
     if normalized.empty:
         logger.warning("FINRA OTC data returned no rows for configured tickers.")
-        # Return empty DataFrames - orchestrator will handle Polygon-only mode
         return pd.DataFrame(), pd.DataFrame(), None
 
     available_weeks = sorted(normalized["week_start_date"].unique())

@@ -1,165 +1,91 @@
 # Project Context
 
 ## Project Goal Summary
-- Build a production-quality Python analytics project for end-of-day dark pool ETF analysis (Option B inference).
-- Generate daily summary tables (estimated bought/sold, buy ratio, total off-exchange volume) and historical log-ratio plots.
-- Persist all raw and derived data in DuckDB and save outputs locally.
+- Build a production-quality Python analytics pipeline to infer institutional accumulation vs distribution for liquid ETFs.
+- Keep FINRA OTC weekly volume as the authoritative off-exchange anchor.
+- Add FINRA daily short sale volume as a separate, timely pressure signal (never a replacement for OTC weekly).
+- Use Polygon lit-market trade inference (Option B) to compute a directional proxy (log(Buy/Sell)).
+- Add price context (daily aggregates, returns, z-scores) alongside short-pressure metrics.
+- Aggregate constituent-level short pressure to index-level totals with coverage stats.
+- Persist raw and derived datasets in DuckDB and render daily tables for DEFAULT_TICKERS.
 
 ## Current Capabilities
-- Full implementation complete with performance optimizations.
-- Parallel Polygon API fetching with aggregates fallback (when trades API returns 403).
-- Proper connection management and consistent buy-ratio formulas.
-- FINRA direct API key authentication (X-API-KEY/X-API-SECRET headers; OAuth optional).
-- Multi-date fetch modes: "single", "daily" (last N trading days), "weekly" (last N Fridays).
-- FINRA tier tracking via `tierIdentifier` field (T1=NMS Tier 1, T2=NMS Tier 2, OTC).
-- Dark-theme HTML/PNG table renderer with signal annotations (BOT/SELL).
-- Log-ratio time-series plots with volume-scaled markers.
+- Phase A/B pipeline with separate ingestion tables and daily metrics with provenance flags.
+- FINRA OTC weekly fetcher (API or file) with week selection.
+- FINRA daily short sale ingestion (file or API).
+- Polygon trades fetcher with aggregates fallback on 403.
+- Polygon daily aggregates ingestion for price context.
+- Lit inference using NBBO/TICK and log(Buy/Sell).
+- Table renderer for daily outputs (HTML/PNG) with pressure context labels.
+- Index-level constituent aggregation for short pressure.
 
 ## Where Things Live
-- `main.py` — Root entry point (can run from project root)
-- `darkpool_analysis/` — Package directory
-- `darkpool_analysis/__init__.py` — Package init (v0.1.0)
-- `darkpool_analysis/orchestrator.py` — Main orchestration logic
-- `darkpool_analysis/config.py` — Configuration loader from .env
-- `darkpool_analysis/db.py` — DuckDB connection and upsert helpers
-- `darkpool_analysis/fetch_finra.py` — FINRA OTC data fetcher
-- `darkpool_analysis/fetch_polygon_equity.py` — Polygon trades fetcher (parallel)
-- `darkpool_analysis/infer_buy_sell.py` — Lit trade classification (NBBO/TICK)
-- `darkpool_analysis/analytics.py` — Darkpool estimates and summary builders
-- `darkpool_analysis/plotter.py` — Log-ratio time-series plots (CLI: `python plotter.py`)
-- `darkpool_analysis/table_renderer.py` — HTML/PNG table generator (CLI: `python table_renderer.py`)
-- `darkpool_analysis/data/darkpool.duckdb` — Persistent storage
-- `darkpool_analysis/output/tables/` — CSV and HTML/PNG exports
-- `darkpool_analysis/output/plots/` — PNG plots
-- `.env` — Environment secrets (API keys only, at project root)
-- `darkpool_analysis/requirements.txt` — Python dependencies
+- main.py - root entry point
+- darkpool_analysis/orchestrator.py - pipeline driver
+- darkpool_analysis/config.py - config/env loader
+- darkpool_analysis/db.py - DuckDB schema and upsert
+- darkpool_analysis/fetch_finra_otc.py - OTC weekly ingestion
+- darkpool_analysis/fetch_finra_short.py - short sale daily ingestion
+- darkpool_analysis/fetch_polygon_equity.py - Polygon trades fetcher
+- darkpool_analysis/fetch_polygon_agg.py - Polygon daily aggregates (price/volume)
+- darkpool_analysis/infer_buy_sell.py - lit-direction classification
+- darkpool_analysis/analytics.py - lit_direction_daily + daily_metrics + index aggregation
+- darkpool_analysis/table_renderer.py - daily table outputs
+- darkpool_analysis/data/darkpool.duckdb - persistent storage
+- darkpool_analysis/data/constituents/spx_sample.csv - sample constituent list (replace with full coverage)
+- database_check.ipynb - validation notebook
+- darkpool_analysis/output/tables - table outputs
+- darkpool_analysis/output/plots - plots (Phase C)
 
-## Execution Flow (per scheduler tick)
-1. Load config and environment variables (tickers, date ranges, MIN_LIT_VOLUME, RTH filter).
-2. For each target date:
-   - Fetch FINRA OTC weekly data; abort on failure; write `finra_otc_volume_raw`.
-   - Fetch Polygon equity trades for eligible tickers; warn on partial failure; write `equity_trades_raw`.
-   - Classify lit trades and compute lit buy ratios; write `equity_lit_directional_flow`.
-   - Apply lit ratios to FINRA volume; write `darkpool_estimated_flow`.
-   - Build `darkpool_daily_summary`; optionally export CSVs.
-3. After all dates processed:
-   - Generate log-ratio plots from DuckDB.
-   - Render combined HTML/PNG table for all processed dates.
+## Execution Flow (per target date)
+1. Load config and env vars.
+2. Fetch FINRA OTC weekly data (latest week <= target_date) and store finra_otc_weekly_raw.
+3. Fetch FINRA daily short sale data for target_date and store finra_short_daily_raw.
+4. Fetch Polygon trades (or aggregates fallback) and store polygon_equity_trades_raw.
+5. Fetch Polygon daily aggregates for price context and store polygon_daily_agg_raw.
+6. Compute lit_direction_daily (buy/sell volumes, ratios, log_buy_sell).
+7. Build daily_metrics by combining lit_direction_daily, short ratio, price context, and OTC weekly volume.
+8. Aggregate constituent short pressure to index-level daily totals.
+9. Render daily table outputs (HTML/PNG). (Phase C plots later.)
 
 ## Data and Storage Details
-- DuckDB is the single source of truth: `darkpool_analysis/data/darkpool.duckdb`.
-- Raw tables: `finra_otc_volume_raw` (includes `source` column for tier: T1/T2/OTC), `equity_trades_raw`.
-- Derived tables: `equity_lit_directional_flow`, `darkpool_estimated_flow`, `darkpool_daily_summary`.
-- Store float64 values; round only for display/export.
-
-## External Integrations
-- FINRA OTC Transparency (ATS + non-ATS) equity volume; authoritative weekly dataset.
-- Polygon equity trade prints for lit-market proxy (NBBO if available; otherwise TICK rule).
-- Options flow is out of scope; no inferred trade direction from options or short-sale files.
+- DuckDB is the single source of truth.
+- Raw tables:
+  - finra_otc_weekly_raw: symbol, week_start_date, off_exchange_volume, trade_count, tier/participant metadata
+  - finra_short_daily_raw: symbol, trade_date, short_volume, short_exempt_volume, total_volume, market, source_file
+  - polygon_equity_trades_raw: symbol, timestamp, price, size, bid, ask
+  - polygon_daily_agg_raw: symbol, trade_date, open, high, low, close, vwap, volume
+- Derived tables:
+  - lit_direction_daily: symbol, date, lit_buy_volume, lit_sell_volume, lit_buy_ratio, log_buy_sell, classification_method, coverage, inference_version
+  - daily_metrics: symbol, date, log_buy_sell, short_ratio, short_ratio_denominator_type/value, price/return context, pressure_context_label, data_quality, provenance flags, inference_version
+  - index_constituent_short_agg_daily: index_symbol, trade_date, agg_short_ratio, coverage stats, index_return, interpretation_label
+  - composite_signal (Phase C only)
 
 ## Data Sources Explained
+- FINRA OTC weekly summary: authoritative off-exchange volume, published weekly with delay.
+- FINRA daily short sale: short + short-exempt volume and total volume per facility during RTH; used as pressure signal only.
+- Polygon trades: lit-market proxy for direction; NBBO when bid/ask present, TICK otherwise.
+- Polygon daily aggregates: price/volume context and return metrics.
 
-### FINRA OTC Data
-FINRA publishes **volume only** — no buy/sell direction:
-- `off_exchange_volume`: Total shares traded off-exchange
-- `trade_count`: Number of trades
-- `tierIdentifier`: Market tier (T1, T2, OTC)
-- `week_start_date`: Weekly aggregation period
+## Data Quality Flags
+- OTC_ANCHORED: the OTC week covers the target date week.
+- PRE_OTC: the OTC week is stale relative to the target date.
 
-### Polygon Equity Trades
-Polygon provides lit-market trade data used to infer direction:
-- `symbol`: Ticker symbol
-- `timestamp`: Trade execution time (nanoseconds)
-- `price`: Execution price
-- `size`: Shares traded
-- `bid`: Best bid at trade time (NBBO)
-- `ask`: Best ask at trade time (NBBO)
-
-## Inference Methodology (Option B)
-
-We use **Option B: Lit Market Proxy** — applying lit-market buy/sell ratios to dark pool volume.
-
-### Why Option B?
-| Method | Approach | Pros | Cons |
-|--------|----------|------|------|
-| **Option A: Options Flow** | Infer from options activity | Captures institutional intent | Complex; options ≠ equity |
-| **Option B: Lit Market Proxy** | Apply lit buy/sell ratio | Simple; same-asset inference | Assumes dark ≈ lit behavior |
-| **Option C: Short Sale Data** | Use short volume as sell proxy | Direct short data | Shorts ≠ all sells |
-
-### Classification Methods
-1. **NBBO** (preferred): Compare trade price to bid/ask quotes
-   - `price >= ask` → BUY (buyer lifting the offer)
-   - `price <= bid` → SELL (seller hitting the bid)
-   - else → NEUTRAL (excluded)
-
-2. **TICK** (fallback): Compare to previous trade price
-   - `price > prev_price` → BUY
-   - `price < prev_price` → SELL
-   - else → NEUTRAL (excluded)
-
-NBBO is used when all trades have valid bid/ask; TICK is used if any are missing.
-
-## Polygon API Subscription Tiers
-
-| Tier | Trades API | Aggregates API | Classification |
-|------|------------|----------------|----------------|
-| **Free** | 403 Forbidden | Available | TICK (minute bars) |
-| **Paid** | Available | Available | NBBO (tick-level) |
-
-When trades API returns 403, code auto-falls back to minute aggregates:
-- Uses OHLC bars: `close > open` → BUY, `close < open` → SELL
-- Less accurate since each bar contains multiple trades in both directions
-
-## Trading Hours Consideration
-
-**Current setting**: RTH 09:30-16:15 ET (15-min buffer for closing auction)
-
-### The Mismatch
-- FINRA reports **total daily volume** (all hours, including pre/post market)
-- We classify lit trades during **RTH only** (~90% of volume)
-- Assumption: Extended hours direction ≈ RTH direction
-
-### Extended Hours Trade-off
-| Approach | Pro | Con |
-|----------|-----|-----|
-| RTH only (current) | Better NBBO quality, tight spreads | Misses ~10% of volume |
-| Include extended hours | Captures all volume | Wider spreads, noisier classification |
-
-Extended hours typically have wider spreads and lower liquidity, making NBBO classification less reliable.
-
-## Deployment and Operations
-- Local setup: `pip install -r darkpool_analysis/requirements.txt`, configure `.env` with API keys, then run from root.
-- Run from root: `python main.py`
-- Run from subdirectory: `cd darkpool_analysis && python orchestrator.py`
-- CLI tools: `python plotter.py --symbols TQQQ,SPY` or `python table_renderer.py --dates 2025-12-20`
-- Daily run after market close; weekly run Sunday after FINRA settlement.
-- Set `POLYGON_MAX_WORKERS` env var to control parallel API threads (default: 4).
-
-## Configuration Structure
-- **`.env` (project root)**: Only secrets (POLYGON_API_KEY, FINRA_API_KEY, FINRA_API_SECRET).
-- **`config.py`**: All defaults including:
-  - `DEFAULT_TICKERS = ["TQQQ"]`
-  - `DEFAULT_TARGET_DATE = "2025-12-22"` (update as needed)
-  - `DEFAULT_FETCH_MODE = "daily"`
-  - `DEFAULT_BACKFILL_COUNT = 10`
-  - `DEFAULT_RTH_START = "09:30"`, `DEFAULT_RTH_END = "16:15"`
-  - `DEFAULT_MIN_LIT_VOLUME = 10000`
-  - `DEFAULT_EXPORT_CSV = False`
-- **Fetch modes** (`FETCH_MODE` env var or DEFAULT_FETCH_MODE):
-  - `"single"`: Process only target_date, snapshot keyed by target_date.
-  - `"daily"`: Process last N trading days (BACKFILL_COUNT), snapshot keyed by target_date.
-  - `"weekly"`: Process last N Fridays (BACKFILL_COUNT), snapshot keyed by FINRA week.
-- Polygon trades API requires paid tier; code auto-falls back to aggregates (minute bars) on 403.
-- DEFAULT_TARGET_DATE should be set to a trading day (not weekend/holiday).
+## Configuration Notes
+- .env holds API secrets only.
+- config.py defines defaults (tickers, dates, RTH window, fetch mode).
+- FINRA_SHORT_SALE_* env vars control daily short sale ingestion.
+- FINRA_OTC_* env vars control weekly OTC ingestion.
+- POLYGON_* env vars control Polygon ingestion.
 
 ## Known Gaps and Watchouts
-- SPXW is not an equity ticker and must be excluded from FINRA volume tables (via `EXCLUDED_FINRA_TICKERS`).
-- If lit volume is below MIN_LIT_VOLUME, set buy ratio to NULL and persist coverage metadata.
-- Daily outputs must reference the most recent settled FINRA week.
-- PNG table rendering requires one of: Playwright (recommended), imgkit, or Selenium.
+- Short sale "TotalVolume" is facility-specific, not total market volume.
+- If total_volume is missing, short_ratio uses Polygon total volume and is marked as a proxy.
+- OTC weekly data is delayed; daily metrics must flag PRE_OTC when stale.
+- Some tickers may lack FINRA OTC coverage; keep rows with has_otc false.
+- Index aggregation requires a maintained constituent list; static lists may drift over time.
 
 ## Tips for Future Contributors
-- Keep the mandatory disclaimer in README and code comments: FINRA does not publish trade direction; buy/sell values are inferred estimates.
-- Avoid hidden assumptions; document inference logic and coverage limits explicitly.
-- Update `AGENT_CHANGELOG.md` after each session with the required checkbox format.
-- The plotter and table_renderer modules have CLI entry points for standalone use.
+- Keep the mandatory disclaimer in README and code comments.
+- Do not imply observed dark-pool direction; all buy/sell values are inferred.
+- Use the database_check.ipynb notebook to validate schema and data before plotting.

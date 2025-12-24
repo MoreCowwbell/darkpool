@@ -58,7 +58,7 @@ def _normalize_trades_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     df["ask"] = pd.to_numeric(df["ask"], errors="coerce")
     df = df.dropna(subset=["symbol", "timestamp", "price", "size"])
     df["timestamp"] = df["timestamp"].dt.tz_convert("UTC").dt.tz_localize(None)
-    return df
+    return df[["symbol", "timestamp", "price", "size", "bid", "ask"]]
 
 
 def _load_trades_from_file(path: str) -> pd.DataFrame:

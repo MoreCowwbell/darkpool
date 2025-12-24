@@ -15,18 +15,38 @@ def get_connection(db_path: Path) -> duckdb.DuckDBPyConnection:
 def init_db(conn: duckdb.DuckDBPyConnection) -> None:
     conn.execute(
         """
-        CREATE TABLE IF NOT EXISTS finra_otc_volume_raw (
+        CREATE TABLE IF NOT EXISTS finra_otc_weekly_raw (
             symbol TEXT,
             week_start_date DATE,
             off_exchange_volume DOUBLE,
             trade_count DOUBLE,
-            source TEXT
+            tier_identifier TEXT,
+            tier_description TEXT,
+            issue_name TEXT,
+            market_participant_name TEXT,
+            mpid TEXT,
+            last_update_date DATE,
+            source_file TEXT
         )
         """
     )
     conn.execute(
         """
-        CREATE TABLE IF NOT EXISTS equity_trades_raw (
+        CREATE TABLE IF NOT EXISTS finra_short_daily_raw (
+            symbol TEXT,
+            trade_date DATE,
+            short_volume DOUBLE,
+            short_exempt_volume DOUBLE,
+            total_volume DOUBLE,
+            market TEXT,
+            source TEXT,
+            source_file TEXT
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS polygon_equity_trades_raw (
             symbol TEXT,
             timestamp TIMESTAMP,
             price DOUBLE,
@@ -38,45 +58,102 @@ def init_db(conn: duckdb.DuckDBPyConnection) -> None:
     )
     conn.execute(
         """
-        CREATE TABLE IF NOT EXISTS equity_lit_directional_flow (
+        CREATE TABLE IF NOT EXISTS polygon_daily_agg_raw (
+            symbol TEXT,
+            trade_date DATE,
+            open DOUBLE,
+            high DOUBLE,
+            low DOUBLE,
+            close DOUBLE,
+            vwap DOUBLE,
+            volume DOUBLE
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS lit_direction_daily (
             symbol TEXT,
             date DATE,
             lit_buy_volume DOUBLE,
             lit_sell_volume DOUBLE,
             lit_buy_ratio DOUBLE,
+            log_buy_sell DOUBLE,
             classification_method TEXT,
-            lit_coverage_pct DOUBLE
+            lit_coverage_pct DOUBLE,
+            inference_version TEXT
         )
         """
     )
     conn.execute(
         """
-        CREATE TABLE IF NOT EXISTS darkpool_estimated_flow (
-            symbol TEXT,
+        CREATE TABLE IF NOT EXISTS daily_metrics (
             date DATE,
-            finra_off_exchange_volume DOUBLE,
-            estimated_dark_buy_volume DOUBLE,
-            estimated_dark_sell_volume DOUBLE,
-            applied_lit_buy_ratio DOUBLE,
-            inference_version TEXT,
-            finra_week_used DATE,
-            has_finra_data BOOLEAN
+            symbol TEXT,
+            log_buy_sell DOUBLE,
+            short_volume DOUBLE,
+            short_exempt_volume DOUBLE,
+            short_total_volume DOUBLE,
+            short_ratio DOUBLE,
+            short_ratio_z DOUBLE,
+            short_ratio_denominator_type TEXT,
+            short_ratio_denominator_value DOUBLE,
+            short_ratio_source TEXT,
+            close DOUBLE,
+            vwap DOUBLE,
+            high DOUBLE,
+            low DOUBLE,
+            volume DOUBLE,
+            return_1d DOUBLE,
+            return_z DOUBLE,
+            range_pct DOUBLE,
+            otc_off_exchange_volume DOUBLE,
+            otc_week_used DATE,
+            data_quality TEXT,
+            has_otc BOOLEAN,
+            has_short BOOLEAN,
+            has_lit BOOLEAN,
+            has_price BOOLEAN,
+            pressure_context_label TEXT,
+            inference_version TEXT
         )
         """
     )
     conn.execute(
         """
-        CREATE TABLE IF NOT EXISTS darkpool_daily_summary (
-            date DATE,
+        CREATE TABLE IF NOT EXISTS index_constituent_short_agg_daily (
+            index_symbol TEXT,
+            trade_date DATE,
+            total_short_volume DOUBLE,
+            total_denominator_volume DOUBLE,
+            denominator_type TEXT,
+            agg_short_ratio DOUBLE,
+            agg_short_ratio_z DOUBLE,
+            coverage_count INTEGER,
+            expected_constituent_count INTEGER,
+            coverage_pct DOUBLE,
+            index_price_symbol TEXT,
+            index_price_source TEXT,
+            index_price_return DOUBLE,
+            index_return_z DOUBLE,
+            interpretation_label TEXT,
+            data_quality TEXT,
+            inference_version TEXT
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS composite_signal (
             symbol TEXT,
-            estimated_bought DOUBLE,
-            estimated_sold DOUBLE,
-            buy_ratio DOUBLE,
-            sell_ratio DOUBLE,
-            total_off_exchange_volume DOUBLE,
-            finra_period_type TEXT,
-            finra_week_used DATE,
-            has_finra_data BOOLEAN
+            date DATE,
+            directional_score DOUBLE,
+            pressure_score DOUBLE,
+            participation_score DOUBLE,
+            composite_score DOUBLE,
+            final_label TEXT,
+            data_quality TEXT,
+            inference_version TEXT
         )
         """
     )
@@ -95,5 +172,9 @@ def upsert_dataframe(
     if keys:
         join_clause = " AND ".join([f"{table_name}.{col} = df_view.{col}" for col in keys])
         conn.execute(f"DELETE FROM {table_name} USING df_view WHERE {join_clause}")
-    conn.execute(f"INSERT INTO {table_name} SELECT * FROM df_view")
+    columns = list(df.columns)
+    column_list = ", ".join(columns)
+    conn.execute(
+        f"INSERT INTO {table_name} ({column_list}) SELECT {column_list} FROM df_view"
+    )
     conn.unregister("df_view")

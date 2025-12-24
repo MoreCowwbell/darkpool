@@ -1,10 +1,8 @@
 duckdb
-matplotlib
 pandas
 python-dotenv
 pytz
 requests
-scipy
 
 # Optional: For table PNG rendering (install one of these)
 # playwright  # Recommended: pip install playwright && playwright install chromium

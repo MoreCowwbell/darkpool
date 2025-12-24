@@ -1,7 +1,7 @@
 """
-Dark-theme table renderer for darkpool analysis.
+Dark-theme table renderer for daily metrics.
 
-Generates PNG and HTML table outputs from DuckDB darkpool_daily_summary data.
+Generates PNG and HTML outputs from DuckDB daily_metrics data.
 """
 from __future__ import annotations
 
@@ -9,16 +9,12 @@ import argparse
 import logging
 from datetime import date
 from pathlib import Path
-from typing import Optional
 
 import duckdb
 import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-# =============================================================================
-# Dark Theme Color Palette
-# =============================================================================
 COLORS = {
     "background": "#0f0f10",
     "header_bg": "#1b1b1d",
@@ -36,151 +32,106 @@ COLORS = {
     "white": "#ffffff",
 }
 
-# =============================================================================
-# Data Fetching
-# =============================================================================
 
-
-def fetch_summary_df(
+def fetch_metrics_df(
     conn: duckdb.DuckDBPyConnection,
     dates: list[date],
     tickers: list[str],
 ) -> pd.DataFrame:
-    """
-    Fetch darkpool_daily_summary data for multiple dates and tickers.
-
-    Args:
-        conn: DuckDB connection (read-only preferred)
-        dates: List of dates to fetch data for
-        tickers: List of ticker symbols to include
-
-    Returns:
-        DataFrame with columns: symbol, estimated_bought, estimated_sold,
-        buy_ratio, total_off_exchange_volume, finra_period_type
-    """
     if not tickers or not dates:
         return pd.DataFrame()
 
-    # Build parameterized query with placeholders
     ticker_placeholders = ", ".join(["?" for _ in tickers])
     date_placeholders = ", ".join(["?" for _ in dates])
     query = f"""
         SELECT
             date,
             symbol,
-            estimated_bought,
-            estimated_sold,
-            buy_ratio,
-            sell_ratio,
-            total_off_exchange_volume,
-            finra_period_type,
-            finra_week_used,
-            has_finra_data
-        FROM darkpool_daily_summary
+            log_buy_sell,
+            short_ratio,
+            short_ratio_z,
+            short_ratio_denominator_type,
+            short_ratio_denominator_value,
+            close,
+            return_1d,
+            return_z,
+            otc_off_exchange_volume,
+            data_quality,
+            pressure_context_label
+        FROM daily_metrics
         WHERE date IN ({date_placeholders}) AND symbol IN ({ticker_placeholders})
         ORDER BY date DESC, symbol
     """
 
     params = list(dates) + list(tickers)
-    df = conn.execute(query, params).df()
-
-    return df
-
-
-# =============================================================================
-# Formatting Utilities
-# =============================================================================
+    return conn.execute(query, params).df()
 
 
 def _format_volume(value: float) -> str:
-    """Format large numbers with K/M/B suffixes."""
     if pd.isna(value) or value is None:
-        return "—"
-
+        return "NA"
     abs_val = abs(value)
     if abs_val >= 1_000_000_000:
         return f"{value / 1_000_000_000:.2f}B"
-    elif abs_val >= 1_000_000:
+    if abs_val >= 1_000_000:
         return f"{value / 1_000_000:.2f}M"
-    elif abs_val >= 1_000:
+    if abs_val >= 1_000:
         return f"{value / 1_000:.0f}K"
-    else:
-        return f"{value:,.0f}"
+    return f"{value:,.0f}"
 
 
 def _format_ratio(value: float) -> str:
-    """Format buy ratio with 2 decimal places."""
     if pd.isna(value) or value is None:
-        return "—"
+        return "NA"
     return f"{value:.2f}"
 
 
-def _format_pct(value: float) -> str:
-    """Format percentage values."""
+def _format_log(value: float) -> str:
     if pd.isna(value) or value is None:
-        return "—"
-    return f"{value:.0f}%"
+        return "NA"
+    return f"{value:.3f}"
 
 
-def _get_signal(buy_ratio: float) -> str:
-    """Determine Accumulation/Distribution signal based on buy_ratio."""
-    if pd.isna(buy_ratio) or buy_ratio is None:
-        return ""
-    if buy_ratio > 1.25:
-        return "Accumulation"
-    elif buy_ratio < 0.80:
-        return "Distribution"
-    return ""
+def _format_pct(value: float) -> str:
+    if pd.isna(value) or value is None:
+        return "NA"
+    return f"{value * 100:.2f}%"
 
 
-def _get_ratio_color(buy_ratio: float) -> str:
-    """Get color for buy_ratio based on thresholds."""
-    if pd.isna(buy_ratio) or buy_ratio is None:
+def _format_z(value: float) -> str:
+    if pd.isna(value) or value is None:
+        return "NA"
+    return f"{value:.2f}"
+
+
+def _get_sign_color(value: float) -> str:
+    if pd.isna(value) or value is None:
         return COLORS["text_muted"]
-    if buy_ratio > 1.25:
+    if value > 0:
         return COLORS["green"]
-    elif buy_ratio < 0.80:
+    if value < 0:
         return COLORS["red"]
     return COLORS["text"]
 
 
-def _get_sell_ratio_color(sell_ratio: float) -> str:
-    """Get color for sell_ratio (inverse logic of buy_ratio)."""
-    if pd.isna(sell_ratio) or sell_ratio is None:
-        return COLORS["text_muted"]
-    if sell_ratio > 1.25:  # High selling pressure
-        return COLORS["red"]
-    elif sell_ratio < 0.80:  # Low selling pressure
+def _get_quality_color(value: str) -> str:
+    if value == "OTC_ANCHORED":
         return COLORS["green"]
-    return COLORS["text"]
+    if value == "PRE_OTC":
+        return COLORS["yellow"]
+    return COLORS["text_muted"]
 
 
-def _get_data_quality(snapshot_date: date, finra_week: date) -> tuple[str, str]:
-    """
-    Determine data quality based on date vs finra_week_used.
-
-    Returns:
-        Tuple of (quality_label, color)
-    """
-    if finra_week is None or pd.isna(finra_week):
-        return ("—", COLORS["text_muted"])
-
-    # Convert to date objects if needed
-    if hasattr(snapshot_date, 'date'):
-        snapshot_date = snapshot_date.date() if callable(getattr(snapshot_date, 'date')) else snapshot_date
-    if hasattr(finra_week, 'date'):
-        finra_week = finra_week.date() if callable(getattr(finra_week, 'date')) else finra_week
-
-    # Calculate weeks difference
-    days_diff = (snapshot_date - finra_week).days
-    weeks_diff = days_diff // 7
-
-    if weeks_diff <= 0:
-        return ("ACTUAL", COLORS["green"])
-    elif weeks_diff == 1:
-        return ("1 week stale", COLORS["yellow"])
-    else:
-        return (f"{weeks_diff} weeks stale", COLORS["red"])
+def _get_pressure_color(label: str) -> str:
+    if label == "SHORT_INTO_STRENGTH":
+        return COLORS["yellow"]
+    if label == "SHORT_ON_WEAKNESS":
+        return COLORS["red"]
+    if label == "LOW_SHORT_STRONG_UP":
+        return COLORS["green"]
+    if label == "LOW_SHORT_SELL_OFF":
+        return COLORS["red_bg"]
+    return COLORS["text_muted"]
 
 
 def format_display_df(
@@ -188,194 +139,102 @@ def format_display_df(
     tickers: list[str],
     dates: list[date],
 ) -> pd.DataFrame:
-    """
-    Format DataFrame for display, organized by date then ticker.
+    display_rows = []
 
-    Args:
-        df: Raw DataFrame from fetch_summary_df
-        tickers: Ordered list of tickers (display order)
-        dates: List of dates (sorted newest first)
-
-    Returns:
-        Formatted DataFrame with display strings and additional columns
-    """
-    display_data = []
-
-    # Convert df dates to Python date objects for comparison
     if not df.empty and "date" in df.columns:
         df = df.copy()
         df["date"] = pd.to_datetime(df["date"]).dt.date
 
-    # Sort dates descending (newest first)
     sorted_dates = sorted(dates, reverse=True)
 
     for target_date in sorted_dates:
         for ticker in tickers:
-            ticker_data = df[(df["symbol"] == ticker) & (df["date"] == target_date)]
+            row_df = df[(df["symbol"] == ticker) & (df["date"] == target_date)]
+            if row_df.empty:
+                display_rows.append(
+                    {
+                        "date": target_date.strftime("%Y-%m-%d"),
+                        "symbol": ticker,
+                        "close": "NA",
+                        "return_1d": "NA",
+                        "return_z": "NA",
+                        "log_buy_sell": "NA",
+                        "short_ratio": "NA",
+                        "short_ratio_z": "NA",
+                        "short_denom_type": "NA",
+                        "short_denom_value": "NA",
+                        "otc_volume": "NA",
+                        "data_quality": "NA",
+                        "pressure_label": "NA",
+                        "_log_raw": None,
+                        "_short_z_raw": None,
+                        "_return_z_raw": None,
+                        "_data_quality_color": COLORS["text_muted"],
+                        "_pressure_color": COLORS["text_muted"],
+                        "_status": "missing",
+                    }
+                )
+                continue
 
-            if ticker_data.empty:
-                # Missing data row
-                display_data.append({
+            row = row_df.iloc[0]
+            display_rows.append(
+                {
                     "date": target_date.strftime("%Y-%m-%d"),
                     "symbol": ticker,
-                    "estimated_bought": "—",
-                    "estimated_sold": "—",
-                    "buy_pct": "—",
-                    "buy_ratio": "—",
-                    "sell_ratio": "—",
-                    "total_volume": "—",
-                    "finra_week": "—",
-                    "data_quality": "—",
-                    "signal": "",
-                    "_buy_ratio_raw": None,
-                    "_sell_ratio_raw": None,
-                    "_data_quality_color": COLORS["text_muted"],
-                    "_status": "missing",
-                })
-            else:
-                row = ticker_data.iloc[0]
-                has_finra = row.get("has_finra_data", True)
-                if pd.isna(has_finra):
-                    has_finra = True  # Default to True for backward compatibility
+                    "close": _format_ratio(row.get("close")),
+                    "return_1d": _format_pct(row.get("return_1d")),
+                    "return_z": _format_z(row.get("return_z")),
+                    "log_buy_sell": _format_log(row.get("log_buy_sell")),
+                    "short_ratio": _format_ratio(row.get("short_ratio")),
+                    "short_ratio_z": _format_z(row.get("short_ratio_z")),
+                    "short_denom_type": row.get("short_ratio_denominator_type") or "NA",
+                    "short_denom_value": _format_volume(row.get("short_ratio_denominator_value")),
+                    "otc_volume": _format_volume(row.get("otc_off_exchange_volume")),
+                    "data_quality": row.get("data_quality") or "NA",
+                    "pressure_label": row.get("pressure_context_label") or "NA",
+                    "_log_raw": row.get("log_buy_sell"),
+                    "_short_z_raw": row.get("short_ratio_z"),
+                    "_return_z_raw": row.get("return_z"),
+                    "_data_quality_color": _get_quality_color(row.get("data_quality")),
+                    "_pressure_color": _get_pressure_color(row.get("pressure_context_label")),
+                    "_status": "ok",
+                }
+            )
 
-                bought = row.get("estimated_bought", 0) or 0
-                sold = row.get("estimated_sold", 0) or 0
-                total = bought + sold
-                buy_pct = (bought / total * 100) if total > 0 else None
-                buy_ratio_raw = row.get("buy_ratio")
-                sell_ratio_raw = row.get("sell_ratio")
-                finra_week_raw = row.get("finra_week_used")
-
-                # Handle Polygon-only tickers (no FINRA data)
-                if not has_finra:
-                    # Polygon-only: show lit_buy_ratio but no FINRA volume
-                    display_data.append({
-                        "date": target_date.strftime("%Y-%m-%d"),
-                        "symbol": ticker,
-                        "estimated_bought": "—",
-                        "estimated_sold": "—",
-                        "buy_pct": _format_pct(buy_ratio_raw * 100 if buy_ratio_raw else None),
-                        "buy_ratio": _format_ratio(buy_ratio_raw),
-                        "sell_ratio": _format_ratio(sell_ratio_raw),
-                        "total_volume": "—",
-                        "finra_week": "—",
-                        "data_quality": "Polygon-only",
-                        "signal": _get_signal(buy_ratio_raw),
-                        "_buy_ratio_raw": buy_ratio_raw,
-                        "_sell_ratio_raw": sell_ratio_raw,
-                        "_data_quality_color": COLORS["cyan"],
-                        "_status": "polygon_only",
-                    })
-                else:
-                    # Normal row with FINRA data
-                    # Format finra_week
-                    if finra_week_raw is not None and not pd.isna(finra_week_raw):
-                        if hasattr(finra_week_raw, 'strftime'):
-                            finra_week_str = finra_week_raw.strftime("%Y-%m-%d")
-                        else:
-                            finra_week_str = str(finra_week_raw)
-                    else:
-                        finra_week_str = "—"
-
-                    # Calculate data quality
-                    quality_label, quality_color = _get_data_quality(target_date, finra_week_raw)
-
-                    display_data.append({
-                        "date": target_date.strftime("%Y-%m-%d"),
-                        "symbol": ticker,
-                        "estimated_bought": _format_volume(bought),
-                        "estimated_sold": _format_volume(sold),
-                        "buy_pct": _format_pct(buy_pct),
-                        "buy_ratio": _format_ratio(buy_ratio_raw),
-                        "sell_ratio": _format_ratio(sell_ratio_raw),
-                        "total_volume": _format_volume(row.get("total_off_exchange_volume", 0)),
-                        "finra_week": finra_week_str,
-                        "data_quality": quality_label,
-                        "signal": _get_signal(buy_ratio_raw),
-                        "_buy_ratio_raw": buy_ratio_raw,
-                        "_sell_ratio_raw": sell_ratio_raw,
-                        "_data_quality_color": quality_color,
-                        "_status": "ok",
-                    })
-
-    return pd.DataFrame(display_data)
-
-
-# =============================================================================
-# HTML Generation
-# =============================================================================
+    return pd.DataFrame(display_rows)
 
 
 def build_styled_html(
     df: pd.DataFrame,
-    title: str = "Dark Pool Volume",
-    subtitle: str = "",
+    title: str,
+    subtitle: str,
 ) -> str:
-    """
-    Build styled HTML table with dark theme.
-
-    Args:
-        df: Formatted DataFrame from format_display_df
-        title: Table title
-        subtitle: Optional subtitle (e.g., date range)
-
-    Returns:
-        Complete HTML string
-    """
-    # Calculate summary stats
-    total_volume = 0
-    total_bought = 0
-    total_sold = 0
-    ratio_values = []
-
-    for _, row in df.iterrows():
-        if row["_status"] == "ok":
-            # Parse back the raw values for summary
-            ratio = row["_buy_ratio_raw"]
-            if ratio is not None and not pd.isna(ratio):
-                ratio_values.append(ratio)
-
-    # Build table rows
     rows_html = ""
     for idx, row in df.iterrows():
-        buy_ratio_raw = row["_buy_ratio_raw"]
-        sell_ratio_raw = row["_sell_ratio_raw"]
-        buy_ratio_color = _get_ratio_color(buy_ratio_raw)
-        sell_ratio_color = _get_sell_ratio_color(sell_ratio_raw)
-        data_quality_color = row.get("_data_quality_color", COLORS["text_muted"])
-        signal = row["signal"]
-
-        # Signal styling
-        if signal == "Accumulation":
-            signal_html = f'<span class="signal signal-accum">Accumulation</span>'
-        elif signal == "Distribution":
-            signal_html = f'<span class="signal signal-dist">Distribution</span>'
-        else:
-            signal_html = ""
-
-        # Row background alternation
         row_bg = COLORS["row_alt_bg"] if idx % 2 == 1 else COLORS["row_bg"]
+        log_color = _get_sign_color(row["_log_raw"])
+        short_z_color = _get_sign_color(row["_short_z_raw"])
+        return_z_color = _get_sign_color(row["_return_z_raw"])
+        quality_color = row["_data_quality_color"]
+        pressure_color = row["_pressure_color"]
 
         rows_html += f"""
         <tr style="background-color: {row_bg};">
             <td class="col-date">{row['date']}</td>
             <td class="col-symbol">{row['symbol']}</td>
-            <td class="col-numeric col-bought">{row['estimated_bought']}</td>
-            <td class="col-numeric col-sold">{row['estimated_sold']}</td>
-            <td class="col-numeric col-pct">{row['buy_pct']}</td>
-            <td class="col-numeric col-ratio" style="color: {buy_ratio_color};">{row['buy_ratio']}</td>
-            <td class="col-numeric col-ratio" style="color: {sell_ratio_color};">{row['sell_ratio']}</td>
-            <td class="col-numeric col-volume">{row['total_volume']}</td>
-            <td class="col-date">{row['finra_week']}</td>
-            <td class="col-quality" style="color: {data_quality_color};">{row['data_quality']}</td>
-            <td class="col-signal">{signal_html}</td>
+            <td class="col-numeric">{row['close']}</td>
+            <td class="col-numeric" style="color: {return_z_color};">{row['return_1d']}</td>
+            <td class="col-numeric" style="color: {return_z_color};">{row['return_z']}</td>
+            <td class="col-numeric" style="color: {log_color};">{row['log_buy_sell']}</td>
+            <td class="col-numeric">{row['short_ratio']}</td>
+            <td class="col-numeric" style="color: {short_z_color};">{row['short_ratio_z']}</td>
+            <td class="col-numeric">{row['short_denom_type']}</td>
+            <td class="col-numeric">{row['short_denom_value']}</td>
+            <td class="col-numeric">{row['otc_volume']}</td>
+            <td class="col-quality" style="color: {quality_color};">{row['data_quality']}</td>
+            <td class="col-quality" style="color: {pressure_color};">{row['pressure_label']}</td>
         </tr>
         """
-
-    # Calculate aggregate stats if we have data
-    agg_ratio = sum(ratio_values) / len(ratio_values) if ratio_values else None
-    agg_ratio_str = f"{agg_ratio:.2f}" if agg_ratio else "—"
-    agg_ratio_color = _get_ratio_color(agg_ratio)
 
     html = f"""
 <!DOCTYPE html>
@@ -385,8 +244,6 @@ def build_styled_html(
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{title}</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-
         * {{
             margin: 0;
             padding: 0;
@@ -396,9 +253,9 @@ def build_styled_html(
         body {{
             background-color: {COLORS['background']};
             color: {COLORS['text']};
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            font-size: 14px;
-            line-height: 1.5;
+            font-family: "Segoe UI", Arial, sans-serif;
+            font-size: 13px;
+            line-height: 1.4;
             padding: 24px;
         }}
 
@@ -406,7 +263,7 @@ def build_styled_html(
             background-color: {COLORS['background']};
             border-radius: 12px;
             padding: 24px;
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
         }}
 
@@ -420,21 +277,21 @@ def build_styled_html(
         }}
 
         .title {{
-            font-size: 24px;
+            font-size: 22px;
             font-weight: 600;
             color: {COLORS['white']};
         }}
 
         .subtitle {{
-            font-size: 14px;
+            font-size: 12px;
             color: {COLORS['text_muted']};
         }}
 
         table {{
             width: 100%;
             border-collapse: collapse;
-            font-family: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
-            font-size: 13px;
+            font-family: Consolas, "Courier New", monospace;
+            font-size: 12px;
         }}
 
         thead {{
@@ -442,10 +299,10 @@ def build_styled_html(
         }}
 
         th {{
-            padding: 12px 16px;
+            padding: 10px 12px;
             text-align: left;
-            font-weight: 500;
-            font-size: 12px;
+            font-weight: 600;
+            font-size: 11px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
             color: {COLORS['text_muted']};
@@ -457,14 +314,13 @@ def build_styled_html(
         }}
 
         td {{
-            padding: 12px 16px;
+            padding: 10px 12px;
             border-bottom: 1px solid {COLORS['border']};
             vertical-align: middle;
         }}
 
         .col-date {{
             color: {COLORS['text_muted']};
-            font-size: 12px;
         }}
 
         .col-symbol {{
@@ -477,88 +333,14 @@ def build_styled_html(
             font-variant-numeric: tabular-nums;
         }}
 
-        .col-bought {{
-            color: {COLORS['green']};
-        }}
-
-        .col-sold {{
-            color: {COLORS['text']};
-        }}
-
-        .col-pct {{
-            color: {COLORS['text_muted']};
-        }}
-
-        .col-ratio {{
-            font-weight: 600;
-        }}
-
-        .col-volume {{
-            color: {COLORS['yellow']};
-        }}
-
         .col-quality {{
-            font-size: 11px;
-            font-weight: 500;
-            text-transform: uppercase;
-        }}
-
-        .col-signal {{
-            text-align: center;
-            width: 70px;
-        }}
-
-        .signal {{
-            display: inline-block;
-            padding: 4px 10px;
-            border-radius: 4px;
-            font-size: 11px;
+            text-align: left;
             font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }}
-
-        .signal-accum {{
-            background-color: {COLORS['green_bg']};
-            color: {COLORS['green']};
-        }}
-
-        .signal-dist {{
-            background-color: {COLORS['red_bg']};
-            color: {COLORS['red']};
-        }}
-
-        .summary {{
-            margin-top: 24px;
-            padding-top: 20px;
-            border-top: 1px solid {COLORS['border']};
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-        }}
-
-        .summary-item {{
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }}
-
-        .summary-label {{
-            font-size: 12px;
-            color: {COLORS['text_muted']};
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }}
-
-        .summary-value {{
-            font-size: 20px;
-            font-weight: 600;
-            font-family: 'JetBrains Mono', monospace;
         }}
 
         .footer {{
-            margin-top: 20px;
-            padding-top: 16px;
+            margin-top: 18px;
+            padding-top: 12px;
             border-top: 1px solid {COLORS['border']};
             font-size: 11px;
             color: {COLORS['text_muted']};
@@ -578,15 +360,17 @@ def build_styled_html(
                 <tr>
                     <th>Date</th>
                     <th>Symbol</th>
-                    <th class="col-numeric">Bought</th>
-                    <th class="col-numeric">Sold</th>
-                    <th class="col-numeric">% Avg</th>
-                    <th class="col-numeric">Buy Ratio</th>
-                    <th class="col-numeric">Sell Ratio</th>
-                    <th class="col-numeric">Total Volume</th>
-                    <th>FINRA Week</th>
-                    <th>Data Quality</th>
-                    <th>Signal</th>
+                    <th class="col-numeric">Close</th>
+                    <th class="col-numeric">Return</th>
+                    <th class="col-numeric">Return Z</th>
+                    <th class="col-numeric">Log(B/S)</th>
+                    <th class="col-numeric">Short Ratio</th>
+                    <th class="col-numeric">Short Z</th>
+                    <th class="col-numeric">Denom</th>
+                    <th class="col-numeric">Denom Vol</th>
+                    <th class="col-numeric">OTC Vol</th>
+                    <th>Quality</th>
+                    <th>Pressure</th>
                 </tr>
             </thead>
             <tbody>
@@ -594,23 +378,8 @@ def build_styled_html(
             </tbody>
         </table>
 
-        <div class="summary">
-            <div class="summary-item">
-                <span class="summary-label">Rows</span>
-                <span class="summary-value">{len(df)}</span>
-            </div>
-            <div class="summary-item">
-                <span class="summary-label">Dates</span>
-                <span class="summary-value">{df['date'].nunique() if not df.empty else 0}</span>
-            </div>
-            <div class="summary-item">
-                <span class="summary-label">Avg Buy Ratio</span>
-                <span class="summary-value" style="color: {agg_ratio_color};">{agg_ratio_str}</span>
-            </div>
-        </div>
-
         <div class="footer">
-            FINRA does not publish trade direction. Buy/Sell values are inferred estimates.
+            FINRA does not publish trade direction. Short data is pressure only.
         </div>
     </div>
 </body>
@@ -620,136 +389,52 @@ def build_styled_html(
     return html
 
 
-# =============================================================================
-# PNG Rendering
-# =============================================================================
-
-
-def render_html_to_png(
-    html_path: Path,
-    png_path: Path,
-    selector: str = "#table-container",
-) -> None:
-    """
-    Render HTML to PNG using Playwright (preferred) or fallback methods.
-
-    Args:
-        html_path: Path to input HTML file
-        png_path: Path to output PNG file
-        selector: CSS selector for element to screenshot
-    """
+def render_html_to_png(html_path: Path, png_path: Path, selector: str = "#table-container") -> None:
     png_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Try Playwright first (best quality)
     try:
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as p:
             browser = p.chromium.launch()
-            page = browser.new_page(
-                viewport={"width": 1400, "height": 900},
-                device_scale_factor=2,  # Retina quality
-            )
-
-            # Load HTML file
+            page = browser.new_page(viewport={"width": 1500, "height": 900}, device_scale_factor=2)
             page.goto(f"file://{html_path.resolve()}")
             page.wait_for_load_state("networkidle")
-
-            # Screenshot the table container
             element = page.locator(selector)
             element.screenshot(path=str(png_path))
-
             browser.close()
             logger.info("Rendered PNG using Playwright: %s", png_path)
             return
-
     except ImportError:
-        logger.warning(
-            "Playwright not installed. Install with: pip install playwright && playwright install chromium"
-        )
-    except Exception as e:
-        logger.warning("Playwright rendering failed: %s", e)
+        logger.warning("Playwright not installed.")
+    except Exception as exc:
+        logger.warning("Playwright rendering failed: %s", exc)
 
-    # Fallback: Try imgkit/wkhtmltoimage
     try:
         import imgkit
 
-        options = {
-            "format": "png",
-            "width": 1400,
-            "quality": 100,
-            "enable-local-file-access": None,
-        }
+        options = {"format": "png", "width": 1500, "quality": 100, "enable-local-file-access": None}
         imgkit.from_file(str(html_path), str(png_path), options=options)
         logger.info("Rendered PNG using imgkit: %s", png_path)
         return
-
     except ImportError:
-        logger.warning("imgkit not installed. Install with: pip install imgkit")
-    except Exception as e:
-        logger.warning("imgkit rendering failed: %s", e)
-
-    # Final fallback: Use selenium
-    try:
-        from selenium import webdriver
-        from selenium.webdriver.chrome.options import Options
-        from selenium.webdriver.common.by import By
-
-        options = Options()
-        options.add_argument("--headless")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--window-size=1400,900")
-
-        driver = webdriver.Chrome(options=options)
-        driver.get(f"file://{html_path.resolve()}")
-
-        element = driver.find_element(By.CSS_SELECTOR, selector)
-        element.screenshot(str(png_path))
-
-        driver.quit()
-        logger.info("Rendered PNG using Selenium: %s", png_path)
-        return
-
-    except ImportError:
-        logger.warning("selenium not installed. Install with: pip install selenium")
-    except Exception as e:
-        logger.warning("Selenium rendering failed: %s", e)
+        logger.warning("imgkit not installed.")
+    except Exception as exc:
+        logger.warning("imgkit rendering failed: %s", exc)
 
     logger.error(
-        "Could not render PNG. Please install one of: playwright, imgkit, or selenium. "
-        "Playwright is recommended: pip install playwright && playwright install chromium"
+        "Could not render PNG. Install one of: playwright, imgkit, selenium."
     )
 
 
-# =============================================================================
-# Main Rendering Function
-# =============================================================================
-
-
-def render_darkpool_table(
+def render_daily_metrics_table(
     db_path: Path,
     output_dir: Path,
     dates: list[date],
     tickers: list[str],
-    title: str = "Dark Pool Volume",
+    title: str = "Daily Metrics",
 ) -> tuple[Path, Path]:
-    """
-    Main entry point: render combined darkpool table as HTML and PNG.
-
-    Args:
-        db_path: Path to DuckDB database
-        output_dir: Output directory for generated files
-        dates: List of dates to include (will be sorted newest first)
-        tickers: List of ticker symbols (in display order)
-        title: Table title
-
-    Returns:
-        Tuple of (html_path, png_path)
-    """
     output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Sort dates for display
     sorted_dates = sorted(dates, reverse=True)
     if len(sorted_dates) == 1:
         subtitle = f"Date: {sorted_dates[0].strftime('%Y-%m-%d')}"
@@ -758,55 +443,33 @@ def render_darkpool_table(
         subtitle = f"{sorted_dates[-1].strftime('%Y-%m-%d')} to {sorted_dates[0].strftime('%Y-%m-%d')}"
         file_suffix = "combined"
 
-    # Connect to database
     conn = duckdb.connect(str(db_path), read_only=True)
     try:
-        # Fetch data for all dates
-        df = fetch_summary_df(conn, dates, tickers)
-
+        df = fetch_metrics_df(conn, dates, tickers)
         if df.empty:
             logger.warning("No data found for dates %s", [d.strftime("%Y-%m-%d") for d in dates])
 
-        # Format for display
         display_df = format_display_df(df, tickers, dates)
+        html_content = build_styled_html(display_df, title=title, subtitle=subtitle)
 
-        # Build HTML
-        html_content = build_styled_html(
-            display_df,
-            title=title,
-            subtitle=subtitle,
-        )
-
-        # Save HTML
-        html_path = output_dir / f"darkpool_table_{file_suffix}.html"
+        html_path = output_dir / f"daily_metrics_{file_suffix}.html"
         html_path.write_text(html_content, encoding="utf-8")
         logger.info("Saved HTML: %s", html_path)
 
-        # Render PNG
-        png_path = output_dir / f"darkpool_table_{file_suffix}.png"
+        png_path = output_dir / f"daily_metrics_{file_suffix}.png"
         render_html_to_png(html_path, png_path)
-
         return html_path, png_path
-
     finally:
         conn.close()
 
 
-# =============================================================================
-# CLI Entry Point
-# =============================================================================
-
-
 def main() -> None:
-    """CLI entry point for table renderer."""
-    parser = argparse.ArgumentParser(
-        description="Render dark pool analysis table as HTML/PNG"
-    )
+    parser = argparse.ArgumentParser(description="Render daily metrics table as HTML/PNG")
     parser.add_argument(
         "--dates",
         type=str,
         required=True,
-        help="Comma-separated dates in YYYY-MM-DD format (e.g., 2025-12-19,2025-12-18)",
+        help="Comma-separated dates in YYYY-MM-DD format",
     )
     parser.add_argument(
         "--output-dir",
@@ -822,43 +485,24 @@ def main() -> None:
     )
 
     args = parser.parse_args()
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-    # Setup logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
-    )
-
-    # Load config
     try:
         from .config import load_config
     except ImportError:
         from config import load_config
 
     config = load_config()
-
-    # Parse dates
     dates = [date.fromisoformat(d.strip()) for d in args.dates.split(",")]
-
-    # Get tickers
-    if args.tickers:
-        tickers = [t.strip().upper() for t in args.tickers.split(",")]
-    else:
-        tickers = config.tickers
-
-    # Get output dir
+    tickers = [t.strip().upper() for t in args.tickers.split(",")] if args.tickers else config.tickers
     output_dir = Path(args.output_dir) if args.output_dir else config.table_dir
 
-    # Render
-    html_path, png_path = render_darkpool_table(
+    render_daily_metrics_table(
         db_path=config.db_path,
         output_dir=output_dir,
         dates=dates,
         tickers=tickers,
     )
-
-    print(f"Generated: {html_path}")
-    print(f"Generated: {png_path}")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+import math
 import logging
 from typing import Iterable
 
@@ -15,7 +16,9 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-def _placeholder_rows(symbols: Iterable[str], trade_date: date) -> pd.DataFrame:
+def _placeholder_rows(
+    symbols: Iterable[str], trade_date: date, inference_version: str
+) -> pd.DataFrame:
     rows = []
     for symbol in symbols:
         rows.append(
@@ -25,8 +28,10 @@ def _placeholder_rows(symbols: Iterable[str], trade_date: date) -> pd.DataFrame:
                 "lit_buy_volume": 0.0,
                 "lit_sell_volume": 0.0,
                 "lit_buy_ratio": pd.NA,
+                "log_buy_sell": pd.NA,
                 "classification_method": "TICK",
                 "lit_coverage_pct": 0.0,
+                "inference_version": inference_version,
             }
         )
     return pd.DataFrame(rows)
@@ -65,10 +70,15 @@ def _classify_group(group: pd.DataFrame, config: Config) -> dict:
     else:
         lit_buy_ratio = buy_volume / total_volume if total_volume else pd.NA
 
+    log_buy_sell = pd.NA
+    if buy_volume > 0 and sell_volume > 0:
+        log_buy_sell = math.log(buy_volume / sell_volume)
+
     return {
         "lit_buy_volume": buy_volume,
         "lit_sell_volume": sell_volume,
         "lit_buy_ratio": lit_buy_ratio,
+        "log_buy_sell": log_buy_sell,
         "classification_method": method,
         "lit_coverage_pct": coverage_pct,
     }
@@ -82,7 +92,7 @@ def compute_lit_directional_flow(
 ) -> pd.DataFrame:
     if trades_df.empty:
         logger.warning("No Polygon trades available; lit flow will be empty.")
-        return _placeholder_rows(expected_symbols, trade_date)
+        return _placeholder_rows(expected_symbols, trade_date, config.inference_version)
 
     df = trades_df.copy()
     df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
@@ -92,14 +102,14 @@ def compute_lit_directional_flow(
     df = df[df["trade_date"] == trade_date].copy()
     if df.empty:
         logger.warning("No trades matched target date after timezone conversion.")
-        return _placeholder_rows(expected_symbols, trade_date)
+        return _placeholder_rows(expected_symbols, trade_date, config.inference_version)
 
     local_ts = df["timestamp"].dt.tz_convert(market_tz)
     rth_mask = (local_ts.dt.time >= config.rth_start) & (local_ts.dt.time <= config.rth_end)
     df = df[rth_mask].copy()
     if df.empty:
         logger.warning("No trades in regular trading hours for %s.", trade_date)
-        return _placeholder_rows(expected_symbols, trade_date)
+        return _placeholder_rows(expected_symbols, trade_date, config.inference_version)
 
     results = []
     for symbol in expected_symbols:
@@ -112,8 +122,10 @@ def compute_lit_directional_flow(
                     "lit_buy_volume": 0.0,
                     "lit_sell_volume": 0.0,
                     "lit_buy_ratio": pd.NA,
+                    "log_buy_sell": pd.NA,
                     "classification_method": "TICK",
                     "lit_coverage_pct": 0.0,
+                    "inference_version": config.inference_version,
                 }
             )
             continue
@@ -123,7 +135,21 @@ def compute_lit_directional_flow(
                 "symbol": symbol,
                 "date": trade_date,
                 **classified,
+                "inference_version": config.inference_version,
             }
         )
 
-    return pd.DataFrame(results)
+    df = pd.DataFrame(results)
+    return df[
+        [
+            "symbol",
+            "date",
+            "lit_buy_volume",
+            "lit_sell_volume",
+            "lit_buy_ratio",
+            "log_buy_sell",
+            "classification_method",
+            "lit_coverage_pct",
+            "inference_version",
+        ]
+    ]

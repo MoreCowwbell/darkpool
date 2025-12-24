@@ -137,3 +137,12 @@ Format:
 
 ## 2025-12-23 Session Summary (Codex)
 - [x] Updated FINRA debug cell to select the latest week on or before `DATE` and print coverage range.
+
+## 2025-12-24 Session Summary (Codex)
+- [x] Updated AGENT docs and project README for the short-sale + price-context pipeline and new table names.
+- [x] Refactored schema to separate raw tables and new derived tables (daily_metrics, index_constituent_short_agg_daily).
+- [x] Implemented FINRA OTC weekly and daily short-sale fetchers plus Polygon daily aggregates ingestion.
+- [x] Reworked analytics to compute log(B/S), short pressure metrics, price context, and pressure labels.
+- [x] Rebuilt orchestrator to run Phase A/B pipeline and render daily metrics tables.
+- [x] Added database_check.ipynb validation notebook and sample SPX constituent file.
+- [x] Removed deprecated plotter files and trimmed requirements to active dependencies.
