@@ -131,3 +131,9 @@ Format:
   - Uses `scipy.interpolate.make_interp_spline` with k=3 (cubic spline).
   - Falls back to straight lines if fewer than 4 data points.
   - Added `scipy` to `requirements.txt`.
+
+## 2025-12-23 Session Summary (Codex)
+- [x] Rewrote `finra_ticker_check.ipynb` with a clean ticker selector plus FINRA presence and Polygon snapshot checks.
+
+## 2025-12-23 Session Summary (Codex)
+- [x] Updated FINRA debug cell to select the latest week on or before `DATE` and print coverage range.
