@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 import io
 import json
 import logging
@@ -71,7 +71,7 @@ def _load_finra_from_file(path: str) -> pd.DataFrame:
     return pd.read_csv(path)
 
 
-def _load_finra_from_api(config: Config, symbols: list[str] | None = None) -> pd.DataFrame:
+def _load_finra_from_api(config: Config, symbols: list[str] | None = None, target_date: date | None = None) -> pd.DataFrame:
     if not config.finra_otc_url:
         raise ValueError("FINRA_OTC_URL is required when FINRA_OTC_FILE is not set.")
     headers = _build_finra_headers(config)
@@ -89,6 +89,18 @@ def _load_finra_from_api(config: Config, symbols: list[str] | None = None) -> pd
             for sym in symbols
         ]
         payload["orFilters"] = symbol_filters
+
+    # Add date range filter if target_date provided
+    if target_date:
+        week_start = target_date - timedelta(days=target_date.weekday())
+        start_date = week_start - timedelta(weeks=4)  # Past 4 weeks for coverage
+        payload["dateRangeFilters"] = [
+            {
+                "fieldName": "weekStartDate",
+                "startDate": start_date.isoformat(),
+                "endDate": week_start.isoformat(),
+            }
+        ]
 
     if method == "POST":
         response = requests.post(
@@ -189,7 +201,7 @@ def fetch_finra_otc_volume(
         raw_df = _load_finra_from_file(config.finra_otc_file)
     else:
         logger.info("Fetching FINRA OTC data from API for symbols: %s", config.finra_tickers)
-        raw_df = _load_finra_from_api(config, symbols=config.finra_tickers)
+        raw_df = _load_finra_from_api(config, symbols=config.finra_tickers, target_date=target_date)
         logger.info("Fetched %d rows from FINRA API", len(raw_df))
 
     normalized = _normalize_finra_columns(raw_df, config)

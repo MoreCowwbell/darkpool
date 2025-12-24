@@ -10,6 +10,7 @@ def build_darkpool_estimates(
     lit_flow_df: pd.DataFrame,
     snapshot_date: date,
     inference_version: str,
+    finra_week: date,
 ) -> pd.DataFrame:
     finra = finra_week_df.copy()
     ratios = lit_flow_df[["symbol", "lit_buy_ratio"]].copy()
@@ -26,6 +27,7 @@ def build_darkpool_estimates(
     )
     merged["date"] = snapshot_date
     merged["inference_version"] = inference_version
+    merged["finra_week_used"] = finra_week
 
     return merged[
         [
@@ -36,6 +38,7 @@ def build_darkpool_estimates(
             "estimated_dark_sell_volume",
             "applied_lit_buy_ratio",
             "inference_version",
+            "finra_week_used",
         ]
     ]
 
@@ -56,6 +59,8 @@ def build_daily_summary(
     summary["sell_ratio"] = summary["estimated_sold"] / summary["estimated_bought"]
     summary.loc[summary["estimated_bought"] <= 0, "sell_ratio"] = pd.NA
 
+    # finra_week_used is already in estimated_flow_df from build_darkpool_estimates
+
     return summary[
         [
             "date",
@@ -66,5 +71,6 @@ def build_daily_summary(
             "sell_ratio",
             "total_off_exchange_volume",
             "finra_period_type",
+            "finra_week_used",
         ]
     ]

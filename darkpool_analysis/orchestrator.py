@@ -79,7 +79,7 @@ def _process_single_date(config, conn, run_date: date) -> list[str]:
 
     snapshot_date = _resolve_snapshot_date(config.fetch_mode, run_date, finra_week)
     estimated_flow_df = build_darkpool_estimates(
-        finra_week_df, lit_flow_df, snapshot_date, config.inference_version
+        finra_week_df, lit_flow_df, snapshot_date, config.inference_version, finra_week
     )
     upsert_dataframe(conn, "darkpool_estimated_flow", estimated_flow_df, ["symbol", "date"])
 

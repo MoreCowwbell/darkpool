@@ -73,7 +73,8 @@ def fetch_summary_df(
             buy_ratio,
             sell_ratio,
             total_off_exchange_volume,
-            finra_period_type
+            finra_period_type,
+            finra_week_used
         FROM darkpool_daily_summary
         WHERE date IN ({date_placeholders}) AND symbol IN ({ticker_placeholders})
         ORDER BY date DESC, symbol
@@ -153,6 +154,34 @@ def _get_sell_ratio_color(sell_ratio: float) -> str:
     return COLORS["text"]
 
 
+def _get_data_quality(snapshot_date: date, finra_week: date) -> tuple[str, str]:
+    """
+    Determine data quality based on date vs finra_week_used.
+
+    Returns:
+        Tuple of (quality_label, color)
+    """
+    if finra_week is None or pd.isna(finra_week):
+        return ("—", COLORS["text_muted"])
+
+    # Convert to date objects if needed
+    if hasattr(snapshot_date, 'date'):
+        snapshot_date = snapshot_date.date() if callable(getattr(snapshot_date, 'date')) else snapshot_date
+    if hasattr(finra_week, 'date'):
+        finra_week = finra_week.date() if callable(getattr(finra_week, 'date')) else finra_week
+
+    # Calculate weeks difference
+    days_diff = (snapshot_date - finra_week).days
+    weeks_diff = days_diff // 7
+
+    if weeks_diff <= 0:
+        return ("ACTUAL", COLORS["green"])
+    elif weeks_diff == 1:
+        return ("1 week stale", COLORS["yellow"])
+    else:
+        return (f"{weeks_diff} weeks stale", COLORS["red"])
+
+
 def format_display_df(
     df: pd.DataFrame,
     tickers: list[str],
@@ -194,9 +223,12 @@ def format_display_df(
                     "buy_ratio": "—",
                     "sell_ratio": "—",
                     "total_volume": "—",
+                    "finra_week": "—",
+                    "data_quality": "—",
                     "signal": "",
                     "_buy_ratio_raw": None,
                     "_sell_ratio_raw": None,
+                    "_data_quality_color": COLORS["text_muted"],
                     "_status": "missing",
                 })
             else:
@@ -207,6 +239,19 @@ def format_display_df(
                 buy_pct = (bought / total * 100) if total > 0 else None
                 buy_ratio_raw = row.get("buy_ratio")
                 sell_ratio_raw = row.get("sell_ratio")
+                finra_week_raw = row.get("finra_week_used")
+
+                # Format finra_week
+                if finra_week_raw is not None and not pd.isna(finra_week_raw):
+                    if hasattr(finra_week_raw, 'strftime'):
+                        finra_week_str = finra_week_raw.strftime("%Y-%m-%d")
+                    else:
+                        finra_week_str = str(finra_week_raw)
+                else:
+                    finra_week_str = "—"
+
+                # Calculate data quality
+                quality_label, quality_color = _get_data_quality(target_date, finra_week_raw)
 
                 display_data.append({
                     "date": target_date.strftime("%Y-%m-%d"),
@@ -217,9 +262,12 @@ def format_display_df(
                     "buy_ratio": _format_ratio(buy_ratio_raw),
                     "sell_ratio": _format_ratio(sell_ratio_raw),
                     "total_volume": _format_volume(row.get("total_off_exchange_volume", 0)),
+                    "finra_week": finra_week_str,
+                    "data_quality": quality_label,
                     "signal": _get_signal(buy_ratio_raw),
                     "_buy_ratio_raw": buy_ratio_raw,
                     "_sell_ratio_raw": sell_ratio_raw,
+                    "_data_quality_color": quality_color,
                     "_status": "ok",
                 })
 
@@ -267,6 +315,7 @@ def build_styled_html(
         sell_ratio_raw = row["_sell_ratio_raw"]
         buy_ratio_color = _get_ratio_color(buy_ratio_raw)
         sell_ratio_color = _get_sell_ratio_color(sell_ratio_raw)
+        data_quality_color = row.get("_data_quality_color", COLORS["text_muted"])
         signal = row["signal"]
 
         # Signal styling
@@ -290,6 +339,8 @@ def build_styled_html(
             <td class="col-numeric col-ratio" style="color: {buy_ratio_color};">{row['buy_ratio']}</td>
             <td class="col-numeric col-ratio" style="color: {sell_ratio_color};">{row['sell_ratio']}</td>
             <td class="col-numeric col-volume">{row['total_volume']}</td>
+            <td class="col-date">{row['finra_week']}</td>
+            <td class="col-quality" style="color: {data_quality_color};">{row['data_quality']}</td>
             <td class="col-signal">{signal_html}</td>
         </tr>
         """
@@ -419,6 +470,12 @@ def build_styled_html(
             color: {COLORS['yellow']};
         }}
 
+        .col-quality {{
+            font-size: 11px;
+            font-weight: 500;
+            text-transform: uppercase;
+        }}
+
         .col-signal {{
             text-align: center;
             width: 70px;
@@ -500,6 +557,8 @@ def build_styled_html(
                     <th class="col-numeric">Buy Ratio</th>
                     <th class="col-numeric">Sell Ratio</th>
                     <th class="col-numeric">Total Volume</th>
+                    <th>FINRA Week</th>
+                    <th>Data Quality</th>
                     <th>Signal</th>
                 </tr>
             </thead>

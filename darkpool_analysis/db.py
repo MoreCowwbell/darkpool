@@ -58,7 +58,8 @@ def init_db(conn: duckdb.DuckDBPyConnection) -> None:
             estimated_dark_buy_volume DOUBLE,
             estimated_dark_sell_volume DOUBLE,
             applied_lit_buy_ratio DOUBLE,
-            inference_version TEXT
+            inference_version TEXT,
+            finra_week_used DATE
         )
         """
     )
@@ -72,7 +73,8 @@ def init_db(conn: duckdb.DuckDBPyConnection) -> None:
             buy_ratio DOUBLE,
             sell_ratio DOUBLE,
             total_off_exchange_volume DOUBLE,
-            finra_period_type TEXT
+            finra_period_type TEXT,
+            finra_week_used DATE
         )
         """
     )
