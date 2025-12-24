@@ -54,6 +54,7 @@ DEFAULT_RTH_END = "16:15"
 DEFAULT_INFERENCE_VERSION = "OptionB_v1"
 DEFAULT_EXPORT_CSV = False  # Export tables to CSV files
 DEFAULT_PLOT_MODE = "absolute"  # "log" or "absolute"
+DEFAULT_INCLUDE_POLYGON_ONLY_TICKERS = True  # Include tickers without FINRA data (Polygon-only)
 
 # API endpoints (not secrets)
 DEFAULT_POLYGON_BASE_URL = "https://api.polygon.io"
@@ -159,6 +160,7 @@ class Config:
     finra_symbol_field: Optional[str]
     finra_volume_field: Optional[str]
     finra_trade_count_field: Optional[str]
+    include_polygon_only_tickers: bool
 
 
 def load_config() -> Config:
@@ -223,4 +225,7 @@ def load_config() -> Config:
         finra_symbol_field=os.getenv("FINRA_SYMBOL_FIELD"),
         finra_volume_field=os.getenv("FINRA_VOLUME_FIELD"),
         finra_trade_count_field=os.getenv("FINRA_TRADE_COUNT_FIELD"),
+        include_polygon_only_tickers=os.getenv(
+            "INCLUDE_POLYGON_ONLY_TICKERS", str(DEFAULT_INCLUDE_POLYGON_ONLY_TICKERS)
+        ).lower() in ("true", "1", "yes"),
     )

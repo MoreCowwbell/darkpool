@@ -74,7 +74,8 @@ def fetch_summary_df(
             sell_ratio,
             total_off_exchange_volume,
             finra_period_type,
-            finra_week_used
+            finra_week_used,
+            has_finra_data
         FROM darkpool_daily_summary
         WHERE date IN ({date_placeholders}) AND symbol IN ({ticker_placeholders})
         ORDER BY date DESC, symbol
@@ -233,6 +234,10 @@ def format_display_df(
                 })
             else:
                 row = ticker_data.iloc[0]
+                has_finra = row.get("has_finra_data", True)
+                if pd.isna(has_finra):
+                    has_finra = True  # Default to True for backward compatibility
+
                 bought = row.get("estimated_bought", 0) or 0
                 sold = row.get("estimated_sold", 0) or 0
                 total = bought + sold
@@ -241,35 +246,57 @@ def format_display_df(
                 sell_ratio_raw = row.get("sell_ratio")
                 finra_week_raw = row.get("finra_week_used")
 
-                # Format finra_week
-                if finra_week_raw is not None and not pd.isna(finra_week_raw):
-                    if hasattr(finra_week_raw, 'strftime'):
-                        finra_week_str = finra_week_raw.strftime("%Y-%m-%d")
-                    else:
-                        finra_week_str = str(finra_week_raw)
+                # Handle Polygon-only tickers (no FINRA data)
+                if not has_finra:
+                    # Polygon-only: show lit_buy_ratio but no FINRA volume
+                    display_data.append({
+                        "date": target_date.strftime("%Y-%m-%d"),
+                        "symbol": ticker,
+                        "estimated_bought": "—",
+                        "estimated_sold": "—",
+                        "buy_pct": _format_pct(buy_ratio_raw * 100 if buy_ratio_raw else None),
+                        "buy_ratio": _format_ratio(buy_ratio_raw),
+                        "sell_ratio": _format_ratio(sell_ratio_raw),
+                        "total_volume": "—",
+                        "finra_week": "—",
+                        "data_quality": "Polygon-only",
+                        "signal": _get_signal(buy_ratio_raw),
+                        "_buy_ratio_raw": buy_ratio_raw,
+                        "_sell_ratio_raw": sell_ratio_raw,
+                        "_data_quality_color": COLORS["cyan"],
+                        "_status": "polygon_only",
+                    })
                 else:
-                    finra_week_str = "—"
+                    # Normal row with FINRA data
+                    # Format finra_week
+                    if finra_week_raw is not None and not pd.isna(finra_week_raw):
+                        if hasattr(finra_week_raw, 'strftime'):
+                            finra_week_str = finra_week_raw.strftime("%Y-%m-%d")
+                        else:
+                            finra_week_str = str(finra_week_raw)
+                    else:
+                        finra_week_str = "—"
 
-                # Calculate data quality
-                quality_label, quality_color = _get_data_quality(target_date, finra_week_raw)
+                    # Calculate data quality
+                    quality_label, quality_color = _get_data_quality(target_date, finra_week_raw)
 
-                display_data.append({
-                    "date": target_date.strftime("%Y-%m-%d"),
-                    "symbol": ticker,
-                    "estimated_bought": _format_volume(bought),
-                    "estimated_sold": _format_volume(sold),
-                    "buy_pct": _format_pct(buy_pct),
-                    "buy_ratio": _format_ratio(buy_ratio_raw),
-                    "sell_ratio": _format_ratio(sell_ratio_raw),
-                    "total_volume": _format_volume(row.get("total_off_exchange_volume", 0)),
-                    "finra_week": finra_week_str,
-                    "data_quality": quality_label,
-                    "signal": _get_signal(buy_ratio_raw),
-                    "_buy_ratio_raw": buy_ratio_raw,
-                    "_sell_ratio_raw": sell_ratio_raw,
-                    "_data_quality_color": quality_color,
-                    "_status": "ok",
-                })
+                    display_data.append({
+                        "date": target_date.strftime("%Y-%m-%d"),
+                        "symbol": ticker,
+                        "estimated_bought": _format_volume(bought),
+                        "estimated_sold": _format_volume(sold),
+                        "buy_pct": _format_pct(buy_pct),
+                        "buy_ratio": _format_ratio(buy_ratio_raw),
+                        "sell_ratio": _format_ratio(sell_ratio_raw),
+                        "total_volume": _format_volume(row.get("total_off_exchange_volume", 0)),
+                        "finra_week": finra_week_str,
+                        "data_quality": quality_label,
+                        "signal": _get_signal(buy_ratio_raw),
+                        "_buy_ratio_raw": buy_ratio_raw,
+                        "_sell_ratio_raw": sell_ratio_raw,
+                        "_data_quality_color": quality_color,
+                        "_status": "ok",
+                    })
 
     return pd.DataFrame(display_data)
 

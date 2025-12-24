@@ -62,12 +62,12 @@ date       | symbol | buy_ratio | finra_week_used | data_quality
 - We should still show Polygon's lit market directional signal
 
 **Implementation:**
-- [ ] Modify `build_darkpool_estimates()` to use RIGHT JOIN from Polygon ratios instead of LEFT JOIN from FINRA
-- [ ] Handle NULL FINRA volume gracefully - still compute and store the row
-- [ ] Add `has_finra_data BOOLEAN` column to summary table
-- [ ] Update table renderer to show "Polygon-only" or "No FINRA volume" for these rows
-- [ ] Update plotter to include these tickers (with different styling or annotation)
-- [ ] Add config option `INCLUDE_POLYGON_ONLY_TICKERS` (default: True)
+- [x] Modify `build_darkpool_estimates()` to use RIGHT JOIN from Polygon ratios instead of LEFT JOIN from FINRA
+- [x] Handle NULL FINRA volume gracefully - still compute and store the row
+- [x] Add `has_finra_data BOOLEAN` column to summary table
+- [x] Update table renderer to show "Polygon-only" or "No FINRA volume" for these rows
+- [x] Update plotter to include these tickers (with different styling or annotation)
+- [x] Add config option `INCLUDE_POLYGON_ONLY_TICKERS` (default: True)
 
 **Output Example:**
 ```

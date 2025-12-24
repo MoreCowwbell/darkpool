@@ -11,14 +11,28 @@ def build_darkpool_estimates(
     snapshot_date: date,
     inference_version: str,
     finra_week: date,
+    include_polygon_only: bool = True,
 ) -> pd.DataFrame:
     finra = finra_week_df.copy()
     ratios = lit_flow_df[["symbol", "lit_buy_ratio"]].copy()
-    merged = finra.merge(ratios, on="symbol", how="left")
+
+    # Use outer join to include Polygon-only tickers (no FINRA data)
+    if include_polygon_only:
+        merged = ratios.merge(finra, on="symbol", how="left")
+    else:
+        # Original behavior: only include tickers with FINRA data
+        merged = finra.merge(ratios, on="symbol", how="left")
+
+    # Handle FINRA volume - will be NaN for Polygon-only tickers
     merged["finra_off_exchange_volume"] = pd.to_numeric(
-        merged["off_exchange_volume"], errors="coerce"
+        merged.get("off_exchange_volume", pd.Series(dtype=float)), errors="coerce"
     )
     merged["applied_lit_buy_ratio"] = pd.to_numeric(merged["lit_buy_ratio"], errors="coerce")
+
+    # Flag whether FINRA data exists for this ticker
+    merged["has_finra_data"] = merged["finra_off_exchange_volume"].notna()
+
+    # Estimated volumes - will be NaN for Polygon-only tickers (no FINRA volume to apply)
     merged["estimated_dark_buy_volume"] = (
         merged["finra_off_exchange_volume"] * merged["applied_lit_buy_ratio"]
     )
@@ -39,6 +53,7 @@ def build_darkpool_estimates(
             "applied_lit_buy_ratio",
             "inference_version",
             "finra_week_used",
+            "has_finra_data",
         ]
     ]
 
@@ -59,7 +74,7 @@ def build_daily_summary(
     summary["sell_ratio"] = summary["estimated_sold"] / summary["estimated_bought"]
     summary.loc[summary["estimated_bought"] <= 0, "sell_ratio"] = pd.NA
 
-    # finra_week_used is already in estimated_flow_df from build_darkpool_estimates
+    # finra_week_used and has_finra_data are already in estimated_flow_df from build_darkpool_estimates
 
     return summary[
         [
@@ -72,5 +87,6 @@ def build_daily_summary(
             "total_off_exchange_volume",
             "finra_period_type",
             "finra_week_used",
+            "has_finra_data",
         ]
     ]

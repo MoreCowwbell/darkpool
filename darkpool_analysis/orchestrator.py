@@ -62,24 +62,37 @@ def _process_single_date(config, conn, run_date: date) -> list[str]:
     finra_all_df, finra_week_df, finra_week = fetch_finra_otc_volume(config, run_date)
     upsert_dataframe(conn, "finra_otc_volume_raw", finra_all_df, ["symbol", "week_start_date", "source"])
 
-    eligible_symbols = sorted(finra_week_df["symbol"].unique())
-    missing_symbols = sorted(set(config.finra_tickers) - set(eligible_symbols))
-    if missing_symbols:
-        logging.warning("Missing FINRA data for symbols: %s", ", ".join(missing_symbols))
+    finra_symbols = set(finra_week_df["symbol"].unique())
+    missing_finra_symbols = sorted(set(config.finra_tickers) - finra_symbols)
+    if missing_finra_symbols:
+        logging.warning("Missing FINRA data for symbols: %s", ", ".join(missing_finra_symbols))
 
-    trades_df, failures = fetch_polygon_trades(config, eligible_symbols, run_date)
+    # When include_polygon_only is True, fetch Polygon data for ALL tickers
+    # Otherwise, only fetch for FINRA-eligible symbols
+    if config.include_polygon_only_tickers:
+        symbols_to_fetch = sorted(config.tickers)
+        logging.info("Fetching Polygon data for all tickers (include_polygon_only=True)")
+    else:
+        symbols_to_fetch = sorted(finra_symbols)
+
+    trades_df, failures = fetch_polygon_trades(config, symbols_to_fetch, run_date)
     if failures:
         logging.warning("Polygon failures for symbols: %s", ", ".join(failures))
 
     if not trades_df.empty:
         upsert_dataframe(conn, "equity_trades_raw", trades_df, ["symbol", "timestamp"])
 
-    lit_flow_df = compute_lit_directional_flow(trades_df, eligible_symbols, run_date, config)
+    lit_flow_df = compute_lit_directional_flow(trades_df, symbols_to_fetch, run_date, config)
     upsert_dataframe(conn, "equity_lit_directional_flow", lit_flow_df, ["symbol", "date"])
 
     snapshot_date = _resolve_snapshot_date(config.fetch_mode, run_date, finra_week)
     estimated_flow_df = build_darkpool_estimates(
-        finra_week_df, lit_flow_df, snapshot_date, config.inference_version, finra_week
+        finra_week_df,
+        lit_flow_df,
+        snapshot_date,
+        config.inference_version,
+        finra_week,
+        include_polygon_only=config.include_polygon_only_tickers,
     )
     upsert_dataframe(conn, "darkpool_estimated_flow", estimated_flow_df, ["symbol", "date"])
 
@@ -103,7 +116,7 @@ def _process_single_date(config, conn, run_date: date) -> list[str]:
             config.table_dir / f"darkpool_daily_summary_{date_tag}.csv",
         )
 
-    return eligible_symbols, snapshot_date
+    return symbols_to_fetch, snapshot_date
 
 
 def main() -> None:
