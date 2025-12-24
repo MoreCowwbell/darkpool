@@ -98,10 +98,18 @@ def plot_buy_ratio_series(db_path: Path, output_dir: Path, symbols: list[str], p
                     continue
             else:
                 # Compute log ratio: ln(bought / sold)
-                df["plot_value"] = df.apply(
-                    lambda row: _compute_log_ratio(row["estimated_bought"], row["estimated_sold"]),
-                    axis=1,
-                )
+                # For Polygon-only rows (no estimated volumes), use ln(buy_ratio) directly
+                def compute_log_value(row):
+                    if row.get("has_finra_data", True):
+                        return _compute_log_ratio(row["estimated_bought"], row["estimated_sold"])
+                    else:
+                        # Polygon-only: buy_ratio is already computed, just take log
+                        ratio = row.get("buy_ratio")
+                        if ratio is not None and ratio > 0:
+                            return math.log(ratio)
+                        return None
+
+                df["plot_value"] = df.apply(compute_log_value, axis=1)
                 df = df.dropna(subset=["plot_value"])
                 if df.empty:
                     logger.warning("No valid log ratio values for %s.", symbol)

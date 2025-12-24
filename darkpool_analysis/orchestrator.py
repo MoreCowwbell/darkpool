@@ -60,9 +60,17 @@ def _process_single_date(config, conn, run_date: date) -> list[str]:
     logging.info("Processing date: %s", run_date.isoformat())
 
     finra_all_df, finra_week_df, finra_week = fetch_finra_otc_volume(config, run_date)
-    upsert_dataframe(conn, "finra_otc_volume_raw", finra_all_df, ["symbol", "week_start_date", "source"])
 
-    finra_symbols = set(finra_week_df["symbol"].unique())
+    # Handle case where FINRA has no data for any configured tickers
+    if finra_week_df.empty:
+        if not config.include_polygon_only_tickers:
+            raise RuntimeError("FINRA OTC data returned no rows and include_polygon_only_tickers is False.")
+        logging.info("No FINRA data available - proceeding with Polygon-only mode")
+        finra_week = run_date  # Use run_date as placeholder for Polygon-only mode
+    else:
+        upsert_dataframe(conn, "finra_otc_volume_raw", finra_all_df, ["symbol", "week_start_date", "source"])
+
+    finra_symbols = set(finra_week_df["symbol"].unique()) if not finra_week_df.empty else set()
     missing_finra_symbols = sorted(set(config.finra_tickers) - finra_symbols)
     if missing_finra_symbols:
         logging.warning("Missing FINRA data for symbols: %s", ", ".join(missing_finra_symbols))
@@ -83,8 +91,10 @@ def _process_single_date(config, conn, run_date: date) -> list[str]:
         upsert_dataframe(conn, "equity_trades_raw", trades_df, ["symbol", "timestamp"])
 
     lit_flow_df = compute_lit_directional_flow(trades_df, symbols_to_fetch, run_date, config)
+    logging.info("lit_flow_df: shape=%s, columns=%s", lit_flow_df.shape, list(lit_flow_df.columns))
     upsert_dataframe(conn, "equity_lit_directional_flow", lit_flow_df, ["symbol", "date"])
 
+    logging.info("finra_week_df: shape=%s, empty=%s", finra_week_df.shape, finra_week_df.empty)
     snapshot_date = _resolve_snapshot_date(config.fetch_mode, run_date, finra_week)
     estimated_flow_df = build_darkpool_estimates(
         finra_week_df,

@@ -207,7 +207,9 @@ def fetch_finra_otc_volume(
     normalized = _normalize_finra_columns(raw_df, config)
     normalized = normalized[normalized["symbol"].isin(config.finra_tickers)].copy()
     if normalized.empty:
-        raise RuntimeError("FINRA OTC data returned no rows for configured tickers.")
+        logger.warning("FINRA OTC data returned no rows for configured tickers.")
+        # Return empty DataFrames - orchestrator will handle Polygon-only mode
+        return pd.DataFrame(), pd.DataFrame(), None
 
     available_weeks = sorted(normalized["week_start_date"].unique())
     eligible_weeks = [week for week in available_weeks if week <= target_date]
