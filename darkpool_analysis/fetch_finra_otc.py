@@ -41,6 +41,7 @@ def _resolve_optional_column(df: pd.DataFrame, candidates: list[str]) -> Optiona
 
 
 def _fetch_finra_token(config: Config) -> str:
+    """OAuth 2.0 client_credentials flow - get access token from FINRA Identity Platform."""
     if not config.finra_token_url:
         raise ValueError("FINRA_TOKEN_URL is required to fetch an auth token.")
     if not config.finra_api_key or not config.finra_api_secret:
@@ -48,7 +49,7 @@ def _fetch_finra_token(config: Config) -> str:
     response = requests.post(
         config.finra_token_url,
         auth=(config.finra_api_key, config.finra_api_secret),
-        data={"grant_type": "client_credentials"},
+        headers={"Accept": "application/json"},
         timeout=30,
     )
     response.raise_for_status()

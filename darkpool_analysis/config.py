@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 # =============================================================================
 # Default Configuration (can be overridden via .env)
 # =============================================================================
-DEFAULT_TICKERS = ["SPY", "QQQ", "TQQQ", "XLK", "XLF", "XLE", "XLV", "XLI"]
+DEFAULT_TICKERS = ["AMZN"]
 EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 
 ### US_SECTOR_CORE
@@ -70,7 +70,7 @@ DEFAULT_POLYGON_BASE_URL = "https://api.polygon.io"
 # FINRA OTC endpoint (returns all tiers: T1, T2, OTC via tierIdentifier field)
 DEFAULT_FINRA_OTC_URL = "https://api.finra.org/data/group/otcMarket/name/weeklySummary"
 DEFAULT_FINRA_SHORT_SALE_URL = "https://api.finra.org/data/group/otcMarket/name/regShoDaily"
-DEFAULT_FINRA_TOKEN_URL = ""  # Empty = use direct API key auth (no OAuth needed)
+DEFAULT_FINRA_TOKEN_URL = "https://ews.fip.finra.org/fip/rest/ews/oauth2/access_token?grant_type=client_credentials"
 DEFAULT_FINRA_REQUEST_METHOD = "POST"
 
 

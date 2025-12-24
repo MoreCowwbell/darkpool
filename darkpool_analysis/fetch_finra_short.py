@@ -20,10 +20,11 @@ logger = logging.getLogger(__name__)
 def _build_finra_headers(config: Config) -> dict:
     headers = {"Accept": "application/json"}
     if config.finra_token_url:
+        # OAuth 2.0 client_credentials flow - get access token from FINRA Identity Platform
         response = requests.post(
             config.finra_token_url,
             auth=(config.finra_api_key, config.finra_api_secret),
-            data={"grant_type": "client_credentials"},
+            headers={"Accept": "application/json"},
             timeout=30,
         )
         response.raise_for_status()
@@ -33,6 +34,7 @@ def _build_finra_headers(config: Config) -> dict:
             raise ValueError("FINRA token response missing access_token.")
         headers["Authorization"] = f"Bearer {token}"
         return headers
+    # Fallback: direct API key auth (may not work for all FINRA endpoints)
     if config.finra_api_key and config.finra_api_secret:
         headers["X-API-KEY"] = config.finra_api_key
         headers["X-API-SECRET"] = config.finra_api_secret
@@ -46,12 +48,13 @@ def _infer_source_from_filename(name: str) -> Optional[str]:
 
 def _normalize_short_sale_df(df: pd.DataFrame, source_file: Optional[str]) -> pd.DataFrame:
     columns = {col.lower(): col for col in df.columns}
-    date_col = columns.get("date")
-    symbol_col = columns.get("symbol")
-    short_col = columns.get("shortvolume") or columns.get("short_volume")
-    short_exempt_col = columns.get("shortexemptvolume") or columns.get("short_exempt_volume")
-    total_col = columns.get("totalvolume") or columns.get("total_volume")
-    market_col = columns.get("market")
+    # Support both file format (Date, Symbol, etc.) and API format (tradeReportDate, etc.)
+    date_col = columns.get("date") or columns.get("tradereportdate")
+    symbol_col = columns.get("symbol") or columns.get("securitiesinformationprocessorsymbolidentifier")
+    short_col = columns.get("shortvolume") or columns.get("short_volume") or columns.get("shortparquantity")
+    short_exempt_col = columns.get("shortexemptvolume") or columns.get("short_exempt_volume") or columns.get("shortexemptparquantity")
+    total_col = columns.get("totalvolume") or columns.get("total_volume") or columns.get("totalparquantity")
+    market_col = columns.get("market") or columns.get("marketcode")
 
     if not date_col or not symbol_col or not short_col:
         raise ValueError("Short sale file missing required columns: Date, Symbol, ShortVolume")
@@ -118,7 +121,7 @@ def _load_short_sale_from_api(config: Config, target_date: date) -> pd.DataFrame
         "limit": 10000,
         "dateRangeFilters": [
             {
-                "fieldName": "tradeDate",
+                "fieldName": "tradeReportDate",
                 "startDate": target_date.isoformat(),
                 "endDate": target_date.isoformat(),
             }

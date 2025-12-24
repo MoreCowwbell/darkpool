@@ -195,12 +195,14 @@ def build_daily_metrics(
         for symbol, group in merged.groupby("symbol"):
             weekly = otc_weekly[otc_weekly["symbol"] == symbol].copy()
             weekly = weekly.sort_values("week_start_date")
+            weekly["week_start_date"] = pd.to_datetime(weekly["week_start_date"])
             if weekly.empty:
                 group["otc_off_exchange_volume"] = pd.NA
                 group["otc_week_used"] = pd.NA
                 mapped.append(group)
                 continue
             daily_sorted = group.sort_values("date")
+            daily_sorted["date"] = pd.to_datetime(daily_sorted["date"])
             aligned = pd.merge_asof(
                 daily_sorted,
                 weekly,
