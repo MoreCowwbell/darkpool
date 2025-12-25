@@ -53,7 +53,7 @@
 
 ## Outputs
 - Save tables to darkpool_analysis/output/tables/ (CSV if EXPORT_CSV=True, HTML/PNG always).
-- Save plots to darkpool_analysis/output/plots/ (Phase C only).
+- Save plots to darkpool_analysis/output/plots/ (multi-panel PNG per ticker).
 - Tables and plots read from DuckDB only.
 
 ## Data Quality and Provenance
@@ -78,13 +78,29 @@
 - FINRA_OTC_* env vars control weekly OTC ingestion.
 - POLYGON_DAILY_AGG_* env vars control daily aggregates ingestion.
 
+## FINRA API Authentication
+- FINRA Query API requires OAuth 2.0 (client_credentials flow).
+- Token endpoint: `https://ews.fip.finra.org/fip/rest/ews/oauth2/access_token?grant_type=client_credentials`
+- Use HTTP Basic Auth with FINRA_API_KEY:FINRA_API_SECRET to get Bearer token.
+- The X-API-KEY/X-API-SECRET header approach does not work for Query API endpoints.
+
+## FINRA Short Sale API Field Names
+The API uses different field names than the file format:
+- `tradeReportDate` (filter and response)
+- `securitiesInformationProcessorSymbolIdentifier` (symbol)
+- `shortParQuantity` (short volume)
+- `shortExemptParQuantity` (short exempt volume)
+- `totalParQuantity` (total volume)
+- `marketCode` (market/facility)
+
 ## Documentation and Runbooks
 - Keep README.md synchronized with module layout and deployment steps.
 - CLI usage:
   - python main.py (from project root)
   - python orchestrator.py (from darkpool_analysis/)
   - python table_renderer.py --dates 2025-12-20 (standalone tables)
-- database_check.ipynb is required for validation before plotting.
+  - python plotter.py --dates 2025-12-20 (standalone plots)
+- database_check.ipynb is required for validation.
 - Mandatory disclaimer must appear in README and code comments:
   "FINRA does not publish trade direction for off-exchange volume. Buy/Sell values are inferred estimates derived from lit-market equity trades and applied proportionally to FINRA OTC volume."
 

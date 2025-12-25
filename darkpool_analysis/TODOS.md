@@ -24,6 +24,13 @@
 - [x] V1: Create database_check.ipynb for schema + provenance checks.
 - [x] V2: Align daily table renderer to daily_metrics outputs.
 
+## Bug Fixes (2025-12-24)
+- [x] F1: Fix FINRA OAuth 2.0 authentication (set correct FIP token URL).
+- [x] F2: Fix FINRA short sale API field name mapping (tradeReportDate, securitiesInformationProcessorSymbolIdentifier, etc.).
+- [x] F3: Fix pandas merge_asof dtype error (convert date columns to datetime64).
+- [x] F4: Fix KeyError 'symbol' after merge_asof (drop duplicate column before merge).
+- [x] F5: Fix FutureWarning for isin with datetime64 (convert to .dt.date before comparison).
+
 ## Phase C - Composite interpretation + visualization
 - [ ] C1: Implement composite_signal table/view with inference_version.
-- [ ] C2: Add multi-panel plotter (log_buy_sell + short ratio + OTC anchor).
+- [x] C2: Add multi-panel plotter (log_buy_sell + short ratio z-score + OTC volume).

@@ -12,12 +12,14 @@
 ## Current Capabilities
 - Phase A/B pipeline with separate ingestion tables and daily metrics with provenance flags.
 - FINRA OTC weekly fetcher (API or file) with week selection.
-- FINRA daily short sale ingestion (file or API).
+- FINRA daily short sale ingestion (file or API) with OAuth 2.0 authentication.
 - Polygon trades fetcher with aggregates fallback on 403.
 - Polygon daily aggregates ingestion for price context.
 - Lit inference using NBBO/TICK and log(Buy/Sell).
 - Table renderer for daily outputs (HTML/PNG) with pressure context labels.
+- Multi-panel plotter (Phase C): log_buy_sell, short_ratio_z, OTC volume per ticker.
 - Index-level constituent aggregation for short pressure.
+- Pipeline validated and running end-to-end (2025-12-24).
 
 ## Where Things Live
 - main.py - root entry point
@@ -30,7 +32,8 @@
 - darkpool_analysis/fetch_polygon_agg.py - Polygon daily aggregates (price/volume)
 - darkpool_analysis/infer_buy_sell.py - lit-direction classification
 - darkpool_analysis/analytics.py - lit_direction_daily + daily_metrics + index aggregation
-- darkpool_analysis/table_renderer.py - daily table outputs
+- darkpool_analysis/table_renderer.py - daily table outputs (HTML/PNG)
+- darkpool_analysis/plotter.py - multi-panel metric plots (Phase C)
 - darkpool_analysis/data/darkpool.duckdb - persistent storage
 - darkpool_analysis/data/constituents/spx_sample.csv - sample constituent list (replace with full coverage)
 - database_check.ipynb - validation notebook
@@ -72,11 +75,17 @@
 - PRE_OTC: the OTC week is stale relative to the target date.
 
 ## Configuration Notes
-- .env holds API secrets only.
-- config.py defines defaults (tickers, dates, RTH window, fetch mode).
+- .env holds API secrets only (POLYGON_API_KEY, FINRA_API_KEY, FINRA_API_SECRET).
+- config.py defines defaults (tickers, dates, RTH window, fetch mode, API URLs).
 - FINRA_SHORT_SALE_* env vars control daily short sale ingestion.
 - FINRA_OTC_* env vars control weekly OTC ingestion.
 - POLYGON_* env vars control Polygon ingestion.
+
+## FINRA API Authentication
+- FINRA Query API requires OAuth 2.0 client_credentials flow.
+- Token endpoint: `https://ews.fip.finra.org/fip/rest/ews/oauth2/access_token?grant_type=client_credentials`
+- Use HTTP Basic Auth with FINRA_API_KEY:FINRA_API_SECRET to obtain Bearer token.
+- Short sale API uses different field names than file format (tradeReportDate, securitiesInformationProcessorSymbolIdentifier, etc.).
 
 ## Known Gaps and Watchouts
 - Short sale "TotalVolume" is facility-specific, not total market volume.

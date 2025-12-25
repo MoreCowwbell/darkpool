@@ -20,6 +20,7 @@ try:
     from .fetch_polygon_agg import fetch_polygon_daily_agg
     from .fetch_polygon_equity import fetch_polygon_trades
     from .infer_buy_sell import compute_lit_directional_flow
+    from .plotter import render_metrics_plots
     from .table_renderer import render_daily_metrics_table
 except ImportError:
     from analytics import build_daily_metrics, build_index_constituent_short_agg
@@ -30,6 +31,7 @@ except ImportError:
     from fetch_polygon_agg import fetch_polygon_daily_agg
     from fetch_polygon_equity import fetch_polygon_trades
     from infer_buy_sell import compute_lit_directional_flow
+    from plotter import render_metrics_plots
     from table_renderer import render_daily_metrics_table
 
 
@@ -163,6 +165,16 @@ def main() -> None:
         )
     except Exception as exc:
         logging.error("Failed to render daily metrics table: %s", exc)
+
+    try:
+        render_metrics_plots(
+            db_path=config.db_path,
+            output_dir=config.plot_dir,
+            dates=config.target_dates,
+            tickers=config.tickers,
+        )
+    except Exception as exc:
+        logging.error("Failed to render metrics plots: %s", exc)
 
     logging.info("Analysis complete. Processed %d dates.", len(config.target_dates))
 

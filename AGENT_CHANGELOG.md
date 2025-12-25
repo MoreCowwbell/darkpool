@@ -146,3 +146,30 @@ Format:
 - [x] Rebuilt orchestrator to run Phase A/B pipeline and render daily metrics tables.
 - [x] Added database_check.ipynb validation notebook and sample SPX constituent file.
 - [x] Removed deprecated plotter files and trimmed requirements to active dependencies.
+
+## 2025-12-24 Session Summary (Claude Code) - FINRA API Fixes
+- [x] Fixed FINRA OAuth 2.0 authentication:
+  - Set `DEFAULT_FINRA_TOKEN_URL` to FINRA Identity Platform FIP endpoint.
+  - Updated `_build_finra_headers()` to use HTTP Basic Auth for token request.
+  - Removed duplicate `data=` param from token request (grant_type already in URL).
+- [x] Fixed FINRA short sale API field name mapping:
+  - Updated date filter to use `tradeReportDate` instead of `tradeDate`.
+  - Updated normalizer to handle API column names (securitiesInformationProcessorSymbolIdentifier, shortParQuantity, etc.).
+- [x] Fixed pandas merge_asof dtype error:
+  - Converted `date` and `week_start_date` columns to datetime64 before merge.
+- [x] Fixed KeyError 'symbol' after merge_asof:
+  - Dropped `symbol` column from `weekly` dataframe before merge to prevent symbol_x/symbol_y duplication.
+- [x] Fixed FutureWarning for isin with datetime64:
+  - Converted to `.dt.date` before comparison in analytics.py.
+- [x] Updated finra_ticker_check.ipynb for refactored module structure.
+- [x] Updated all project documentation (README, TODOS, AGENT_* files).
+
+## 2025-12-24 Session Summary (Claude Code) - Phase C Plotter
+- [x] Created `plotter.py` module with 3-panel dark-theme visualization:
+  - Panel 1: log(Buy/Sell) with accumulation/distribution threshold lines.
+  - Panel 2: Short ratio z-score with high/low pressure thresholds.
+  - Panel 3: OTC off-exchange volume bars with data quality coloring.
+- [x] Added matplotlib to requirements.txt.
+- [x] Wired `render_metrics_plots()` into orchestrator after table rendering.
+- [x] Updated TODOS.md: marked C2 as complete.
+- [x] Updated README.md and AGENT_CONTEXT.md with plotter documentation.

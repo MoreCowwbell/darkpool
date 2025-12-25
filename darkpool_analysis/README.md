@@ -13,9 +13,7 @@ Mandatory disclaimer:
 - Ingest and persist raw datasets in DuckDB (no mixing).
 - Compute daily metrics with explicit provenance flags.
 - Render daily tables for configured tickers.
-- Phase C (later): composite interpretation layer and multi-panel plots.
-
-Phase C plotting is intentionally not implemented until database validation passes.
+- Generate multi-panel plots for pressure analysis (Phase C).
 
 ## Data Sources
 - FINRA OTC weekly summary (ATS + non-ATS off-exchange volume, delayed).
@@ -36,6 +34,7 @@ darkpool_analysis/
 ├── infer_buy_sell.py
 ├── analytics.py
 ├── table_renderer.py
+├── plotter.py
 ├── data/
 │   └── darkpool.duckdb
 └── output/
@@ -68,8 +67,8 @@ Polygon:
 FINRA OTC weekly:
 - FINRA_OTC_URL (API endpoint)
 - FINRA_OTC_FILE (optional local CSV/JSON override)
-- FINRA_API_KEY, FINRA_API_SECRET (optional headers or token auth)
-- FINRA_TOKEN_URL (optional OAuth token endpoint)
+- FINRA_API_KEY, FINRA_API_SECRET (required for OAuth 2.0 authentication)
+- FINRA_TOKEN_URL (OAuth token endpoint, defaults to FINRA Identity Platform FIP)
 - FINRA_REQUEST_METHOD (GET or POST)
 - FINRA_REQUEST_JSON (JSON string for POST body)
 - FINRA_REQUEST_PARAMS (JSON string for query params)
@@ -100,8 +99,8 @@ Open and run:
 
 ## Outputs
 - DuckDB database: darkpool_analysis/data/darkpool.duckdb
-- Tables: darkpool_analysis/output/tables/
-- Plots: darkpool_analysis/output/plots/ (Phase C only)
+- Tables: darkpool_analysis/output/tables/ (HTML/PNG)
+- Plots: darkpool_analysis/output/plots/ (multi-panel PNG per ticker)
 
 ## Notes on Inference
 - Lit trades are classified NBBO-first, TICK fallback.
@@ -110,3 +109,14 @@ Open and run:
 - OTC weekly data is delayed; daily metrics are labeled OTC_ANCHORED or PRE_OTC accordingly.
 - Price context is sourced from Polygon daily aggregates only.
 - Constituent aggregation requires a maintained index list; see data/constituents/spx_sample.csv as a format example.
+
+## FINRA API Notes
+- FINRA Query API requires OAuth 2.0 authentication via the FINRA Identity Platform (FIP).
+- Token endpoint: `https://ews.fip.finra.org/fip/rest/ews/oauth2/access_token?grant_type=client_credentials`
+- Short sale API field names differ from file format:
+  - `tradeReportDate` (not `Date`)
+  - `securitiesInformationProcessorSymbolIdentifier` (not `Symbol`)
+  - `shortParQuantity` (not `ShortVolume`)
+  - `shortExemptParQuantity` (not `ShortExemptVolume`)
+  - `totalParQuantity` (not `TotalVolume`)
+  - `marketCode` (not `Market`)
