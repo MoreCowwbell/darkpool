@@ -126,7 +126,7 @@ For symbol filtering, use `domainFilters`:
 - Target Python 3.11+ with explicit imports.
 - Use relative imports within the package (with try/except ImportError fallback for direct execution).
 - Keep orchestrator.py thin; delegate API, persistence, analytics, and rendering to dedicated modules.
-- Keep requirements.txt aligned with actual imports: duckdb, matplotlib, pandas, python-dotenv, pytz, requests.
+- Keep requirements.txt aligned with actual imports: duckdb, matplotlib, numpy, pandas, python-dotenv, pytz, requests, scipy.
 - Optional PNG rendering: playwright (recommended), imgkit, selenium.
 - Use ThreadPoolExecutor for parallel API fetching; control via POLYGON_MAX_WORKERS env var (default: 4).
 - Always wrap DuckDB connections in try/finally to ensure conn.close() on exit.

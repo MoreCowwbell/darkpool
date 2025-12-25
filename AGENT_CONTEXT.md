@@ -12,12 +12,12 @@
 ## Current Capabilities
 - Phase A/B pipeline with separate ingestion tables and daily metrics with provenance flags.
 - FINRA OTC weekly fetcher (API or file) with week selection.
-- FINRA daily short sale ingestion (file or API) with OAuth 2.0 authentication.
+- FINRA daily short sale ingestion (file or API) with OAuth 2.0 authentication and domainFilters symbol filtering.
 - Polygon trades fetcher with aggregates fallback on 403.
 - Polygon daily aggregates ingestion for price context.
 - Lit inference using NBBO/TICK and log(Buy/Sell).
 - Table renderer for daily outputs (HTML/PNG) with pressure context labels.
-- Multi-panel plotter (Phase C): log_buy_sell, short_ratio_z, OTC volume per ticker.
+- Multi-panel plotter (Phase C): log_buy_sell, short_ratio_z, OTC volume per ticker with PCHIP smooth curves.
 - Index-level constituent aggregation for short pressure.
 - Pipeline validated and running end-to-end (2025-12-24).
 
@@ -86,6 +86,12 @@
 - Token endpoint: `https://ews.fip.finra.org/fip/rest/ews/oauth2/access_token?grant_type=client_credentials`
 - Use HTTP Basic Auth with FINRA_API_KEY:FINRA_API_SECRET to obtain Bearer token.
 - Short sale API uses different field names than file format (tradeReportDate, securitiesInformationProcessorSymbolIdentifier, etc.).
+
+## FINRA Query API Filtering
+- Use `domainFilters` for multiple symbol filtering (NOT `orFilters` which is invalid).
+- Use `dateRangeFilters` for date range filtering.
+- Use `compareFilters` for single value comparisons.
+- Example: `{"domainFilters": [{"fieldName": "securitiesInformationProcessorSymbolIdentifier", "fieldValues": ["RGTI", "AMZN"]}]}`
 
 ## Known Gaps and Watchouts
 - Short sale "TotalVolume" is facility-specific, not total market volume.

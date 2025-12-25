@@ -181,3 +181,13 @@ Format:
   - API now returns only requested symbols instead of first 5000 rows alphabetically.
   - Reference: https://developer.finra.org/docs
 - [x] Rolling z-score crash fixes already applied in previous session.
+
+## 2025-12-24 Session Summary (Claude Code) - Smooth Line Interpolation
+- [x] Added PCHIP (Piecewise Cubic Hermite Interpolating Polynomial) smoothing to `plotter.py`:
+  - Added `numpy` and `scipy.interpolate.PchipInterpolator` imports.
+  - Created `_plot_smooth_line()` helper function for reusable smooth curve plotting.
+  - Panel 1 (log_buy_sell): Now uses smooth PCHIP curve instead of linear segments.
+  - Panel 2 (short_ratio_z): Now uses smooth PCHIP curve instead of linear segments.
+  - Uses 150 interpolation points when 3+ data points available.
+  - Falls back to linear plot for fewer than 3 data points.
+- [x] Updated `requirements.txt`: Added `numpy` and `scipy` dependencies.
