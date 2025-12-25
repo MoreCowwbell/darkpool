@@ -196,6 +196,8 @@ def build_daily_metrics(
             weekly = otc_weekly[otc_weekly["symbol"] == symbol].copy()
             weekly = weekly.sort_values("week_start_date")
             weekly["week_start_date"] = pd.to_datetime(weekly["week_start_date"])
+            # Drop symbol to avoid duplicate column (symbol_x, symbol_y) after merge_asof
+            weekly = weekly.drop(columns=["symbol"])
             if weekly.empty:
                 group["otc_off_exchange_volume"] = pd.NA
                 group["otc_week_used"] = pd.NA
@@ -304,7 +306,8 @@ def build_daily_metrics(
         ]
     ].copy()
 
-    output = output[output["date"].isin(all_dates)].copy()
+    # Convert date column to date objects for comparison (avoids FutureWarning with datetime64)
+    output = output[pd.to_datetime(output["date"]).dt.date.isin(all_dates)].copy()
     return output
 
 
