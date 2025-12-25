@@ -16,7 +16,9 @@ from pathlib import Path
 import duckdb
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+import numpy as np
 import pandas as pd
+from scipy.interpolate import PchipInterpolator
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +99,29 @@ def _format_volume(value: float) -> str:
     return f"{value:,.0f}"
 
 
+def _plot_smooth_line(ax, dates, values, color, valid_mask):
+    """Plot a smooth PCHIP-interpolated line through valid data points."""
+    if valid_mask.sum() >= 3:
+        valid_dates = dates[valid_mask]
+        valid_values = values[valid_mask]
+        date_nums = mdates.date2num(valid_dates)
+
+        x_smooth = np.linspace(date_nums.min(), date_nums.max(), 150)
+        interp = PchipInterpolator(date_nums, valid_values.to_numpy())
+        y_smooth = interp(x_smooth)
+
+        ax.plot(
+            mdates.num2date(x_smooth),
+            y_smooth,
+            color=color,
+            linewidth=2,
+            alpha=0.6,
+            zorder=2,
+        )
+    else:
+        ax.plot(dates[valid_mask], values[valid_mask], color=color, linewidth=1.5, alpha=0.7)
+
+
 def plot_symbol_metrics(
     df: pd.DataFrame,
     symbol: str,
@@ -139,10 +164,10 @@ def plot_symbol_metrics(
     ax1.axhline(y=LOG_THRESHOLD_HIGH, color=COLORS["green"], linestyle="--", linewidth=1, alpha=0.7)
     ax1.axhline(y=LOG_THRESHOLD_LOW, color=COLORS["red"], linestyle="--", linewidth=1, alpha=0.7)
 
-    # Plot line and scatter
+    # Plot smooth line and scatter
     valid_mask = ~log_bs.isna()
     if valid_mask.any():
-        ax1.plot(dates[valid_mask], log_bs[valid_mask], color=COLORS["cyan"], linewidth=1.5, alpha=0.7)
+        _plot_smooth_line(ax1, dates, log_bs, COLORS["cyan"], valid_mask)
         ax1.scatter(dates, log_bs, c=colors1, s=60, zorder=5, edgecolors=COLORS["white"], linewidths=0.5)
 
     ax1.set_ylabel("log(Buy/Sell)", color=COLORS["text"], fontsize=10)
@@ -165,7 +190,7 @@ def plot_symbol_metrics(
 
     valid_mask2 = ~short_z.isna()
     if valid_mask2.any():
-        ax2.plot(dates[valid_mask2], short_z[valid_mask2], color=COLORS["yellow"], linewidth=1.5, alpha=0.7)
+        _plot_smooth_line(ax2, dates, short_z, COLORS["yellow"], valid_mask2)
         ax2.scatter(dates, short_z, c=colors2, s=60, zorder=5, edgecolors=COLORS["white"], linewidths=0.5)
 
     ax2.set_ylabel("Short Ratio Z", color=COLORS["text"], fontsize=10)

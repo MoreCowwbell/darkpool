@@ -81,8 +81,7 @@ def _compute_price_context(
     df["range_pct"] = (df["high"] - df["low"]) / df["close"]
     df["return_z"] = (
         df.groupby("symbol")["return_1d"]
-        .apply(lambda s: _rolling_zscore(s, config.return_z_window, config.zscore_min_periods))
-        .reset_index(level=0, drop=True)
+        .transform(lambda s: _rolling_zscore(s, config.return_z_window, config.zscore_min_periods))
     )
     return df
 
@@ -242,11 +241,13 @@ def build_daily_metrics(
         / merged.loc[denom_ready, "short_ratio_denominator_value"]
     )
 
+    # Ensure numeric dtype for rolling calculations (pd.NA -> np.nan)
+    merged["short_ratio"] = pd.to_numeric(merged["short_ratio"], errors="coerce")
+
     merged["short_ratio_z"] = (
         merged.sort_values(["symbol", "date"])
         .groupby("symbol")["short_ratio"]
-        .apply(lambda s: _rolling_zscore(s, config.short_z_window, config.zscore_min_periods))
-        .reset_index(level=0, drop=True)
+        .transform(lambda s: _rolling_zscore(s, config.short_z_window, config.zscore_min_periods))
     )
 
     merged["has_otc"] = merged["otc_off_exchange_volume"].notna()
@@ -425,10 +426,11 @@ def build_index_constituent_short_agg(
 
     agg_df = pd.DataFrame(rows)
     agg_df = agg_df.sort_values(["index_symbol", "trade_date"])
+    # Ensure numeric dtype for rolling calculations
+    agg_df["agg_short_ratio"] = pd.to_numeric(agg_df["agg_short_ratio"], errors="coerce")
     agg_df["agg_short_ratio_z"] = (
         agg_df.groupby("index_symbol")["agg_short_ratio"]
-        .apply(lambda s: _rolling_zscore(s, config.short_z_window, config.zscore_min_periods))
-        .reset_index(level=0, drop=True)
+        .transform(lambda s: _rolling_zscore(s, config.short_z_window, config.zscore_min_periods))
     )
     agg_df["interpretation_label"] = agg_df.apply(
         lambda row: _label_pressure_context(

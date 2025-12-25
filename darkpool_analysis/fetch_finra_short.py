@@ -127,6 +127,16 @@ def _load_short_sale_from_api(config: Config, target_date: date) -> pd.DataFrame
             }
         ],
     }
+    # Add symbol filtering to avoid pagination issues (API returns max 10000 rows)
+    # FINRA Query API uses domainFilters for multiple values (like SQL IN clause)
+    # See: https://developer.finra.org/docs
+    if config.finra_tickers:
+        payload["domainFilters"] = [
+            {
+                "fieldName": "securitiesInformationProcessorSymbolIdentifier",
+                "fieldValues": config.finra_tickers,
+            }
+        ]
     response = requests.post(
         config.finra_short_sale_url,
         headers=headers,
@@ -137,10 +147,16 @@ def _load_short_sale_from_api(config: Config, target_date: date) -> pd.DataFrame
     data = response.json()
     if isinstance(data, dict) and "data" in data:
         df = pd.DataFrame(data["data"])
+        logger.info("FINRA short sale API returned %d rows", len(df))
     elif isinstance(data, list):
         df = pd.DataFrame(data)
+        logger.info("FINRA short sale API returned %d rows (list)", len(df))
     else:
         raise ValueError("Unsupported FINRA short sale API response shape.")
+
+    if df.empty:
+        logger.warning("FINRA short sale API returned empty dataframe")
+        return df
 
     return _normalize_short_sale_df(df, source_file=None)
 

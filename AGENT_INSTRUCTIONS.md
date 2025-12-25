@@ -93,6 +93,24 @@ The API uses different field names than the file format:
 - `totalParQuantity` (total volume)
 - `marketCode` (market/facility)
 
+## FINRA Query API Filtering
+The Query API supports three filter types (NOT `orFilters`):
+- `compareFilters` - single value comparisons (EQUAL, GREATER, etc.)
+- `dateRangeFilters` - date range filtering
+- `domainFilters` - multiple values for a field (like SQL IN clause)
+
+For symbol filtering, use `domainFilters`:
+```json
+{
+  "domainFilters": [
+    {
+      "fieldName": "securitiesInformationProcessorSymbolIdentifier",
+      "fieldValues": ["RGTI", "AAPL", "TSLA"]
+    }
+  ]
+}
+```
+
 ## Documentation and Runbooks
 - Keep README.md synchronized with module layout and deployment steps.
 - CLI usage:

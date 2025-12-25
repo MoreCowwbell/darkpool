@@ -173,3 +173,11 @@ Format:
 - [x] Wired `render_metrics_plots()` into orchestrator after table rendering.
 - [x] Updated TODOS.md: marked C2 as complete.
 - [x] Updated README.md and AGENT_CONTEXT.md with plotter documentation.
+
+## 2025-12-24 Session Summary (Claude Code) - FINRA domainFilters Fix
+- [x] Fixed FINRA Short Sale API symbol filtering:
+  - Root cause: `orFilters` is NOT a valid FINRA Query API filter type (API ignores it).
+  - Fix: Changed to `domainFilters` with `fieldValues` array (correct syntax for multiple values).
+  - API now returns only requested symbols instead of first 5000 rows alphabetically.
+  - Reference: https://developer.finra.org/docs
+- [x] Rolling z-score crash fixes already applied in previous session.

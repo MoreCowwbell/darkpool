@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 # =============================================================================
 # Default Configuration (can be overridden via .env)
 # =============================================================================
-DEFAULT_TICKERS = ["AMZN"]
+DEFAULT_TICKERS = ["AMZN", "RGTI"]
 EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 
 ### US_SECTOR_CORE
@@ -44,7 +44,7 @@ EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 
 
 # Analysis defaults
-DEFAULT_TARGET_DATE = "2025-12-22"  # Last trading day (Monday)
+DEFAULT_TARGET_DATE = "2025-12-23"  # Last trading day (Monday)
 DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
 DEFAULT_BACKFILL_COUNT = 10  # Number of periods to fetch (days for daily, weeks for weekly)
 DEFAULT_MIN_LIT_VOLUME = 10000
