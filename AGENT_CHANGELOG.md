@@ -191,3 +191,8 @@ Format:
   - Uses 150 interpolation points when 3+ data points available.
   - Falls back to linear plot for fewer than 3 data points.
 - [x] Updated `requirements.txt`: Added `numpy` and `scipy` dependencies.
+
+## 2025-12-24 Session Summary (Codex)
+- [x] Fixed FINRA domainFilters payloads to use the required `values` list for OTC and short sale API calls.
+- [x] Normalized daily metrics date typing to avoid mixed Timestamp/date sort failures.
+- [x] Updated AGENT docs with the corrected domainFilters example.

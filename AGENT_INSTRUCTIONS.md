@@ -105,7 +105,7 @@ For symbol filtering, use `domainFilters`:
   "domainFilters": [
     {
       "fieldName": "securitiesInformationProcessorSymbolIdentifier",
-      "fieldValues": ["RGTI", "AAPL", "TSLA"]
+      "values": ["RGTI", "AAPL", "TSLA"]
     }
   ]
 }

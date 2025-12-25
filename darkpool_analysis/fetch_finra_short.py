@@ -128,13 +128,13 @@ def _load_short_sale_from_api(config: Config, target_date: date) -> pd.DataFrame
         ],
     }
     # Add symbol filtering to avoid pagination issues (API returns max 10000 rows)
-    # FINRA Query API uses domainFilters for multiple values (like SQL IN clause)
+    # FINRA Query API uses domainFilters with a "values" list (like SQL IN clause)
     # See: https://developer.finra.org/docs
     if config.finra_tickers:
         payload["domainFilters"] = [
             {
                 "fieldName": "securitiesInformationProcessorSymbolIdentifier",
-                "fieldValues": config.finra_tickers,
+                "values": config.finra_tickers,
             }
         ]
     response = requests.post(

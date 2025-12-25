@@ -101,11 +101,12 @@ def _load_finra_from_api(
     payload.setdefault("limit", 10000)
 
     if symbols:
-        symbol_filters = [
-            {"fieldName": "issueSymbolIdentifier", "fieldValue": sym, "compareType": "EQUAL"}
-            for sym in symbols
+        payload["domainFilters"] = [
+            {
+                "fieldName": "issueSymbolIdentifier",
+                "values": [sym.upper() for sym in symbols],
+            }
         ]
-        payload["orFilters"] = symbol_filters
 
     if target_date:
         week_start = target_date - timedelta(days=target_date.weekday())

@@ -188,7 +188,7 @@ def build_daily_metrics(
     # OTC weekly mapping (latest week_start_date <= date)
     if otc_weekly.empty:
         merged["otc_off_exchange_volume"] = pd.NA
-        merged["otc_week_used"] = pd.NA
+        merged["otc_week_used"] = pd.NaT
     else:
         mapped = []
         for symbol, group in merged.groupby("symbol"):
@@ -199,7 +199,7 @@ def build_daily_metrics(
             weekly = weekly.drop(columns=["symbol"])
             if weekly.empty:
                 group["otc_off_exchange_volume"] = pd.NA
-                group["otc_week_used"] = pd.NA
+                group["otc_week_used"] = pd.NaT
                 mapped.append(group)
                 continue
             daily_sorted = group.sort_values("date")
@@ -214,6 +214,10 @@ def build_daily_metrics(
             aligned = aligned.rename(columns={"week_start_date": "otc_week_used"})
             mapped.append(aligned)
         merged = pd.concat(mapped, ignore_index=True)
+
+    merged["date"] = pd.to_datetime(merged["date"])
+    if "otc_week_used" in merged.columns:
+        merged["otc_week_used"] = pd.to_datetime(merged["otc_week_used"])
 
     # Short ratio denominator logic
     merged["short_volume_total"] = (
@@ -309,6 +313,9 @@ def build_daily_metrics(
 
     # Convert date column to date objects for comparison (avoids FutureWarning with datetime64)
     output = output[pd.to_datetime(output["date"]).dt.date.isin(all_dates)].copy()
+    output["date"] = pd.to_datetime(output["date"]).dt.date
+    if "otc_week_used" in output.columns:
+        output["otc_week_used"] = pd.to_datetime(output["otc_week_used"]).dt.date
     return output
 
 

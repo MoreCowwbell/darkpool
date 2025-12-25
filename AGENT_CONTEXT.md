@@ -91,7 +91,7 @@
 - Use `domainFilters` for multiple symbol filtering (NOT `orFilters` which is invalid).
 - Use `dateRangeFilters` for date range filtering.
 - Use `compareFilters` for single value comparisons.
-- Example: `{"domainFilters": [{"fieldName": "securitiesInformationProcessorSymbolIdentifier", "fieldValues": ["RGTI", "AMZN"]}]}`
+- Example: `{"domainFilters": [{"fieldName": "securitiesInformationProcessorSymbolIdentifier", "values": ["RGTI", "AMZN"]}]}`
 
 ## Known Gaps and Watchouts
 - Short sale "TotalVolume" is facility-specific, not total market volume.
