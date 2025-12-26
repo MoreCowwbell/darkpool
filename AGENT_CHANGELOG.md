@@ -204,3 +204,7 @@ Format:
 - [x] Reworked daily metrics to compute short-sale buy ratios, lit ratios, and OTC weekly proxy ratios with consolidated short totals and OTC status.
 - [x] Rebuilt table layout with short/lit/OTC sections, updated summaries/definitions, and added OTC week/status columns.
 - [x] Updated plots to show short sale buy ratio, lit buy/log ratios, OTC buy/sell with a decision strip, and set orchestrator to layered mode.
+## 2025-12-25 Session Summary (Codex)
+- [x] Updated `darkpool/AGENT_CONTEXT.md` with consolidated short totals, new table layout, OTC status, and layered plots.
+- [x] Updated `darkpool/AGENT_INSTRUCTIONS.md` with short ratio formulas and OTC status provenance.
+- [x] Updated `darkpool/darkpool_analysis/TODOS.md` with revised plot description and table/metric revision items.

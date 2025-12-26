@@ -13,11 +13,13 @@
 - Phase A/B pipeline with separate ingestion tables and daily metrics with provenance flags.
 - FINRA OTC weekly fetcher (API or file) with week selection.
 - FINRA daily short sale ingestion (file or API) with OAuth 2.0 authentication and domainFilters symbol filtering.
+- Consolidates per-venue short sale rows into one daily total per (symbol, date) for ratio calculations.
 - Polygon trades fetcher with aggregates fallback on 403.
 - Polygon daily aggregates ingestion for price context.
 - Lit inference using NBBO/TICK and log(Buy/Sell).
-- Table renderer for daily outputs (HTML/PNG) with pressure context labels.
-- Multi-panel plotter (Phase C): log_buy_sell, short_ratio_z, OTC volume per ticker with PCHIP smooth curves.
+- Daily metrics include short/lit/OTC buy/sell volumes, buy ratios, and rolling z-scores.
+- Table renderer for daily outputs (HTML/PNG) grouped by ticker with summary/definition panels.
+- Multi-panel plotter (Phase C): short sale buy ratio, lit buy + log buy ratios, OTC buy/sell with weekly ratio overlay, plus decision strip per ticker.
 - Index-level constituent aggregation for short pressure.
 - Pipeline validated and running end-to-end (2025-12-24).
 
@@ -49,7 +51,7 @@
 6. Compute lit_direction_daily (buy/sell volumes, ratios, log_buy_sell).
 7. Build daily_metrics by combining lit_direction_daily, short ratio, price context, and OTC weekly volume.
 8. Aggregate constituent short pressure to index-level daily totals.
-9. Render daily table outputs (HTML/PNG). (Phase C plots later.)
+9. Render daily table outputs (HTML/PNG) and layered plots with decision strip.
 
 ## Data and Storage Details
 - DuckDB is the single source of truth.
@@ -60,7 +62,7 @@
   - polygon_daily_agg_raw: symbol, trade_date, open, high, low, close, vwap, volume
 - Derived tables:
   - lit_direction_daily: symbol, date, lit_buy_volume, lit_sell_volume, lit_buy_ratio, log_buy_sell, classification_method, coverage, inference_version
-  - daily_metrics: symbol, date, log_buy_sell, short_ratio, short_ratio_denominator_type/value, price/return context, pressure_context_label, data_quality, provenance flags, inference_version
+  - daily_metrics: symbol, date, short/lit/OTC buy/sell volumes, buy ratios, z-scores, short_ratio_denominator_type/value, otc_status, otc_week_used, price/return context, pressure_context_label, data_quality, provenance flags, inference_version
   - index_constituent_short_agg_daily: index_symbol, trade_date, agg_short_ratio, coverage stats, index_return, interpretation_label
   - composite_signal (Phase C only)
 
@@ -73,6 +75,7 @@
 ## Data Quality Flags
 - OTC_ANCHORED: the OTC week covers the target date week.
 - PRE_OTC: the OTC week is stale relative to the target date.
+- otc_status: Anchored, Staled, or None (table/plot display flag alongside data_quality).
 
 ## Configuration Notes
 - .env holds API secrets only (POLYGON_API_KEY, FINRA_API_KEY, FINRA_API_SECRET).
@@ -96,6 +99,7 @@
 ## Known Gaps and Watchouts
 - Short sale "TotalVolume" is facility-specific, not total market volume.
 - If total_volume is missing, short_ratio uses Polygon total volume and is marked as a proxy.
+- Short Sale Buy Ratio excludes short-exempt volume; short-exempt is kept separately for diagnostics.
 - OTC weekly data is delayed; daily metrics must flag PRE_OTC when stale.
 - Some tickers may lack FINRA OTC coverage; keep rows with has_otc false.
 - Index aggregation requires a maintained constituent list; static lists may drift over time.

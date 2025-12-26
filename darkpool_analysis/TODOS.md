@@ -33,4 +33,10 @@
 
 ## Phase C - Composite interpretation + visualization
 - [ ] C1: Implement composite_signal table/view with inference_version.
-- [x] C2: Add multi-panel plotter (log_buy_sell + short ratio z-score + OTC volume).
+- [x] C2: Add multi-panel plotter (short sale buy ratio, lit buy + log ratios, OTC buy/sell + decision strip).
+
+## Table + Metric Revisions (2025-12-25)
+- [x] T1: Consolidate per-venue short sale rows into one daily total for ratios.
+- [x] T2: Add short/lit/OTC buy/sell volumes, buy ratios, and z-scores to daily_metrics.
+- [x] T3: Add OTC status and OTC week used fields for table/plot display.
+- [x] T4: Rebuild table layout into Short Sale / Lit / OTC sections with ticker averages and summary panel.

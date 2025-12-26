@@ -15,7 +15,7 @@
 - All paths must be local and relative.
 
 ## Phase Sequencing
-- Do not implement Phase C visualization until database_check.ipynb and daily table outputs are correct.
+- Phase C visualization is implemented; validate database_check.ipynb and daily tables before modifying plots.
 
 ## Option B Inference Rules
 - Regular Trading Hours only (09:30-16:15 ET); exclude extended hours.
@@ -33,9 +33,12 @@
 ## Ratio Formulas
 - lit_buy_ratio = buy_volume / (buy_volume + sell_volume)
 - log_buy_sell = ln(buy_volume / sell_volume) when both > 0, else NULL
-- short_ratio = (short_volume + short_exempt_volume) / denominator_value when denominator_value > 0
+- short_buy_volume = short_volume (short-exempt excluded)
+- short_sell_volume = denominator_value - short_volume when denominator_value > 0
+- short_ratio = short_volume / denominator_value when denominator_value > 0
 - short_ratio_denominator_type = FINRA_TOTAL or POLYGON_TOTAL
 - short_ratio_denominator_value = numeric denominator used
+- short_ratio_source = CONSOLIDATED when per-venue rows are summed
 
 ## Signal Thresholds (Phase C)
 - BOT signal: log_buy_sell > ln(1.25) (~ +0.223)
@@ -47,7 +50,7 @@
 - polygon_equity_trades_raw: symbol, timestamp, price, size, bid, ask
 - polygon_daily_agg_raw: symbol, trade_date, open, high, low, close, vwap, volume
 - lit_direction_daily: symbol, date, lit_buy_volume, lit_sell_volume, lit_buy_ratio, log_buy_sell, classification_method, coverage stats, inference_version
-- daily_metrics: symbol, date, log_buy_sell, short_ratio, short_ratio_denominator_type/value, price context, pressure_context_label, data_quality, provenance flags, inference_version
+- daily_metrics: includes short/lit/OTC buy/sell volumes, buy ratios, z-scores, otc_status, otc_week_used, plus price context and provenance
 - index_constituent_short_agg_daily: index_symbol, trade_date, agg_short_ratio, coverage stats, index_return, interpretation_label, inference_version, data_quality
 - composite_signal (Phase C only)
 
@@ -58,6 +61,7 @@
 
 ## Data Quality and Provenance
 - data_quality = OTC_ANCHORED when the OTC week covers the target date; else PRE_OTC.
+- otc_status = Anchored, Staled, or None for table/plot display.
 - Persist has_otc, has_short, has_lit flags for each daily_metrics row.
 - Persist short_ratio_source to avoid double counting when consolidated files are present.
 - If short_ratio uses Polygon denominator, label short_ratio_denominator_type = POLYGON_TOTAL.
