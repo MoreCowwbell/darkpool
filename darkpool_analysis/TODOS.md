@@ -40,3 +40,9 @@
 - [x] T2: Add short/lit/OTC buy/sell volumes, buy ratios, and z-scores to daily_metrics.
 - [x] T3: Add OTC status and OTC week used fields for table/plot display.
 - [x] T4: Rebuild table layout into Short Sale / Lit / OTC sections with ticker averages and summary panel.
+
+
+## faster code
+- [] user toggle to feth LIT data as OHLCV vs 1 min
+- [] refactor and identify onsolete part of code
+- [] figure out how to leverage OTC weelly and plot it porperly
