@@ -102,6 +102,16 @@ Open and run:
 - Tables: darkpool_analysis/output/tables/ (HTML/PNG)
 - Plots: darkpool_analysis/output/plots/ (multi-panel PNG per ticker)
 
+## Table Styling
+Table presentation is controlled by `DEFAULT_TABLE_STYLE` in `darkpool_analysis/config.py`.
+Key knobs:
+- `mode`: "scan" (compact) or "analysis" (roomier)
+- `base_font_size`, `header_font_size`, `numeric_font_scale`
+- `row_padding_y`, `row_padding_x`, `group_alt_strength`
+- `neutral_text_opacity`, `signal_opacity_strong`, `signal_opacity_muted`
+- `group_separator_px`
+- `palette` (muted green/red and neutral tones)
+
 ## Plot Modes
 - layered (default): short sale buy ratio, lit buy ratios (lit + log), OTC buy/sell with decision strip.
 - short_only: short ratio, short sale volume, close price.

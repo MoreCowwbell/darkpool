@@ -208,3 +208,10 @@ Format:
 - [x] Updated `darkpool/AGENT_CONTEXT.md` with consolidated short totals, new table layout, OTC status, and layered plots.
 - [x] Updated `darkpool/AGENT_INSTRUCTIONS.md` with short ratio formulas and OTC status provenance.
 - [x] Updated `darkpool/darkpool_analysis/TODOS.md` with revised plot description and table/metric revision items.
+## 2025-12-25 Session Summary (Codex)
+- [x] Added configurable table styling in `darkpool/darkpool_analysis/config.py` (DEFAULT_TABLE_STYLE).
+- [x] Restyled `darkpool/darkpool_analysis/table_renderer.py` for grouped readability, muted signals, zoning, and status glyphs.
+- [x] Documented table styling knobs in `darkpool/darkpool_analysis/README.md`.
+## 2025-12-25 Session Summary (Codex)
+- [x] Added plot styling helpers for axis bounds, centerlines, and legend styling in `darkpool/darkpool_analysis/plotter.py`.
+- [x] Applied per-panel legends, subtle gridlines, and reduced marker/bar dominance for layered and short-only plots.

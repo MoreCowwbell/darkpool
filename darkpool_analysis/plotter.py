@@ -18,6 +18,8 @@ import matplotlib.dates as mdates
 import numpy as np
 import pandas as pd
 from scipy.interpolate import PchipInterpolator
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +37,123 @@ COLORS = {
     "white": "#ffffff",
     "neutral": "#6b6b6b",
 }
+
+MAIN_LINE_WIDTH = 2.3
+SECONDARY_LINE_WIDTH = 1.8
+THRESHOLD_LINE_WIDTH = 1.0
+CENTERLINE_WIDTH = 1.4
+GRID_ALPHA = 0.18
+MARKER_SIZE = 28
+MARKER_SIZE_SMALL = 22
+BAR_ALPHA_PRIMARY = 0.35
+BAR_ALPHA_SECONDARY = 0.25
+
+
+def _clean_upper_bound(value: float, min_upper: float = 2.0) -> float:
+    if value <= min_upper:
+        return min_upper
+    if value <= 5.0:
+        return np.ceil(value * 2) / 2
+    return float(np.ceil(value))
+
+
+def compute_abs_ratio_ylim(
+    values: pd.Series,
+    min_upper: float = 2.0,
+    lower: float = 0.0,
+) -> tuple[float, float, float]:
+    series = pd.to_numeric(values, errors="coerce")
+    max_val = series.max(skipna=True)
+    if pd.isna(max_val):
+        max_val = min_upper
+    max_val = max(float(max_val), 1.0)
+    upper = _clean_upper_bound(max_val, min_upper=min_upper)
+    step = 0.5 if upper <= 5.0 else 1.0
+    return lower, upper, step
+
+
+def compute_log_ratio_ylim(values: pd.Series, headroom: float = 0.08) -> tuple[float, float, float]:
+    series = pd.to_numeric(values, errors="coerce").dropna()
+    if series.empty:
+        bound = 0.5
+    else:
+        max_abs = series.abs().max()
+        bound = max_abs * (1 + headroom)
+    if bound <= 0:
+        bound = 0.5
+    if bound <= 0.5:
+        step = 0.1
+    elif bound <= 1.0:
+        step = 0.2
+    elif bound <= 2.0:
+        step = 0.5
+    else:
+        step = 1.0
+    bound = float(np.ceil(bound / step) * step)
+    return -bound, bound, step
+
+
+def _apply_primary_axis_style(ax) -> None:
+    ax.set_facecolor(COLORS["panel_bg"])
+    ax.tick_params(colors=COLORS["text"], labelsize=9)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_color(COLORS["grid"])
+    ax.spines["bottom"].set_color(COLORS["grid"])
+    ax.grid(True, alpha=GRID_ALPHA, color=COLORS["grid"], linestyle="--")
+
+
+def _apply_secondary_axis_style(ax) -> None:
+    ax.tick_params(colors=COLORS["text"], labelsize=9)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_color(COLORS["grid"])
+    ax.spines["left"].set_visible(False)
+    ax.grid(False)
+
+
+def _add_panel_legend(ax, handles, labels, loc: str = "upper left") -> None:
+    if not handles:
+        return
+    legend = ax.legend(
+        handles,
+        labels,
+        loc=loc,
+        fontsize=8,
+        frameon=True,
+        facecolor=COLORS["background"],
+        framealpha=0.7,
+        edgecolor=COLORS["grid"],
+    )
+    for text in legend.get_texts():
+        text.set_color(COLORS["text"])
+
+
+def _set_abs_ratio_axis(ax, values: pd.Series, neutral_value: float = 1.0) -> Line2D:
+    ymin, ymax, step = compute_abs_ratio_ylim(values)
+    ax.set_ylim(ymin, ymax)
+    ax.set_yticks(np.arange(ymin, ymax + step * 0.5, step))
+    return ax.axhline(
+        y=neutral_value,
+        color=COLORS["neutral"],
+        linestyle="-",
+        linewidth=CENTERLINE_WIDTH,
+        alpha=0.7,
+        zorder=1,
+    )
+
+
+def _set_log_ratio_axis(ax, values: pd.Series, neutral_value: float = 0.0) -> Line2D:
+    ymin, ymax, step = compute_log_ratio_ylim(values)
+    ax.set_ylim(ymin, ymax)
+    ax.set_yticks(np.arange(ymin, ymax + step * 0.5, step))
+    return ax.axhline(
+        y=neutral_value,
+        color=COLORS["neutral"],
+        linestyle="-",
+        linewidth=CENTERLINE_WIDTH,
+        alpha=0.7,
+        zorder=1,
+    )
 
 def fetch_metrics_for_plot(
     conn: duckdb.DuckDBPyConnection,
@@ -105,7 +224,16 @@ def _format_volume(value: float) -> str:
     return f"{value:,.0f}"
 
 
-def _plot_smooth_line(ax, dates, values, color, valid_mask):
+def _plot_smooth_line(
+    ax,
+    dates,
+    values,
+    color,
+    valid_mask,
+    linewidth: float = MAIN_LINE_WIDTH,
+    alpha: float = 0.85,
+    zorder: int = 3,
+):
     """Plot a smooth PCHIP-interpolated line through valid data points."""
     if valid_mask.sum() >= 3:
         valid_dates = dates[valid_mask]
@@ -120,12 +248,19 @@ def _plot_smooth_line(ax, dates, values, color, valid_mask):
             mdates.num2date(x_smooth),
             y_smooth,
             color=color,
-            linewidth=2,
-            alpha=0.6,
-            zorder=2,
+            linewidth=linewidth,
+            alpha=alpha,
+            zorder=zorder,
         )
     else:
-        ax.plot(dates[valid_mask], values[valid_mask], color=color, linewidth=1.5, alpha=0.7)
+        ax.plot(
+            dates[valid_mask],
+            values[valid_mask],
+            color=color,
+            linewidth=linewidth,
+            alpha=alpha,
+            zorder=zorder,
+        )
 
 
 def plot_symbol_metrics(
@@ -158,13 +293,7 @@ def plot_symbol_metrics(
     fig.patch.set_facecolor(COLORS["background"])
 
     for ax in axes:
-        ax.set_facecolor(COLORS["panel_bg"])
-        ax.tick_params(colors=COLORS["text"], labelsize=9)
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-        ax.spines["left"].set_color(COLORS["grid"])
-        ax.spines["bottom"].set_color(COLORS["grid"])
-        ax.grid(True, alpha=0.3, color=COLORS["grid"], linestyle="--")
+        _apply_primary_axis_style(ax)
 
     dates = df["date"]
 
@@ -174,12 +303,34 @@ def plot_symbol_metrics(
 
     valid_mask = ~short_ratio.isna()
     if valid_mask.any():
-        _plot_smooth_line(ax1, dates, short_ratio, COLORS["cyan"], valid_mask)
-        ax1.scatter(dates, short_ratio, c=COLORS["cyan"], s=60, zorder=5, edgecolors=COLORS["white"], linewidths=0.5)
+        _plot_smooth_line(ax1, dates, short_ratio, COLORS["cyan"], valid_mask, linewidth=MAIN_LINE_WIDTH)
+        ax1.scatter(
+            dates,
+            short_ratio,
+            c=COLORS["cyan"],
+            s=MARKER_SIZE,
+            zorder=5,
+            edgecolors=COLORS["white"],
+            linewidths=0.4,
+        )
 
-    ax1.axhline(y=0.5, color=COLORS["neutral"], linestyle="--", linewidth=1, alpha=0.6)
+    _set_abs_ratio_axis(ax1, short_ratio, neutral_value=1.0)
     ax1.set_ylabel("Short Sale Buy Ratio", color=COLORS["text"], fontsize=10)
     ax1.set_title(f"{symbol} - Short Sale Buy Ratio", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
+    legend_handles_1 = [
+        Line2D([0], [0], color=COLORS["cyan"], linewidth=MAIN_LINE_WIDTH, label="Short Sale Buy Ratio"),
+        Line2D(
+            [0], [0],
+            marker="o",
+            color="none",
+            markerfacecolor=COLORS["cyan"],
+            markeredgecolor=COLORS["white"],
+            markersize=4.5,
+            label="Observations",
+        ),
+        Line2D([0], [0], color=COLORS["neutral"], linewidth=CENTERLINE_WIDTH, label="Neutral (1.0)"),
+    ]
+    _add_panel_legend(ax1, legend_handles_1, [h.get_label() for h in legend_handles_1], loc="upper left")
 
     # Panel 2: Lit Buy Ratio + Log Buy Ratio
     ax2 = axes[1]
@@ -188,30 +339,45 @@ def plot_symbol_metrics(
 
     valid_mask2 = ~lit_buy_ratio.isna()
     if valid_mask2.any():
-        _plot_smooth_line(ax2, dates, lit_buy_ratio, COLORS["cyan"], valid_mask2)
-        ax2.plot(dates[valid_mask2], lit_buy_ratio[valid_mask2], color=COLORS["cyan"], alpha=0.0, label="Lit Buy Ratio")
-        ax2.scatter(dates, lit_buy_ratio, c=COLORS["cyan"], s=40, zorder=5, edgecolors=COLORS["white"], linewidths=0.4)
+        _plot_smooth_line(ax2, dates, lit_buy_ratio, COLORS["cyan"], valid_mask2, linewidth=MAIN_LINE_WIDTH)
+        ax2.scatter(
+            dates,
+            lit_buy_ratio,
+            c=COLORS["cyan"],
+            s=MARKER_SIZE_SMALL,
+            zorder=5,
+            edgecolors=COLORS["white"],
+            linewidths=0.4,
+        )
 
     ax2b = ax2.twinx()
-    ax2b.tick_params(colors=COLORS["text"], labelsize=9)
-    ax2b.spines["top"].set_visible(False)
-    ax2b.spines["right"].set_color(COLORS["grid"])
+    _apply_secondary_axis_style(ax2b)
     valid_mask2b = ~log_buy_ratio.isna()
     if valid_mask2b.any():
-        _plot_smooth_line(ax2b, dates, log_buy_ratio, COLORS["yellow"], valid_mask2b)
-        ax2b.plot(dates[valid_mask2b], log_buy_ratio[valid_mask2b], color=COLORS["yellow"], alpha=0.0, label="Log Buy Ratio")
-        ax2b.scatter(dates, log_buy_ratio, c=COLORS["yellow"], s=40, zorder=5, edgecolors=COLORS["white"], linewidths=0.4)
+        _plot_smooth_line(ax2b, dates, log_buy_ratio, COLORS["yellow"], valid_mask2b, linewidth=SECONDARY_LINE_WIDTH)
+        ax2b.scatter(
+            dates,
+            log_buy_ratio,
+            c=COLORS["yellow"],
+            s=MARKER_SIZE_SMALL,
+            zorder=5,
+            edgecolors=COLORS["white"],
+            linewidths=0.4,
+        )
+
+    _set_abs_ratio_axis(ax2, lit_buy_ratio, neutral_value=1.0)
+    _set_log_ratio_axis(ax2b, log_buy_ratio, neutral_value=0.0)
 
     ax2.set_ylabel("Lit Buy Ratio", color=COLORS["cyan"], fontsize=10)
     ax2b.set_ylabel("Log Buy Ratio", color=COLORS["yellow"], fontsize=10)
     ax2.set_title("Lit Directional Flow", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
-    handles, labels = [], []
-    for axis in (ax2, ax2b):
-        h, l = axis.get_legend_handles_labels()
-        handles.extend(h)
-        labels.extend(l)
-    if handles:
-        ax2.legend(handles, labels, loc="upper left", fontsize=8, frameon=False)
+    legend_handles_2 = [
+        Line2D([0], [0], color=COLORS["cyan"], linewidth=MAIN_LINE_WIDTH, label="Lit Buy Ratio"),
+        Line2D([0], [0], color=COLORS["yellow"], linewidth=SECONDARY_LINE_WIDTH, label="Log Buy Ratio"),
+        Line2D([0], [0], color=COLORS["neutral"], linewidth=CENTERLINE_WIDTH, label="Neutral (1.0)"),
+        Line2D([0], [0], color=COLORS["neutral"], linewidth=CENTERLINE_WIDTH, label="Neutral (0.0)"),
+    ]
+    _add_panel_legend(ax2, legend_handles_2, [h.get_label() for h in legend_handles_2], loc="upper left")
 
     # Panel 3: OTC Buy/Sell Volumes + Weekly Buy Ratio
     ax3 = axes[2]
@@ -221,27 +387,58 @@ def plot_symbol_metrics(
 
     valid_mask3 = ~otc_buy.isna() & ~otc_sell.isna()
     if valid_mask3.any():
-        ax3.bar(dates[valid_mask3], otc_buy[valid_mask3], color=COLORS["green"], alpha=0.75, width=0.8, label="OTC Buy")
-        ax3.bar(dates[valid_mask3], otc_sell[valid_mask3], bottom=otc_buy[valid_mask3], color=COLORS["red"], alpha=0.65, width=0.8, label="OTC Sell")
+        ax3.bar(
+            dates[valid_mask3],
+            otc_buy[valid_mask3],
+            color=COLORS["green"],
+            alpha=BAR_ALPHA_PRIMARY,
+            width=0.75,
+            label="OTC Buy",
+            zorder=2,
+        )
+        ax3.bar(
+            dates[valid_mask3],
+            otc_sell[valid_mask3],
+            bottom=otc_buy[valid_mask3],
+            color=COLORS["red"],
+            alpha=BAR_ALPHA_SECONDARY,
+            width=0.75,
+            label="OTC Sell",
+            zorder=2,
+        )
 
     ax3.set_ylabel("OTC Vol", color=COLORS["text"], fontsize=10)
     ax3.set_title("OTC Weekly Anchor", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
     ax3.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: _format_volume(x)))
-    if valid_mask3.any():
-        ax3.legend(loc="upper left", fontsize=8, frameon=False)
 
     ax3b = ax3.twinx()
-    ax3b.tick_params(colors=COLORS["text"], labelsize=9)
-    ax3b.spines["top"].set_visible(False)
-    ax3b.spines["right"].set_color(COLORS["grid"])
+    _apply_secondary_axis_style(ax3b)
     valid_mask3b = ~otc_ratio.isna()
     if valid_mask3b.any():
-        _plot_smooth_line(ax3b, dates, otc_ratio, COLORS["yellow"], valid_mask3b)
-        ax3b.scatter(dates, otc_ratio, c=COLORS["yellow"], s=40, zorder=5, edgecolors=COLORS["white"], linewidths=0.4)
+        _plot_smooth_line(ax3b, dates, otc_ratio, COLORS["yellow"], valid_mask3b, linewidth=SECONDARY_LINE_WIDTH)
+        ax3b.scatter(
+            dates,
+            otc_ratio,
+            c=COLORS["yellow"],
+            s=MARKER_SIZE_SMALL,
+            zorder=6,
+            edgecolors=COLORS["white"],
+            linewidths=0.4,
+        )
+    _set_abs_ratio_axis(ax3b, otc_ratio, neutral_value=1.0)
     ax3b.set_ylabel("OTC Buy Ratio", color=COLORS["yellow"], fontsize=10)
+    legend_handles_3 = [
+        Patch(facecolor=COLORS["green"], edgecolor="none", alpha=BAR_ALPHA_PRIMARY, label="OTC Buy"),
+        Patch(facecolor=COLORS["red"], edgecolor="none", alpha=BAR_ALPHA_SECONDARY, label="OTC Sell"),
+        Line2D([0], [0], color=COLORS["yellow"], linewidth=SECONDARY_LINE_WIDTH, label="OTC Buy Ratio"),
+        Line2D([0], [0], color=COLORS["neutral"], linewidth=CENTERLINE_WIDTH, label="Neutral (1.0)"),
+    ]
+    _add_panel_legend(ax3, legend_handles_3, [h.get_label() for h in legend_handles_3], loc="upper right")
 
     # Decision strip
     ax4 = axes[3]
+    ax4.set_facecolor(COLORS["panel_bg"])
+    ax4.tick_params(colors=COLORS["text"], labelsize=8)
     decisions = df["pressure_context_label"].fillna("Neutral").tolist()
     decision_colors = []
     for label in decisions:
@@ -258,6 +455,12 @@ def plot_symbol_metrics(
     ax4.grid(False)
     for spine in ax4.spines.values():
         spine.set_visible(False)
+    legend_handles_4 = [
+        Patch(facecolor=COLORS["green"], edgecolor="none", label="Accumulating"),
+        Patch(facecolor=COLORS["red"], edgecolor="none", label="Distribution"),
+        Patch(facecolor=COLORS["neutral"], edgecolor="none", label="Neutral"),
+    ]
+    _add_panel_legend(ax4, legend_handles_4, [h.get_label() for h in legend_handles_4], loc="upper right")
 
     # Format x-axis dates
     ax4.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d"))
@@ -307,14 +510,8 @@ def plot_short_only_metrics(
     fig, axes = plt.subplots(3, 1, figsize=(12, 10), sharex=True)
     fig.patch.set_facecolor(COLORS["background"])
 
-    for ax in axes:
-        ax.set_facecolor(COLORS["panel_bg"])
-        ax.tick_params(colors=COLORS["text"], labelsize=9)
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-        ax.spines["left"].set_color(COLORS["grid"])
-        ax.spines["bottom"].set_color(COLORS["grid"])
-        ax.grid(True, alpha=0.3, color=COLORS["grid"], linestyle="--")
+    for ax in axes[:3]:
+        _apply_primary_axis_style(ax)
 
     dates = df["date"]
 
@@ -326,35 +523,87 @@ def plot_short_only_metrics(
 
     valid_mask = ~short_ratio.isna()
     if valid_mask.any():
-        _plot_smooth_line(ax1, dates, short_ratio, COLORS["cyan"], valid_mask)
-        ax1.scatter(dates, short_ratio, c=colors1, s=60, zorder=5, edgecolors=COLORS["white"], linewidths=0.5)
+        _plot_smooth_line(ax1, dates, short_ratio, COLORS["cyan"], valid_mask, linewidth=MAIN_LINE_WIDTH)
+        ax1.scatter(
+            dates,
+            short_ratio,
+            c=colors1,
+            s=MARKER_SIZE,
+            zorder=5,
+            edgecolors=COLORS["white"],
+            linewidths=0.4,
+        )
 
+    _set_abs_ratio_axis(ax1, short_ratio, neutral_value=1.0)
     ax1.set_ylabel("Short Sale Buy Ratio", color=COLORS["text"], fontsize=10)
     ax1.set_title(f"{symbol} - Short Sale Buy Ratio", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
-    ax1.text(0.99, 0.95, "FINRA_TOTAL", transform=ax1.transAxes, fontsize=8,
-             color=COLORS["cyan"], ha="right", va="top")
-    ax1.text(0.99, 0.85, "POLYGON_TOTAL", transform=ax1.transAxes, fontsize=8,
-             color=COLORS["yellow"], ha="right", va="top")
+    ax1.text(
+        0.99,
+        0.95,
+        "FINRA_TOTAL",
+        transform=ax1.transAxes,
+        fontsize=8,
+        color=COLORS["cyan"],
+        ha="right",
+        va="top",
+    )
+    ax1.text(
+        0.99,
+        0.85,
+        "POLYGON_TOTAL",
+        transform=ax1.transAxes,
+        fontsize=8,
+        color=COLORS["yellow"],
+        ha="right",
+        va="top",
+    )
+    legend_handles_1 = [
+        Line2D([0], [0], color=COLORS["cyan"], linewidth=MAIN_LINE_WIDTH, label="Short Sale Buy Ratio"),
+        Line2D([0], [0], color=COLORS["neutral"], linewidth=CENTERLINE_WIDTH, label="Neutral (1.0)"),
+        Line2D([0], [0], marker="o", color="none", markerfacecolor=COLORS["cyan"], markeredgecolor=COLORS["white"], markersize=4.5, label="Observations"),
+    ]
+    _add_panel_legend(ax1, legend_handles_1, [h.get_label() for h in legend_handles_1], loc="upper left")
 
     # Panel 2: Short Sale Volume
     ax2 = axes[1]
     short_vol = df["short_buy_volume"]
     valid_mask2 = ~short_vol.isna()
     if valid_mask2.any():
-        ax2.bar(dates[valid_mask2], short_vol[valid_mask2], color=COLORS["yellow"], alpha=0.8, width=0.8)
+        ax2.bar(
+            dates[valid_mask2],
+            short_vol[valid_mask2],
+            color=COLORS["yellow"],
+            alpha=0.5,
+            width=0.75,
+        )
     ax2.set_ylabel("Short Vol", color=COLORS["text"], fontsize=10)
     ax2.set_title("Short Sale Volume", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
     ax2.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: _format_volume(x)))
+    legend_handles_2 = [Patch(facecolor=COLORS["yellow"], edgecolor="none", alpha=0.5, label="Short Sale Vol")]
+    _add_panel_legend(ax2, legend_handles_2, [h.get_label() for h in legend_handles_2], loc="upper left")
 
     # Panel 3: Close Price
     ax3 = axes[2]
     close = df["close"]
     valid_mask3 = ~close.isna()
     if valid_mask3.any():
-        ax3.plot(dates[valid_mask3], close[valid_mask3], color=COLORS["green"], linewidth=2, alpha=0.8)
-        ax3.scatter(dates[valid_mask3], close[valid_mask3], color=COLORS["green"], s=30, zorder=5, edgecolors=COLORS["white"], linewidths=0.4)
+        ax3.plot(dates[valid_mask3], close[valid_mask3], color=COLORS["green"], linewidth=MAIN_LINE_WIDTH, alpha=0.85)
+        ax3.scatter(
+            dates[valid_mask3],
+            close[valid_mask3],
+            color=COLORS["green"],
+            s=MARKER_SIZE_SMALL,
+            zorder=5,
+            edgecolors=COLORS["white"],
+            linewidths=0.4,
+        )
     ax3.set_ylabel("Close", color=COLORS["text"], fontsize=10)
     ax3.set_title("Close Price", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
+    legend_handles_3 = [
+        Line2D([0], [0], color=COLORS["green"], linewidth=MAIN_LINE_WIDTH, label="Close Price"),
+        Line2D([0], [0], marker="o", color="none", markerfacecolor=COLORS["green"], markeredgecolor=COLORS["white"], markersize=4.0, label="Observations"),
+    ]
+    _add_panel_legend(ax3, legend_handles_3, [h.get_label() for h in legend_handles_3], loc="upper left")
 
     ax3.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d"))
     ax3.xaxis.set_major_locator(mdates.DayLocator(interval=max(1, len(dates) // 10)))

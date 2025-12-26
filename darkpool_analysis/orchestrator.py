@@ -162,6 +162,7 @@ def main() -> None:
             dates=config.target_dates,
             tickers=config.tickers,
             title="Institutional Pressure Metrics",
+            table_style=config.table_style,
         )
     except Exception as exc:
         logging.error("Failed to render daily metrics table: %s", exc)

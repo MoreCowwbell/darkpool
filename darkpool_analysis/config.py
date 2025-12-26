@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 from typing import Optional
+from copy import deepcopy
 
 import pytz
 from dotenv import load_dotenv
@@ -63,6 +64,58 @@ DEFAULT_RETURN_Z_MIN = 0.5
 DEFAULT_SHORT_SALE_PREFERRED_SOURCE = "CNMS"
 DEFAULT_INDEX_CONSTITUENTS_DIR = "data/constituents"
 DEFAULT_INDEX_PROXY_MAP = {"SPX": "SPY"}
+
+DEFAULT_TABLE_STYLE = {
+    "mode": "scan",
+    "font_family": '"Segoe UI", Arial, sans-serif',
+    "font_family_numeric": '"Consolas", "Courier New", monospace',
+    "base_font_size": 13,
+    "header_font_size": 11,
+    "numeric_font_scale": 0.95,
+    "row_padding_y": 10,
+    "row_padding_x": 12,
+    "neutral_text_opacity": 0.78,
+    "header_opacity": 0.72,
+    "signal_opacity_strong": 0.95,
+    "signal_opacity_muted": 0.6,
+    "group_alt_strength": 0.12,
+    "group_separator_px": 2,
+    "group_separator_opacity": 0.35,
+    "group_separator_padding": 2,
+    "zone_tint_alpha": 0.035,
+    "gridline_every": 5,
+    "strong_signal_columns": ["short_z"],
+    "muted_signal_columns": ["return_z", "lit_buy_z", "otc_buy_z"],
+    "status_glyphs": {
+        "pressure": {"Accumulating": "up", "Distribution": "down", "Neutral": "dot", "NA": "dot"},
+        "otc_status": {"Anchored": "dot", "Staled": "dot", "None": "dot", "NA": "dot"},
+    },
+    "palette": {
+        "background": "#0f0f10",
+        "header_bg": "#141518",
+        "panel_bg": "#141416",
+        "row_bg": "#0f1012",
+        "row_alt_bg": "#15161a",
+        "text": "#e6e6e6",
+        "text_muted": "#8b8b8b",
+        "border": "#26262a",
+        "green": "#3cbf8a",
+        "red": "#d06c6c",
+        "yellow": "#d6b35b",
+        "cyan": "#7ab6ff",
+        "white": "#ffffff",
+    },
+    "zones": {
+        "id": "#121319",
+        "volume": "#10151a",
+        "ratio": "#141117",
+        "status": "#121213",
+    },
+    "modes": {
+        "scan": {"base_font_size": 12, "row_padding_y": 9, "neutral_text_opacity": 0.72},
+        "analysis": {"base_font_size": 13, "row_padding_y": 12, "neutral_text_opacity": 0.85},
+    },
+}
 
 # API endpoints (not secrets)
 DEFAULT_POLYGON_BASE_URL = "https://api.polygon.io"
@@ -193,6 +246,7 @@ class Config:
     index_constituents_dir: Path
     index_constituents_file: Optional[str]
     index_proxy_map: dict
+    table_style: dict
 
 
 def load_config() -> Config:
@@ -289,4 +343,5 @@ def load_config() -> Config:
         index_constituents_dir=index_constituents_dir,
         index_constituents_file=index_constituents_file,
         index_proxy_map=_parse_json_env("INDEX_PROXY_MAP") or DEFAULT_INDEX_PROXY_MAP,
+        table_style=deepcopy(DEFAULT_TABLE_STYLE),
     )

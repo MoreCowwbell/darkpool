@@ -7,31 +7,63 @@ from __future__ import annotations
 
 import argparse
 import logging
+from copy import deepcopy
 from datetime import date
 from pathlib import Path
+from typing import Optional
 
 import duckdb
 import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-COLORS = {
-    "background": "#0f0f10",
-    "header_bg": "#1b1b1d",
-    "panel_bg": "#141416",
-    "row_bg": "#0f0f10",
-    "row_alt_bg": "#141416",
-    "text": "#e6e6e6",
-    "text_muted": "#8b8b8b",
-    "border": "#2a2a2d",
-    "green": "#00ff88",
-    "green_bg": "#0a3d2a",
-    "red": "#ff6b6b",
-    "red_bg": "#3d1a1a",
-    "yellow": "#ffd700",
-    "cyan": "#00d4ff",
-    "white": "#ffffff",
-}
+try:
+    from .config import DEFAULT_TABLE_STYLE
+except ImportError:
+    from config import DEFAULT_TABLE_STYLE
+
+GLYPH_MAP = {"dot": "●", "up": "▲", "down": "▼"}
+
+
+def _resolve_table_style(raw_style: Optional[dict]) -> dict:
+    style = deepcopy(DEFAULT_TABLE_STYLE)
+    if raw_style:
+        for key, value in raw_style.items():
+            if key == "palette":
+                style["palette"].update(value)
+            elif key == "modes":
+                style["modes"].update(value)
+            elif key == "zones":
+                style["zones"].update(value)
+            else:
+                style[key] = value
+
+    mode = style.get("mode", "scan")
+    mode_overrides = style.get("modes", {}).get(mode, {})
+    for key, value in mode_overrides.items():
+        style[key] = value
+
+    return style
+
+
+def _hex_to_rgb(value: str) -> tuple[int, int, int]:
+    value = value.lstrip("#")
+    return tuple(int(value[i : i + 2], 16) for i in (0, 2, 4))
+
+
+def _rgba(value: str, alpha: float) -> str:
+    r, g, b = _hex_to_rgb(value)
+    return f"rgba({r}, {g}, {b}, {alpha:.3f})"
+
+
+def _blend_hex(base: str, overlay: str, alpha: float) -> str:
+    base_rgb = _hex_to_rgb(base)
+    overlay_rgb = _hex_to_rgb(overlay)
+    blended = tuple(
+        int(round(base_c * (1 - alpha) + over_c * alpha))
+        for base_c, over_c in zip(base_rgb, overlay_rgb)
+    )
+    return "#{:02x}{:02x}{:02x}".format(*blended)
 
 
 def fetch_metrics_df(
@@ -109,36 +141,52 @@ def _format_z(value: float) -> str:
     return f"{value:.2f}"
 
 
-def _get_sign_color(value: float) -> str:
+def _get_sign_color(value: float, palette: dict, opacity: float) -> str:
     if pd.isna(value) or value is None:
-        return COLORS["text_muted"]
+        return _rgba(palette["text_muted"], opacity)
     if value > 0:
-        return COLORS["green"]
+        return _rgba(palette["green"], opacity)
     if value < 0:
-        return COLORS["red"]
-    return COLORS["text"]
+        return _rgba(palette["red"], opacity)
+    return _rgba(palette["text"], opacity)
 
 
-def _get_otc_status_color(value: str) -> str:
+def _get_otc_status_color(value: str, palette: dict) -> str:
     if value == "Anchored":
-        return COLORS["green"]
+        return palette["green"]
     if value == "Staled":
-        return COLORS["yellow"]
-    return COLORS["text_muted"]
+        return palette["yellow"]
+    return palette["text_muted"]
 
 
-def _get_pressure_color(label: str) -> str:
+def _get_pressure_color(label: str, palette: dict) -> str:
     if label == "Accumulating":
-        return COLORS["green"]
+        return palette["green"]
     if label == "Distribution":
-        return COLORS["red"]
-    return COLORS["text_muted"]
+        return palette["red"]
+    return palette["text_muted"]
+
+
+def _get_status_glyph(label: str, glyph_map: dict, fallback: str = "dot") -> str:
+    key = glyph_map.get(label, fallback)
+    return GLYPH_MAP.get(key, GLYPH_MAP["dot"])
+
+
+def _format_status_html(label: str, color: str, glyph_map: dict) -> str:
+    if label in (None, "", "NA"):
+        return "NA"
+    glyph = _get_status_glyph(label, glyph_map)
+    return (
+        f'<span class="status-symbol" style="color: {color};">{glyph}</span>'
+        f'<span class="status-text">{label}</span>'
+    )
 
 
 def format_display_df(
     df: pd.DataFrame,
     tickers: list[str],
     dates: list[date],
+    palette: dict,
 ) -> pd.DataFrame:
     display_rows = []
 
@@ -239,8 +287,8 @@ def format_display_df(
                 "_short_z_raw": avg_values.get("short_ratio_z"),
                 "_lit_z_raw": avg_values.get("lit_buy_ratio_z"),
                 "_otc_z_raw": avg_values.get("otc_buy_ratio_z"),
-                "_otc_status_color": COLORS["text_muted"],
-                "_pressure_color": COLORS["text_muted"],
+                "_otc_status_color": palette["text_muted"],
+                "_pressure_color": palette["text_muted"],
                 "_row_type": "avg",
                 "_short_total_raw": avg_values.get("short_ratio_denominator_value"),
                 "_short_buy_raw": avg_values.get("short_buy_volume"),
@@ -291,8 +339,8 @@ def format_display_df(
                         "_short_z_raw": None,
                         "_lit_z_raw": None,
                         "_otc_z_raw": None,
-                        "_otc_status_color": COLORS["text_muted"],
-                        "_pressure_color": COLORS["text_muted"],
+                        "_otc_status_color": palette["text_muted"],
+                        "_pressure_color": palette["text_muted"],
                         "_row_type": "missing",
                         "_short_total_raw": None,
                         "_short_buy_raw": None,
@@ -344,8 +392,8 @@ def format_display_df(
                     "_short_z_raw": row.get("short_ratio_z"),
                     "_lit_z_raw": row.get("lit_buy_ratio_z"),
                     "_otc_z_raw": row.get("otc_buy_ratio_z"),
-                    "_otc_status_color": _get_otc_status_color(otc_status),
-                    "_pressure_color": _get_pressure_color(pressure_label),
+                    "_otc_status_color": _get_otc_status_color(otc_status, palette),
+                    "_pressure_color": _get_pressure_color(pressure_label, palette),
                     "_row_type": "data",
                     "_short_total_raw": row.get("short_ratio_denominator_value"),
                     "_short_buy_raw": row.get("short_buy_volume"),
@@ -371,48 +419,89 @@ def build_styled_html(
     df: pd.DataFrame,
     title: str,
     subtitle: str,
+    table_style: Optional[dict] = None,
 ) -> str:
+    style = _resolve_table_style(table_style)
+    palette = style["palette"]
+    zones = style["zones"]
+    strong_signal_cols = set(style.get("strong_signal_columns", []))
+    muted_signal_cols = set(style.get("muted_signal_columns", []))
+    strong_signal_opacity = style.get("signal_opacity_strong", 0.95)
+    muted_signal_opacity = style.get("signal_opacity_muted", 0.6)
+    neutral_text = _rgba(palette["text"], style["neutral_text_opacity"])
+    group_bg_even = palette["row_bg"]
+    group_bg_odd = _blend_hex(palette["row_bg"], palette["row_alt_bg"], style["group_alt_strength"])
+
+    def _signal_color(value: float, col_name: str) -> str:
+        if col_name in strong_signal_cols:
+            return _get_sign_color(value, palette, strong_signal_opacity)
+        if col_name in muted_signal_cols:
+            return _get_sign_color(value, palette, muted_signal_opacity)
+        return neutral_text
+
     rows_html = ""
+    group_index = -1
+    last_symbol = None
+
     for idx, row in df.iterrows():
         row_type = row.get("_row_type")
-        row_bg = COLORS["row_alt_bg"] if idx % 2 == 1 else COLORS["row_bg"]
-        row_class = ""
-        if row_type == "avg":
-            row_bg = COLORS["header_bg"]
-            row_class = "row-avg"
+        symbol = row.get("symbol")
+        is_new_group = symbol != last_symbol
+        if is_new_group:
+            group_index += 1
+            last_symbol = symbol
 
-        return_z_color = _get_sign_color(row["_return_z_raw"])
-        short_z_color = _get_sign_color(row["_short_z_raw"])
-        lit_z_color = _get_sign_color(row["_lit_z_raw"])
-        otc_z_color = _get_sign_color(row["_otc_z_raw"])
+        group_class = "group-even" if group_index % 2 == 0 else "group-odd"
+        row_class_parts = [group_class]
+        if row_type == "avg":
+            row_class_parts.append("row-avg")
+        if row_type == "missing":
+            row_class_parts.append("row-missing")
+        if is_new_group and group_index > 0:
+            row_class_parts.append("group-start")
+
+        row_class = " ".join(row_class_parts)
+
+        return_z_color = _signal_color(row["_return_z_raw"], "return_z")
+        short_z_color = _signal_color(row["_short_z_raw"], "short_z")
+        lit_z_color = _signal_color(row["_lit_z_raw"], "lit_buy_z")
+        otc_z_color = _signal_color(row["_otc_z_raw"], "otc_buy_z")
         otc_status_color = row["_otc_status_color"]
         pressure_color = row["_pressure_color"]
+        otc_status_html = _format_status_html(
+            row.get("otc_status"), otc_status_color, style.get("status_glyphs", {}).get("otc_status", {})
+        )
+        pressure_html = _format_status_html(
+            row.get("pressure_label"),
+            pressure_color,
+            style.get("status_glyphs", {}).get("pressure", {}),
+        )
 
         rows_html += f"""
-        <tr class="{row_class}" style="background-color: {row_bg};">
-            <td class="col-date">{row['date']}</td>
-            <td class="col-symbol">{row['symbol']}</td>
-            <td class="col-numeric" style="color: {return_z_color};">{row['return_z']}</td>
-            <td class="col-numeric">{row['short_total_vol']}</td>
-            <td class="col-numeric">{row['short_buy_vol']}</td>
-            <td class="col-numeric">{row['short_sell_vol']}</td>
-            <td class="col-numeric">{row['short_buy_ratio']}</td>
-            <td class="col-numeric" style="color: {short_z_color};">{row['short_z']}</td>
-            <td class="col-numeric">{row['lit_total_vol']}</td>
-            <td class="col-numeric">{row['lit_buy_vol']}</td>
-            <td class="col-numeric">{row['lit_sell_vol']}</td>
-            <td class="col-numeric">{row['lit_buy_ratio']}</td>
-            <td class="col-numeric">{row['log_buy_ratio']}</td>
-            <td class="col-numeric" style="color: {lit_z_color};">{row['lit_buy_z']}</td>
-            <td class="col-numeric">{row['otc_total_vol']}</td>
-            <td class="col-numeric">{row['otc_buy_vol']}</td>
-            <td class="col-numeric">{row['otc_sell_vol']}</td>
-            <td class="col-numeric">{row['otc_weekly_buy_ratio']}</td>
-            <td class="col-numeric" style="color: {otc_z_color};">{row['otc_buy_z']}</td>
-            <td class="col-quality">{row['short_vol_source']}</td>
-            <td class="col-quality" style="color: {otc_status_color};">{row['otc_status']}</td>
-            <td class="col-date">{row['otc_week_used']}</td>
-            <td class="col-quality" style="color: {pressure_color};">{row['pressure_label']}</td>
+        <tr class="{row_class}">
+            <td class="col-date col-anchor zone-id">{row['date']}</td>
+            <td class="col-symbol col-anchor zone-id">{row['symbol']}</td>
+            <td class="col-numeric zone-ratio col-signal" style="color: {return_z_color};">{row['return_z']}</td>
+            <td class="col-numeric zone-volume">{row['short_total_vol']}</td>
+            <td class="col-numeric zone-volume">{row['short_buy_vol']}</td>
+            <td class="col-numeric zone-volume">{row['short_sell_vol']}</td>
+            <td class="col-numeric zone-ratio">{row['short_buy_ratio']}</td>
+            <td class="col-numeric zone-ratio col-signal" style="color: {short_z_color};">{row['short_z']}</td>
+            <td class="col-numeric zone-volume">{row['lit_total_vol']}</td>
+            <td class="col-numeric zone-volume">{row['lit_buy_vol']}</td>
+            <td class="col-numeric zone-volume">{row['lit_sell_vol']}</td>
+            <td class="col-numeric zone-ratio">{row['lit_buy_ratio']}</td>
+            <td class="col-numeric zone-ratio">{row['log_buy_ratio']}</td>
+            <td class="col-numeric zone-ratio col-signal" style="color: {lit_z_color};">{row['lit_buy_z']}</td>
+            <td class="col-numeric zone-volume">{row['otc_total_vol']}</td>
+            <td class="col-numeric zone-volume">{row['otc_buy_vol']}</td>
+            <td class="col-numeric zone-volume">{row['otc_sell_vol']}</td>
+            <td class="col-numeric zone-ratio">{row['otc_weekly_buy_ratio']}</td>
+            <td class="col-numeric zone-ratio col-signal" style="color: {otc_z_color};">{row['otc_buy_z']}</td>
+            <td class="col-quality zone-status">{row['short_vol_source']}</td>
+            <td class="col-quality col-status zone-status">{otc_status_html}</td>
+            <td class="col-date zone-status">{row['otc_week_used']}</td>
+            <td class="col-quality col-status zone-status">{pressure_html}</td>
         </tr>
         """
 
@@ -624,6 +713,32 @@ def build_styled_html(
         </div>
     """
 
+    legend_html = f"""
+        <div class="legend-panel">
+            <span class="legend-item"><span class="legend-symbol" style="color: {palette['green']};">{GLYPH_MAP['up']}</span>Accumulating</span>
+            <span class="legend-item"><span class="legend-symbol" style="color: {palette['red']};">{GLYPH_MAP['down']}</span>Distribution</span>
+            <span class="legend-item"><span class="legend-symbol" style="color: {palette['text_muted']};">{GLYPH_MAP['dot']}</span>Neutral</span>
+            <span class="legend-item"><span class="legend-symbol" style="color: {palette['green']};">{GLYPH_MAP['dot']}</span>OTC Anchored</span>
+            <span class="legend-item"><span class="legend-symbol" style="color: {palette['yellow']};">{GLYPH_MAP['dot']}</span>OTC Staled</span>
+        </div>
+    """
+
+    header_text = _rgba(palette["text"], style["header_opacity"])
+    gridline_color = _rgba(palette["border"], 0.35)
+    border_color = _rgba(palette["border"], 0.55)
+    group_sep_color = _rgba(palette["border"], style["group_separator_opacity"])
+    zone_id_bg = _rgba(zones["id"], style["zone_tint_alpha"])
+    zone_volume_bg = _rgba(zones["volume"], style["zone_tint_alpha"])
+    zone_ratio_bg = _rgba(zones["ratio"], style["zone_tint_alpha"])
+    zone_status_bg = _rgba(zones["status"], style["zone_tint_alpha"])
+    row_pad_y = style["row_padding_y"]
+    row_pad_x = style["row_padding_x"]
+    group_start_pad = row_pad_y + style["group_separator_padding"]
+    base_font_size = style["base_font_size"]
+    numeric_font_size = style["base_font_size"] * style["numeric_font_scale"]
+    header_font_size = style["header_font_size"]
+    gridline_every = style["gridline_every"]
+
     html = f"""
 <!DOCTYPE html>
 <html lang="en">
@@ -639,16 +754,16 @@ def build_styled_html(
         }}
 
         body {{
-            background-color: {COLORS['background']};
-            color: {COLORS['text']};
-            font-family: "Segoe UI", Arial, sans-serif;
-            font-size: 13px;
-            line-height: 1.4;
+            background-color: {palette['background']};
+            color: {palette['text']};
+            font-family: {style['font_family']};
+            font-size: {base_font_size}px;
+            line-height: 1.45;
             padding: 24px;
         }}
 
         #table-container {{
-            background-color: {COLORS['background']};
+            background-color: {palette['background']};
             border-radius: 12px;
             padding: 24px;
             max-width: 2400px;
@@ -661,40 +776,42 @@ def build_styled_html(
             align-items: baseline;
             margin-bottom: 20px;
             padding-bottom: 16px;
-            border-bottom: 1px solid {COLORS['border']};
+            border-bottom: 1px solid {border_color};
         }}
 
         .title {{
             font-size: 22px;
             font-weight: 600;
-            color: {COLORS['white']};
+            color: {palette['white']};
         }}
 
         .subtitle {{
             font-size: 12px;
-            color: {COLORS['text_muted']};
+            color: {palette['text_muted']};
         }}
 
         table {{
             width: 100%;
             border-collapse: collapse;
-            font-family: Consolas, "Courier New", monospace;
-            font-size: 12px;
+            font-family: {style['font_family']};
+            font-size: {base_font_size}px;
         }}
 
         thead {{
-            background-color: {COLORS['header_bg']};
+            background-color: {palette['header_bg']};
         }}
 
         th {{
-            padding: 10px 12px;
+            padding: {row_pad_y}px {row_pad_x}px;
             text-align: left;
             font-weight: 600;
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            color: {COLORS['text_muted']};
-            border-bottom: 1px solid {COLORS['border']};
+            font-size: {header_font_size}px;
+            text-transform: none;
+            letter-spacing: 0.2px;
+            color: {header_text};
+            border-bottom: 1px solid {border_color};
+            white-space: normal;
+            line-height: 1.2;
         }}
 
         th.col-numeric {{
@@ -702,23 +819,29 @@ def build_styled_html(
         }}
 
         td {{
-            padding: 10px 12px;
-            border-bottom: 1px solid {COLORS['border']};
+            padding: {row_pad_y}px {row_pad_x}px;
+            border-bottom: 1px solid transparent;
             vertical-align: middle;
+            white-space: nowrap;
         }}
 
         .col-date {{
-            color: {COLORS['text_muted']};
+            color: {palette['text']};
+            font-weight: 600;
         }}
 
         .col-symbol {{
             font-weight: 600;
-            color: {COLORS['cyan']};
+            color: {palette['cyan']};
         }}
 
         .col-numeric {{
             text-align: right;
             font-variant-numeric: tabular-nums;
+            font-feature-settings: "tnum";
+            font-family: {style['font_family_numeric']};
+            font-size: {numeric_font_size}px;
+            color: {neutral_text};
         }}
 
         .col-quality {{
@@ -726,23 +849,80 @@ def build_styled_html(
             font-weight: 600;
         }}
 
+        .col-anchor {{
+            letter-spacing: 0.2px;
+        }}
+
+        .col-status {{
+            font-weight: 600;
+        }}
+
+        .status-symbol {{
+            display: inline-block;
+            margin-right: 6px;
+            font-size: 10px;
+            transform: translateY(-1px);
+        }}
+
+        .status-text {{
+            color: {palette['text']};
+        }}
+
+        .group-even {{
+            background-color: {group_bg_even};
+        }}
+
+        .group-odd {{
+            background-color: {group_bg_odd};
+        }}
+
+        .group-start td {{
+            border-top: {style['group_separator_px']}px solid {group_sep_color};
+            padding-top: {group_start_pad}px;
+        }}
+
         .row-avg td {{
             font-weight: 600;
+            background-color: {palette['header_bg']};
+        }}
+
+        .row-missing {{
+            opacity: 0.7;
+        }}
+
+        tbody tr:nth-child({gridline_every}n) td {{
+            border-bottom: 1px solid {gridline_color};
+        }}
+
+        .zone-id {{
+            background-color: {zone_id_bg};
+        }}
+
+        .zone-volume {{
+            background-color: {zone_volume_bg};
+        }}
+
+        .zone-ratio {{
+            background-color: {zone_ratio_bg};
+        }}
+
+        .zone-status {{
+            background-color: {zone_status_bg};
         }}
 
         .summary-panel {{
             margin-top: 18px;
             padding: 16px;
-            border: 1px solid {COLORS['border']};
+            border: 1px solid {border_color};
             border-radius: 10px;
-            background-color: {COLORS['panel_bg']};
+            background-color: {palette['panel_bg']};
         }}
 
         .summary-title {{
             font-size: 12px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
-            color: {COLORS['text_muted']};
+            color: {palette['text_muted']};
             margin-bottom: 12px;
         }}
 
@@ -754,7 +934,7 @@ def build_styled_html(
             font-size: 11px;
             text-transform: uppercase;
             letter-spacing: 0.4px;
-            color: {COLORS['text_muted']};
+            color: {palette['text_muted']};
             margin-bottom: 8px;
         }}
 
@@ -772,27 +952,27 @@ def build_styled_html(
         }}
 
         .summary-label {{
-            color: {COLORS['text_muted']};
+            color: {palette['text_muted']};
         }}
 
         .summary-value {{
-            color: {COLORS['white']};
+            color: {palette['white']};
             font-variant-numeric: tabular-nums;
         }}
 
         .definitions-panel {{
             margin-top: 16px;
             padding: 16px;
-            border: 1px solid {COLORS['border']};
+            border: 1px solid {border_color};
             border-radius: 10px;
-            background-color: {COLORS['panel_bg']};
+            background-color: {palette['panel_bg']};
         }}
 
         .definitions-title {{
             font-size: 12px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
-            color: {COLORS['text_muted']};
+            color: {palette['text_muted']};
             margin-bottom: 10px;
         }}
 
@@ -805,26 +985,45 @@ def build_styled_html(
         }}
 
         .definitions-list li {{
-            color: {COLORS['text']};
+            color: {palette['text']};
         }}
 
         .def-term {{
-            color: {COLORS['cyan']};
+            color: {palette['cyan']};
             font-weight: 600;
         }}
 
         .definitions-note {{
             margin-top: 10px;
             font-size: 11px;
-            color: {COLORS['text_muted']};
+            color: {palette['text_muted']};
+        }}
+
+        .legend-panel {{
+            margin-top: 14px;
+            display: flex;
+            justify-content: flex-end;
+            gap: 18px;
+            font-size: 11px;
+            color: {palette['text_muted']};
+        }}
+
+        .legend-item {{
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }}
+
+        .legend-symbol {{
+            font-size: 10px;
         }}
 
         .footer {{
             margin-top: 18px;
             padding-top: 12px;
-            border-top: 1px solid {COLORS['border']};
+            border-top: 1px solid {border_color};
             font-size: 11px;
-            color: {COLORS['text_muted']};
+            color: {palette['text_muted']};
             text-align: center;
         }}
     </style>
@@ -839,29 +1038,29 @@ def build_styled_html(
         <table>
             <thead>
                 <tr>
-                    <th>Date</th>
-                    <th>Symbol</th>
-                    <th class="col-numeric">Return Z</th>
-                    <th class="col-numeric">Short Total Vol</th>
-                    <th class="col-numeric">Short Buy Vol</th>
-                    <th class="col-numeric">Short Sell Vol</th>
-                    <th class="col-numeric">Short Sale Buy Ratio</th>
-                    <th class="col-numeric">Short Z</th>
-                    <th class="col-numeric">Lit Total Vol</th>
-                    <th class="col-numeric">Lit Buy Vol</th>
-                    <th class="col-numeric">Lit Sell Vol</th>
-                    <th class="col-numeric">Lit Buy Ratio</th>
-                    <th class="col-numeric">Log Buy Ratio</th>
-                    <th class="col-numeric">Lit Buy Z</th>
-                    <th class="col-numeric">OTC Total Vol</th>
-                    <th class="col-numeric">OTC Buy Vol</th>
-                    <th class="col-numeric">OTC Sell Vol</th>
-                    <th class="col-numeric">OTC Weekly Buy Ratio</th>
-                    <th class="col-numeric">OTC Buy Z</th>
-                    <th>Short Vol Source</th>
-                    <th>OTC Status</th>
-                    <th>OTC Week Used</th>
-                    <th>Pressure</th>
+                    <th class="zone-id col-anchor">Date</th>
+                    <th class="zone-id col-anchor">Symbol</th>
+                    <th class="col-numeric zone-ratio">Return Z</th>
+                    <th class="col-numeric zone-volume">Short Total Vol</th>
+                    <th class="col-numeric zone-volume">Short Buy Vol</th>
+                    <th class="col-numeric zone-volume">Short Sell Vol</th>
+                    <th class="col-numeric zone-ratio">Short Sale Buy Ratio</th>
+                    <th class="col-numeric zone-ratio">Short Z</th>
+                    <th class="col-numeric zone-volume">Lit Total Vol</th>
+                    <th class="col-numeric zone-volume">Lit Buy Vol</th>
+                    <th class="col-numeric zone-volume">Lit Sell Vol</th>
+                    <th class="col-numeric zone-ratio">Lit Buy Ratio</th>
+                    <th class="col-numeric zone-ratio">Log Buy Ratio</th>
+                    <th class="col-numeric zone-ratio">Lit Buy Z</th>
+                    <th class="col-numeric zone-volume">OTC Total Vol</th>
+                    <th class="col-numeric zone-volume">OTC Buy Vol</th>
+                    <th class="col-numeric zone-volume">OTC Sell Vol</th>
+                    <th class="col-numeric zone-ratio">OTC Weekly Buy Ratio</th>
+                    <th class="col-numeric zone-ratio">OTC Buy Z</th>
+                    <th class="zone-status">Short Vol Source</th>
+                    <th class="zone-status">OTC Status</th>
+                    <th class="zone-status">OTC Week Used</th>
+                    <th class="zone-status">Pressure</th>
                 </tr>
             </thead>
             <tbody>
@@ -869,6 +1068,7 @@ def build_styled_html(
             </tbody>
         </table>
 
+        {legend_html}
         {summary_html}
         {definitions_html}
 
@@ -927,6 +1127,7 @@ def render_daily_metrics_table(
     dates: list[date],
     tickers: list[str],
     title: str = "Daily Metrics",
+    table_style: Optional[dict] = None,
 ) -> tuple[Path, Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
     sorted_dates = sorted(dates, reverse=True)
@@ -943,8 +1144,11 @@ def render_daily_metrics_table(
         if df.empty:
             logger.warning("No data found for dates %s", [d.strftime("%Y-%m-%d") for d in dates])
 
-        display_df = format_display_df(df, tickers, dates)
-        html_content = build_styled_html(display_df, title=title, subtitle=subtitle)
+        style = _resolve_table_style(table_style)
+        display_df = format_display_df(df, tickers, dates, palette=style["palette"])
+        html_content = build_styled_html(
+            display_df, title=title, subtitle=subtitle, table_style=style
+        )
 
         html_path = output_dir / f"daily_metrics_{file_suffix}.html"
         html_path.write_text(html_content, encoding="utf-8")
@@ -996,6 +1200,7 @@ def main() -> None:
         output_dir=output_dir,
         dates=dates,
         tickers=tickers,
+        table_style=config.table_style,
     )
 
 
