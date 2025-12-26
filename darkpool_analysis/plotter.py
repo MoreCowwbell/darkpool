@@ -171,6 +171,8 @@ def fetch_metrics_for_plot(
             symbol,
             short_ratio,
             short_ratio_z,
+            short_buy_sell_ratio,
+            short_buy_sell_ratio_z,
             short_ratio_denominator_type,
             short_ratio_denominator_value,
             short_buy_volume,
@@ -299,7 +301,7 @@ def plot_symbol_metrics(
 
     # Panel 1: Short Sale Buy Ratio
     ax1 = axes[0]
-    short_ratio = df["short_ratio"]
+    short_ratio = df["short_buy_sell_ratio"]
 
     valid_mask = ~short_ratio.isna()
     if valid_mask.any():
@@ -315,10 +317,10 @@ def plot_symbol_metrics(
         )
 
     _set_abs_ratio_axis(ax1, short_ratio, neutral_value=1.0)
-    ax1.set_ylabel("Short Sale Buy Ratio", color=COLORS["text"], fontsize=10)
-    ax1.set_title(f"{symbol} - Short Sale Buy Ratio", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
+    ax1.set_ylabel("Short Sale Buy/Sell Ratio", color=COLORS["text"], fontsize=10)
+    ax1.set_title(f"{symbol} - Short Sale Buy/Sell Ratio", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
     legend_handles_1 = [
-        Line2D([0], [0], color=COLORS["cyan"], linewidth=MAIN_LINE_WIDTH, label="Short Sale Buy Ratio"),
+        Line2D([0], [0], color=COLORS["cyan"], linewidth=MAIN_LINE_WIDTH, label="Short Sale Buy/Sell Ratio"),
         Line2D(
             [0], [0],
             marker="o",
@@ -517,7 +519,7 @@ def plot_short_only_metrics(
 
     # Panel 1: Short Ratio (daily)
     ax1 = axes[0]
-    short_ratio = df["short_ratio"]
+    short_ratio = df["short_buy_sell_ratio"]
     denom_types = df["short_ratio_denominator_type"]
     colors1 = [_get_denom_color(v) for v in denom_types]
 
@@ -535,8 +537,8 @@ def plot_short_only_metrics(
         )
 
     _set_abs_ratio_axis(ax1, short_ratio, neutral_value=1.0)
-    ax1.set_ylabel("Short Sale Buy Ratio", color=COLORS["text"], fontsize=10)
-    ax1.set_title(f"{symbol} - Short Sale Buy Ratio", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
+    ax1.set_ylabel("Short Sale Buy/Sell Ratio", color=COLORS["text"], fontsize=10)
+    ax1.set_title(f"{symbol} - Short Sale Buy/Sell Ratio", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
     ax1.text(
         0.99,
         0.95,
@@ -558,7 +560,7 @@ def plot_short_only_metrics(
         va="top",
     )
     legend_handles_1 = [
-        Line2D([0], [0], color=COLORS["cyan"], linewidth=MAIN_LINE_WIDTH, label="Short Sale Buy Ratio"),
+        Line2D([0], [0], color=COLORS["cyan"], linewidth=MAIN_LINE_WIDTH, label="Short Sale Buy/Sell Ratio"),
         Line2D([0], [0], color=COLORS["neutral"], linewidth=CENTERLINE_WIDTH, label="Neutral (1.0)"),
         Line2D([0], [0], marker="o", color="none", markerfacecolor=COLORS["cyan"], markeredgecolor=COLORS["white"], markersize=4.5, label="Observations"),
     ]

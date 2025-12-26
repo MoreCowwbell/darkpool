@@ -125,7 +125,7 @@ python plotter.py --dates 2025-12-20 --mode short_only
 ## Notes on Inference
 - Lit trades are classified NBBO-first, TICK fallback.
 - log(Buy/Sell) is computed only when both buy and sell volumes are > 0.
-- Short Sale Buy Ratio uses ShortVolume / TotalVolume (short-exempt excluded); if total volume is missing, Polygon daily volume is used as the denominator and flagged as POLYGON_TOTAL.
+- Short Sale Buy Ratio uses ShortVolume / ShortSellVolume (short-exempt excluded); if total volume is missing, Polygon daily volume is used to derive the sell volume and flagged as POLYGON_TOTAL.
 - OTC weekly data is delayed; OTC status is Anchored, Staled, or None based on the week used.
 - Price context is sourced from Polygon daily aggregates only.
 - Constituent aggregation requires a maintained index list; see data/constituents/spx_sample.csv as a format example.

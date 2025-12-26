@@ -83,6 +83,8 @@ def fetch_metrics_df(
             return_z,
             short_ratio,
             short_ratio_z,
+            short_buy_sell_ratio,
+            short_buy_sell_ratio_z,
             short_ratio_denominator_type,
             short_ratio_denominator_value,
             short_buy_volume,
@@ -197,6 +199,8 @@ def format_display_df(
         "return_z",
         "short_ratio",
         "short_ratio_z",
+        "short_buy_sell_ratio",
+        "short_buy_sell_ratio_z",
         "short_ratio_denominator_type",
         "short_ratio_denominator_value",
         "short_buy_volume",
@@ -238,6 +242,8 @@ def format_display_df(
         "return_z",
         "short_ratio",
         "short_ratio_z",
+        "short_buy_sell_ratio",
+        "short_buy_sell_ratio_z",
         "short_ratio_denominator_value",
         "short_buy_volume",
         "short_sell_volume",
@@ -266,8 +272,8 @@ def format_display_df(
                 "short_total_vol": _format_volume(avg_values.get("short_ratio_denominator_value")),
                 "short_buy_vol": _format_volume(avg_values.get("short_buy_volume")),
                 "short_sell_vol": _format_volume(avg_values.get("short_sell_volume")),
-                "short_buy_ratio": _format_ratio(avg_values.get("short_ratio")),
-                "short_z": _format_z(avg_values.get("short_ratio_z")),
+                "short_buy_ratio": _format_ratio(avg_values.get("short_buy_sell_ratio")),
+                "short_z": _format_z(avg_values.get("short_buy_sell_ratio_z")),
                 "lit_total_vol": _format_volume(avg_values.get("lit_total_volume")),
                 "lit_buy_vol": _format_volume(avg_values.get("lit_buy_volume")),
                 "lit_sell_vol": _format_volume(avg_values.get("lit_sell_volume")),
@@ -284,7 +290,7 @@ def format_display_df(
                 "otc_week_used": "NA",
                 "pressure_label": "NA",
                 "_return_z_raw": avg_values.get("return_z"),
-                "_short_z_raw": avg_values.get("short_ratio_z"),
+                "_short_z_raw": avg_values.get("short_buy_sell_ratio_z"),
                 "_lit_z_raw": avg_values.get("lit_buy_ratio_z"),
                 "_otc_z_raw": avg_values.get("otc_buy_ratio_z"),
                 "_otc_status_color": palette["text_muted"],
@@ -293,7 +299,7 @@ def format_display_df(
                 "_short_total_raw": avg_values.get("short_ratio_denominator_value"),
                 "_short_buy_raw": avg_values.get("short_buy_volume"),
                 "_short_sell_raw": avg_values.get("short_sell_volume"),
-                "_short_ratio_raw": avg_values.get("short_ratio"),
+                "_short_ratio_raw": avg_values.get("short_buy_sell_ratio"),
                 "_lit_total_raw": avg_values.get("lit_total_volume"),
                 "_lit_buy_raw": avg_values.get("lit_buy_volume"),
                 "_lit_sell_raw": avg_values.get("lit_sell_volume"),
@@ -371,8 +377,8 @@ def format_display_df(
                     "short_total_vol": _format_volume(row.get("short_ratio_denominator_value")),
                     "short_buy_vol": _format_volume(row.get("short_buy_volume")),
                     "short_sell_vol": _format_volume(row.get("short_sell_volume")),
-                    "short_buy_ratio": _format_ratio(row.get("short_ratio")),
-                    "short_z": _format_z(row.get("short_ratio_z")),
+                    "short_buy_ratio": _format_ratio(row.get("short_buy_sell_ratio")),
+                    "short_z": _format_z(row.get("short_buy_sell_ratio_z")),
                     "lit_total_vol": _format_volume(row.get("lit_total_volume")),
                     "lit_buy_vol": _format_volume(row.get("lit_buy_volume")),
                     "lit_sell_vol": _format_volume(row.get("lit_sell_volume")),
@@ -389,7 +395,7 @@ def format_display_df(
                     "otc_week_used": _format_date(row.get("otc_week_used")),
                     "pressure_label": pressure_label,
                     "_return_z_raw": row.get("return_z"),
-                    "_short_z_raw": row.get("short_ratio_z"),
+                    "_short_z_raw": row.get("short_buy_sell_ratio_z"),
                     "_lit_z_raw": row.get("lit_buy_ratio_z"),
                     "_otc_z_raw": row.get("otc_buy_ratio_z"),
                     "_otc_status_color": _get_otc_status_color(otc_status, palette),
@@ -398,7 +404,7 @@ def format_display_df(
                     "_short_total_raw": row.get("short_ratio_denominator_value"),
                     "_short_buy_raw": row.get("short_buy_volume"),
                     "_short_sell_raw": row.get("short_sell_volume"),
-                    "_short_ratio_raw": row.get("short_ratio"),
+                    "_short_ratio_raw": row.get("short_buy_sell_ratio"),
                     "_lit_total_raw": row.get("lit_total_volume"),
                     "_lit_buy_raw": row.get("lit_buy_volume"),
                     "_lit_sell_raw": row.get("lit_sell_volume"),
@@ -641,7 +647,7 @@ def build_styled_html(
                         <span class="summary-value">{_format_z(avg_return_z)}</span>
                     </div>
                     <div class="summary-item">
-                        <span class="summary-label">Short Sale Buy Ratio</span>
+                        <span class="summary-label">Short Sale Buy/Sell Ratio</span>
                         <span class="summary-value">{_format_ratio(avg_short_ratio)}</span>
                     </div>
                     <div class="summary-item">
@@ -678,8 +684,8 @@ def build_styled_html(
         ("Short Total Vol", "Consolidated daily volume used for short ratio denominator."),
         ("Short Buy Vol", "FINRA short sale volume (buy-side proxy; short-exempt excluded)."),
         ("Short Sell Vol", "Short Total Vol - Short Buy Vol."),
-        ("Short Sale Buy Ratio", "Short Buy Vol / Short Total Vol (short-exempt excluded)."),
-        ("Short Z", "Rolling z-score of Short Sale Buy Ratio."),
+        ("Short Sale Buy/Sell Ratio", "Short Buy Vol / Short Sell Vol (short-exempt excluded)."),
+        ("Short Z", "Rolling z-score of Short Sale Buy/Sell Ratio."),
         ("Lit Total Vol", "Lit buy + lit sell volume (Polygon trades)."),
         ("Lit Buy Vol", "Lit buy volume from Option B inference."),
         ("Lit Sell Vol", "Lit sell volume from Option B inference."),
@@ -707,7 +713,7 @@ def build_styled_html(
                 {definition_items}
             </ul>
             <div class="definitions-note">
-                Sources: OTC weekly = FINRA weekly summary. Short Sale Buy Ratio = FINRA Reg SHO daily (consolidated).
+                Sources: OTC weekly = FINRA weekly summary. Short Sale Buy/Sell Ratio = FINRA Reg SHO daily (consolidated).
                 Lit direction = Polygon trades. Price/Volume = Polygon daily aggregates.
             </div>
         </div>
@@ -1044,7 +1050,7 @@ def build_styled_html(
                     <th class="col-numeric zone-volume">Short Total Vol</th>
                     <th class="col-numeric zone-volume">Short Buy Vol</th>
                     <th class="col-numeric zone-volume">Short Sell Vol</th>
-                    <th class="col-numeric zone-ratio">Short Sale Buy Ratio</th>
+                    <th class="col-numeric zone-ratio">Short Sale Buy/Sell Ratio</th>
                     <th class="col-numeric zone-ratio">Short Z</th>
                     <th class="col-numeric zone-volume">Lit Total Vol</th>
                     <th class="col-numeric zone-volume">Lit Buy Vol</th>

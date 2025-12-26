@@ -266,12 +266,24 @@ def build_daily_metrics(
         denom_ready, "short_sell_volume"
     ].clip(lower=0.0)
 
+    merged["short_buy_sell_ratio"] = pd.NA
+    valid_sell = merged["short_sell_volume"].notna() & (merged["short_sell_volume"] > 0)
+    merged.loc[valid_sell, "short_buy_sell_ratio"] = (
+        merged.loc[valid_sell, "short_buy_volume"] / merged.loc[valid_sell, "short_sell_volume"]
+    )
+
     # Ensure numeric dtype for rolling calculations (pd.NA -> np.nan)
     merged["short_ratio"] = pd.to_numeric(merged["short_ratio"], errors="coerce")
+    merged["short_buy_sell_ratio"] = pd.to_numeric(merged["short_buy_sell_ratio"], errors="coerce")
 
     merged["short_ratio_z"] = (
         merged.sort_values(["symbol", "date"])
         .groupby("symbol")["short_ratio"]
+        .transform(lambda s: _rolling_zscore(s, config.short_z_window, config.zscore_min_periods))
+    )
+    merged["short_buy_sell_ratio_z"] = (
+        merged.sort_values(["symbol", "date"])
+        .groupby("symbol")["short_buy_sell_ratio"]
         .transform(lambda s: _rolling_zscore(s, config.short_z_window, config.zscore_min_periods))
     )
 
@@ -322,7 +334,7 @@ def build_daily_metrics(
         lambda row: _label_pressure_context(
             row.get("return_z"),
             row.get("return_1d"),
-            row.get("short_ratio_z"),
+            row.get("short_buy_sell_ratio_z"),
             config,
         ),
         axis=1,
@@ -341,6 +353,8 @@ def build_daily_metrics(
             "short_sell_volume",
             "short_ratio",
             "short_ratio_z",
+            "short_buy_sell_ratio",
+            "short_buy_sell_ratio_z",
             "short_ratio_denominator_type",
             "short_ratio_denominator_value",
             "short_ratio_source",

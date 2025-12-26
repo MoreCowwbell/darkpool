@@ -215,3 +215,6 @@ Format:
 ## 2025-12-25 Session Summary (Codex)
 - [x] Added plot styling helpers for axis bounds, centerlines, and legend styling in `darkpool/darkpool_analysis/plotter.py`.
 - [x] Applied per-panel legends, subtle gridlines, and reduced marker/bar dominance for layered and short-only plots.
+## 2025-12-25 Session Summary (Codex)
+- [x] Added short buy/sell ratio and z-score to analytics and DuckDB schema.
+- [x] Switched tables and plots to display Short Sale Buy/Sell Ratio with updated definitions.

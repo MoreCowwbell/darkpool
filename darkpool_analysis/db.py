@@ -98,6 +98,8 @@ def init_db(conn: duckdb.DuckDBPyConnection) -> None:
             short_sell_volume DOUBLE,
             short_ratio DOUBLE,
             short_ratio_z DOUBLE,
+            short_buy_sell_ratio DOUBLE,
+            short_buy_sell_ratio_z DOUBLE,
             short_ratio_denominator_type TEXT,
             short_ratio_denominator_value DOUBLE,
             short_ratio_source TEXT,
@@ -134,6 +136,8 @@ def init_db(conn: duckdb.DuckDBPyConnection) -> None:
     daily_metrics_columns = [
         "short_buy_volume DOUBLE",
         "short_sell_volume DOUBLE",
+        "short_buy_sell_ratio DOUBLE",
+        "short_buy_sell_ratio_z DOUBLE",
         "lit_buy_volume DOUBLE",
         "lit_sell_volume DOUBLE",
         "lit_total_volume DOUBLE",
