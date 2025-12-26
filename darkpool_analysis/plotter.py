@@ -47,6 +47,9 @@ MARKER_SIZE = 28
 MARKER_SIZE_SMALL = 22
 BAR_ALPHA_PRIMARY = 0.35
 BAR_ALPHA_SECONDARY = 0.25
+BOT_THRESHOLD = 1.25
+SELL_THRESHOLD = 0.75
+NEUTRAL_RATIO = 1.0
 
 
 def _clean_upper_bound(value: float, min_upper: float = 2.0) -> float:
@@ -128,30 +131,69 @@ def _add_panel_legend(ax, handles, labels, loc: str = "upper left") -> None:
         text.set_color(COLORS["text"])
 
 
-def _set_abs_ratio_axis(ax, values: pd.Series, neutral_value: float = 1.0) -> Line2D:
+def _set_abs_ratio_axis(
+    ax,
+    values: pd.Series,
+    neutral_value: float = NEUTRAL_RATIO,
+    draw_neutral: bool = True,
+    linestyle: str = "--",
+    linewidth: float = CENTERLINE_WIDTH,
+    alpha: float = 0.7,
+) -> Line2D | None:
     ymin, ymax, step = compute_abs_ratio_ylim(values)
     ax.set_ylim(ymin, ymax)
     ax.set_yticks(np.arange(ymin, ymax + step * 0.5, step))
+    if not draw_neutral:
+        return None
     return ax.axhline(
         y=neutral_value,
         color=COLORS["neutral"],
-        linestyle="-",
-        linewidth=CENTERLINE_WIDTH,
-        alpha=0.7,
+        linestyle=linestyle,
+        linewidth=linewidth,
+        alpha=alpha,
         zorder=1,
     )
 
 
-def _set_log_ratio_axis(ax, values: pd.Series, neutral_value: float = 0.0) -> Line2D:
+def _set_log_ratio_axis(
+    ax,
+    values: pd.Series,
+    neutral_value: float = 0.0,
+    draw_neutral: bool = True,
+    linestyle: str = "--",
+    linewidth: float = CENTERLINE_WIDTH,
+    alpha: float = 0.7,
+) -> Line2D | None:
     ymin, ymax, step = compute_log_ratio_ylim(values)
     ax.set_ylim(ymin, ymax)
     ax.set_yticks(np.arange(ymin, ymax + step * 0.5, step))
+    if not draw_neutral:
+        return None
     return ax.axhline(
         y=neutral_value,
         color=COLORS["neutral"],
-        linestyle="-",
-        linewidth=CENTERLINE_WIDTH,
-        alpha=0.7,
+        linestyle=linestyle,
+        linewidth=linewidth,
+        alpha=alpha,
+        zorder=1,
+    )
+
+
+def _add_ratio_thresholds(ax, bot: float = BOT_THRESHOLD, sell: float = SELL_THRESHOLD) -> None:
+    ax.axhline(
+        y=bot,
+        color=COLORS["green"],
+        linestyle="--",
+        linewidth=THRESHOLD_LINE_WIDTH,
+        alpha=0.8,
+        zorder=1,
+    )
+    ax.axhline(
+        y=sell,
+        color=COLORS["red"],
+        linestyle="--",
+        linewidth=THRESHOLD_LINE_WIDTH,
+        alpha=0.8,
         zorder=1,
     )
 
@@ -316,7 +358,15 @@ def plot_symbol_metrics(
             linewidths=0.4,
         )
 
-    _set_abs_ratio_axis(ax1, short_ratio, neutral_value=1.0)
+    _set_abs_ratio_axis(
+        ax1,
+        short_ratio,
+        neutral_value=NEUTRAL_RATIO,
+        linestyle="--",
+        linewidth=THRESHOLD_LINE_WIDTH,
+        alpha=0.6,
+    )
+    _add_ratio_thresholds(ax1, bot=BOT_THRESHOLD, sell=SELL_THRESHOLD)
     ax1.set_ylabel("Short Sale Buy/Sell Ratio", color=COLORS["text"], fontsize=10)
     ax1.set_title(f"{symbol} - Short Sale Buy/Sell Ratio", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
     legend_handles_1 = [
@@ -330,7 +380,9 @@ def plot_symbol_metrics(
             markersize=4.5,
             label="Observations",
         ),
-        Line2D([0], [0], color=COLORS["neutral"], linewidth=CENTERLINE_WIDTH, label="Neutral (1.0)"),
+        Line2D([0], [0], color=COLORS["neutral"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="Neutral (1.0)"),
+        Line2D([0], [0], color=COLORS["green"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="BOT threshold (1.25)"),
+        Line2D([0], [0], color=COLORS["red"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="SELL threshold (0.75)"),
     ]
     _add_panel_legend(ax1, legend_handles_1, [h.get_label() for h in legend_handles_1], loc="upper left")
 
@@ -367,8 +419,22 @@ def plot_symbol_metrics(
             linewidths=0.4,
         )
 
-    _set_abs_ratio_axis(ax2, lit_buy_ratio, neutral_value=1.0)
-    _set_log_ratio_axis(ax2b, log_buy_ratio, neutral_value=0.0)
+    _set_abs_ratio_axis(
+        ax2,
+        lit_buy_ratio,
+        neutral_value=NEUTRAL_RATIO,
+        linestyle="--",
+        linewidth=THRESHOLD_LINE_WIDTH,
+        alpha=0.6,
+    )
+    _set_log_ratio_axis(
+        ax2b,
+        log_buy_ratio,
+        neutral_value=0.0,
+        linestyle="--",
+        linewidth=THRESHOLD_LINE_WIDTH,
+        alpha=0.6,
+    )
 
     ax2.set_ylabel("Lit Buy Ratio", color=COLORS["cyan"], fontsize=10)
     ax2b.set_ylabel("Log Buy Ratio", color=COLORS["yellow"], fontsize=10)
@@ -376,8 +442,8 @@ def plot_symbol_metrics(
     legend_handles_2 = [
         Line2D([0], [0], color=COLORS["cyan"], linewidth=MAIN_LINE_WIDTH, label="Lit Buy Ratio"),
         Line2D([0], [0], color=COLORS["yellow"], linewidth=SECONDARY_LINE_WIDTH, label="Log Buy Ratio"),
-        Line2D([0], [0], color=COLORS["neutral"], linewidth=CENTERLINE_WIDTH, label="Neutral (1.0)"),
-        Line2D([0], [0], color=COLORS["neutral"], linewidth=CENTERLINE_WIDTH, label="Neutral (0.0)"),
+        Line2D([0], [0], color=COLORS["neutral"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="Neutral (1.0)"),
+        Line2D([0], [0], color=COLORS["neutral"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="Neutral (0.0)"),
     ]
     _add_panel_legend(ax2, legend_handles_2, [h.get_label() for h in legend_handles_2], loc="upper left")
 
@@ -427,13 +493,20 @@ def plot_symbol_metrics(
             edgecolors=COLORS["white"],
             linewidths=0.4,
         )
-    _set_abs_ratio_axis(ax3b, otc_ratio, neutral_value=1.0)
+    _set_abs_ratio_axis(
+        ax3b,
+        otc_ratio,
+        neutral_value=NEUTRAL_RATIO,
+        linestyle="--",
+        linewidth=THRESHOLD_LINE_WIDTH,
+        alpha=0.6,
+    )
     ax3b.set_ylabel("OTC Buy Ratio", color=COLORS["yellow"], fontsize=10)
     legend_handles_3 = [
         Patch(facecolor=COLORS["green"], edgecolor="none", alpha=BAR_ALPHA_PRIMARY, label="OTC Buy"),
         Patch(facecolor=COLORS["red"], edgecolor="none", alpha=BAR_ALPHA_SECONDARY, label="OTC Sell"),
         Line2D([0], [0], color=COLORS["yellow"], linewidth=SECONDARY_LINE_WIDTH, label="OTC Buy Ratio"),
-        Line2D([0], [0], color=COLORS["neutral"], linewidth=CENTERLINE_WIDTH, label="Neutral (1.0)"),
+        Line2D([0], [0], color=COLORS["neutral"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="Neutral (1.0)"),
     ]
     _add_panel_legend(ax3, legend_handles_3, [h.get_label() for h in legend_handles_3], loc="upper right")
 
@@ -536,7 +609,15 @@ def plot_short_only_metrics(
             linewidths=0.4,
         )
 
-    _set_abs_ratio_axis(ax1, short_ratio, neutral_value=1.0)
+    _set_abs_ratio_axis(
+        ax1,
+        short_ratio,
+        neutral_value=NEUTRAL_RATIO,
+        linestyle="--",
+        linewidth=THRESHOLD_LINE_WIDTH,
+        alpha=0.6,
+    )
+    _add_ratio_thresholds(ax1, bot=BOT_THRESHOLD, sell=SELL_THRESHOLD)
     ax1.set_ylabel("Short Sale Buy/Sell Ratio", color=COLORS["text"], fontsize=10)
     ax1.set_title(f"{symbol} - Short Sale Buy/Sell Ratio", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
     ax1.text(
@@ -561,7 +642,9 @@ def plot_short_only_metrics(
     )
     legend_handles_1 = [
         Line2D([0], [0], color=COLORS["cyan"], linewidth=MAIN_LINE_WIDTH, label="Short Sale Buy/Sell Ratio"),
-        Line2D([0], [0], color=COLORS["neutral"], linewidth=CENTERLINE_WIDTH, label="Neutral (1.0)"),
+        Line2D([0], [0], color=COLORS["neutral"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="Neutral (1.0)"),
+        Line2D([0], [0], color=COLORS["green"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="BOT threshold (1.25)"),
+        Line2D([0], [0], color=COLORS["red"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="SELL threshold (0.75)"),
         Line2D([0], [0], marker="o", color="none", markerfacecolor=COLORS["cyan"], markeredgecolor=COLORS["white"], markersize=4.5, label="Observations"),
     ]
     _add_panel_legend(ax1, legend_handles_1, [h.get_label() for h in legend_handles_1], loc="upper left")

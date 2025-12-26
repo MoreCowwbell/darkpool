@@ -218,3 +218,10 @@ Format:
 ## 2025-12-25 Session Summary (Codex)
 - [x] Added short buy/sell ratio and z-score to analytics and DuckDB schema.
 - [x] Switched tables and plots to display Short Sale Buy/Sell Ratio with updated definitions.
+## 2025-12-25 Session Summary (Codex)
+- [x] Added BOT/SELL threshold lines and dashed neutral midline to the short-sale ratio panels.
+## 2025-12-25 Session Summary (Codex)
+- [x] Added column group headers for short/lit/OTC sections and emphasized AVG rows in the table.
+- [x] Colored pressure text for Accumulating/Distribution in the table.
+## 2025-12-25 Session Summary (Codex)
+- [x] Reorganized table summary panel into aligned short/lit/OTC grids with larger summary fonts.
