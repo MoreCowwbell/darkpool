@@ -2,9 +2,8 @@
 Multi-panel dark-theme plotter for daily metrics.
 
 Generates PNG visualizations from DuckDB daily_metrics data:
-- Panel 1: log(Buy/Sell) directional flow
-- Panel 2: Short ratio z-score (pressure signal)
-- Panel 3: OTC volume (participation anchor)
+- Layered: log(Buy/Sell) directional flow, short ratio z-score, OTC volume
+- Short-only: short ratio, short sale volume, close price
 """
 from __future__ import annotations
 
@@ -59,6 +58,9 @@ def fetch_metrics_for_plot(
             log_buy_sell,
             short_ratio,
             short_ratio_z,
+            short_total_volume,
+            short_ratio_denominator_type,
+            close,
             return_1d,
             return_z,
             otc_off_exchange_volume,
@@ -84,6 +86,16 @@ def _get_point_color(value: float, high: float, low: float) -> str:
     if value < low:
         return COLORS["red"]
     return COLORS["cyan"]
+
+
+def _get_denom_color(value: str) -> str:
+    if value is None or pd.isna(value):
+        return COLORS["neutral"]
+    if value == "FINRA_TOTAL":
+        return COLORS["cyan"]
+    if value == "POLYGON_TOTAL":
+        return COLORS["yellow"]
+    return COLORS["neutral"]
 
 
 def _format_volume(value: float) -> str:
@@ -256,15 +268,115 @@ def plot_symbol_metrics(
     return output_path
 
 
+def plot_short_only_metrics(
+    df: pd.DataFrame,
+    symbol: str,
+    output_path: Path,
+    title_suffix: str = "",
+) -> Path:
+    """Generate a short-only plot using daily short sale data and price context."""
+    if df.empty:
+        logger.warning("No data to plot for %s", symbol)
+        return output_path
+
+    plt.style.use("dark_background")
+    fig, axes = plt.subplots(3, 1, figsize=(12, 10), sharex=True)
+    fig.patch.set_facecolor(COLORS["background"])
+
+    for ax in axes:
+        ax.set_facecolor(COLORS["panel_bg"])
+        ax.tick_params(colors=COLORS["text"], labelsize=9)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.spines["left"].set_color(COLORS["grid"])
+        ax.spines["bottom"].set_color(COLORS["grid"])
+        ax.grid(True, alpha=0.3, color=COLORS["grid"], linestyle="--")
+
+    dates = df["date"]
+
+    # Panel 1: Short Ratio (daily)
+    ax1 = axes[0]
+    short_ratio = df["short_ratio"]
+    denom_types = df["short_ratio_denominator_type"]
+    colors1 = [_get_denom_color(v) for v in denom_types]
+
+    valid_mask = ~short_ratio.isna()
+    if valid_mask.any():
+        _plot_smooth_line(ax1, dates, short_ratio, COLORS["cyan"], valid_mask)
+        ax1.scatter(dates, short_ratio, c=colors1, s=60, zorder=5, edgecolors=COLORS["white"], linewidths=0.5)
+
+    ax1.set_ylabel("Short Ratio", color=COLORS["text"], fontsize=10)
+    ax1.set_title(f"{symbol} - Short Ratio (Daily Short Sale)", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
+    ax1.text(0.99, 0.95, "FINRA_TOTAL", transform=ax1.transAxes, fontsize=8,
+             color=COLORS["cyan"], ha="right", va="top")
+    ax1.text(0.99, 0.85, "POLYGON_TOTAL", transform=ax1.transAxes, fontsize=8,
+             color=COLORS["yellow"], ha="right", va="top")
+
+    # Panel 2: Short Sale Volume
+    ax2 = axes[1]
+    short_vol = df["short_total_volume"]
+    valid_mask2 = ~short_vol.isna()
+    if valid_mask2.any():
+        ax2.bar(dates[valid_mask2], short_vol[valid_mask2], color=COLORS["yellow"], alpha=0.8, width=0.8)
+    ax2.set_ylabel("Short Vol", color=COLORS["text"], fontsize=10)
+    ax2.set_title("Short Sale Volume", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
+    ax2.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: _format_volume(x)))
+
+    # Panel 3: Close Price
+    ax3 = axes[2]
+    close = df["close"]
+    valid_mask3 = ~close.isna()
+    if valid_mask3.any():
+        ax3.plot(dates[valid_mask3], close[valid_mask3], color=COLORS["green"], linewidth=2, alpha=0.8)
+        ax3.scatter(dates[valid_mask3], close[valid_mask3], color=COLORS["green"], s=30, zorder=5, edgecolors=COLORS["white"], linewidths=0.4)
+    ax3.set_ylabel("Close", color=COLORS["text"], fontsize=10)
+    ax3.set_title("Close Price", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
+
+    ax3.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d"))
+    ax3.xaxis.set_major_locator(mdates.DayLocator(interval=max(1, len(dates) // 10)))
+    plt.setp(ax3.xaxis.get_majorticklabels(), rotation=45, ha="right")
+
+    fig.suptitle(
+        f"Short Sale Pressure (Daily){title_suffix}",
+        color=COLORS["white"],
+        fontsize=14,
+        fontweight="bold",
+        y=0.98,
+    )
+
+    fig.text(
+        0.5, 0.01,
+        "Daily short sale volume is facility-specific; ratio uses FINRA total when available, else Polygon.",
+        ha="center",
+        fontsize=8,
+        color=COLORS["text_muted"],
+    )
+
+    plt.tight_layout(rect=[0, 0.03, 1, 0.96])
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=150, facecolor=COLORS["background"], edgecolor="none")
+    plt.close(fig)
+
+    logger.info("Saved plot: %s", output_path)
+    return output_path
+
+
 def render_metrics_plots(
     db_path: Path,
     output_dir: Path,
     dates: list[date],
     tickers: list[str],
+    mode: str = "layered",
 ) -> list[Path]:
     """Render multi-panel plots for each ticker."""
     output_dir.mkdir(parents=True, exist_ok=True)
     output_paths = []
+
+    mode = mode.lower()
+    valid_modes = {"layered", "short_only", "both"}
+    if mode not in valid_modes:
+        raise ValueError(f"Invalid plot mode: {mode}. Expected one of {sorted(valid_modes)}.")
 
     conn = duckdb.connect(str(db_path), read_only=True)
     try:
@@ -280,9 +392,15 @@ def render_metrics_plots(
                 sorted_dates = sorted(dates)
                 file_suffix = f"{sorted_dates[0].strftime('%Y%m%d')}_{sorted_dates[-1].strftime('%Y%m%d')}"
 
-            output_path = output_dir / f"{symbol.lower()}_metrics_{file_suffix}.png"
-            plot_symbol_metrics(df, symbol, output_path)
-            output_paths.append(output_path)
+            if mode in ("layered", "both"):
+                output_path = output_dir / f"{symbol.lower()}_metrics_{file_suffix}.png"
+                plot_symbol_metrics(df, symbol, output_path)
+                output_paths.append(output_path)
+
+            if mode in ("short_only", "both"):
+                output_path = output_dir / f"{symbol.lower()}_short_only_{file_suffix}.png"
+                plot_short_only_metrics(df, symbol, output_path)
+                output_paths.append(output_path)
     finally:
         conn.close()
 
@@ -310,6 +428,13 @@ def main() -> None:
         default=None,
         help="Comma-separated list of tickers (default: from config)",
     )
+    parser.add_argument(
+        "--mode",
+        type=str,
+        default="layered",
+        choices=["layered", "short_only", "both"],
+        help="Plot mode: layered, short_only, or both (default: layered)",
+    )
 
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -329,6 +454,7 @@ def main() -> None:
         output_dir=output_dir,
         dates=dates_list,
         tickers=tickers,
+        mode=args.mode,
     )
     print(f"Generated {len(paths)} plot(s)")
 

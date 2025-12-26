@@ -102,6 +102,16 @@ Open and run:
 - Tables: darkpool_analysis/output/tables/ (HTML/PNG)
 - Plots: darkpool_analysis/output/plots/ (multi-panel PNG per ticker)
 
+## Plot Modes
+- layered (default): log(Buy/Sell), short ratio z-score, OTC volume.
+- short_only: short ratio, short sale volume, close price.
+- both: render layered and short_only together.
+
+Example:
+```
+python plotter.py --dates 2025-12-20 --mode short_only
+```
+
 ## Notes on Inference
 - Lit trades are classified NBBO-first, TICK fallback.
 - log(Buy/Sell) is computed only when both buy and sell volumes are > 0.

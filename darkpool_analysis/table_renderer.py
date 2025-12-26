@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 COLORS = {
     "background": "#0f0f10",
     "header_bg": "#1b1b1d",
+    "panel_bg": "#141416",
     "row_bg": "#0f0f10",
     "row_alt_bg": "#141416",
     "text": "#e6e6e6",
@@ -45,22 +46,28 @@ def fetch_metrics_df(
     date_placeholders = ", ".join(["?" for _ in dates])
     query = f"""
         SELECT
-            date,
-            symbol,
-            log_buy_sell,
-            short_ratio,
-            short_ratio_z,
-            short_ratio_denominator_type,
-            short_ratio_denominator_value,
-            close,
-            return_1d,
-            return_z,
-            otc_off_exchange_volume,
-            data_quality,
-            pressure_context_label
-        FROM daily_metrics
-        WHERE date IN ({date_placeholders}) AND symbol IN ({ticker_placeholders})
-        ORDER BY date DESC, symbol
+            dm.date,
+            dm.symbol,
+            dm.log_buy_sell,
+            dm.short_ratio,
+            dm.short_ratio_z,
+            dm.short_ratio_denominator_type,
+            dm.short_ratio_denominator_value,
+            dm.close,
+            dm.return_1d,
+            dm.return_z,
+            dm.volume,
+            dm.otc_off_exchange_volume,
+            dm.data_quality,
+            dm.pressure_context_label,
+            ld.lit_buy_volume,
+            ld.lit_sell_volume,
+            ld.lit_buy_ratio
+        FROM daily_metrics dm
+        LEFT JOIN lit_direction_daily ld
+            ON dm.symbol = ld.symbol AND dm.date = ld.date
+        WHERE dm.date IN ({date_placeholders}) AND dm.symbol IN ({ticker_placeholders})
+        ORDER BY dm.symbol, dm.date DESC
     """
 
     params = list(dates) + list(tickers)
@@ -119,6 +126,8 @@ def _get_quality_color(value: str) -> str:
         return COLORS["green"]
     if value == "PRE_OTC":
         return COLORS["yellow"]
+    if value == "MIXED":
+        return COLORS["text_muted"]
     return COLORS["text_muted"]
 
 
@@ -131,6 +140,8 @@ def _get_pressure_color(label: str) -> str:
         return COLORS["green"]
     if label == "LOW_SHORT_SELL_OFF":
         return COLORS["red_bg"]
+    if label == "MIXED":
+        return COLORS["text_muted"]
     return COLORS["text_muted"]
 
 
@@ -141,15 +152,99 @@ def format_display_df(
 ) -> pd.DataFrame:
     display_rows = []
 
-    if not df.empty and "date" in df.columns:
-        df = df.copy()
+    df = df.copy()
+    required_cols = [
+        "date",
+        "symbol",
+        "close",
+        "return_1d",
+        "return_z",
+        "log_buy_sell",
+        "short_ratio",
+        "short_ratio_z",
+        "short_ratio_denominator_type",
+        "short_ratio_denominator_value",
+        "volume",
+        "otc_off_exchange_volume",
+        "data_quality",
+        "pressure_context_label",
+        "lit_buy_ratio",
+    ]
+    for col in required_cols:
+        if col not in df.columns:
+            df[col] = pd.NA
+
+    if "date" in df.columns:
         df["date"] = pd.to_datetime(df["date"]).dt.date
 
-    sorted_dates = sorted(dates, reverse=True)
+    df["otc_buy_volume"] = df["otc_off_exchange_volume"] * df["lit_buy_ratio"]
+    df["otc_sell_volume"] = df["otc_off_exchange_volume"] - df["otc_buy_volume"]
 
-    for target_date in sorted_dates:
-        for ticker in tickers:
-            row_df = df[(df["symbol"] == ticker) & (df["date"] == target_date)]
+    sorted_dates = sorted(dates, reverse=True)
+    numeric_cols = [
+        "close",
+        "return_1d",
+        "return_z",
+        "log_buy_sell",
+        "lit_buy_ratio",
+        "otc_buy_volume",
+        "otc_sell_volume",
+        "volume",
+        "short_ratio",
+        "short_ratio_z",
+        "short_ratio_denominator_value",
+        "otc_off_exchange_volume",
+    ]
+
+    def _resolve_label(series: pd.Series, fallback: str = "NA") -> str:
+        values = [str(v) for v in series.dropna().unique().tolist() if str(v).strip()]
+        if not values:
+            return fallback
+        if len(values) == 1:
+            return values[0]
+        return "MIXED"
+
+    for ticker in tickers:
+        ticker_df = df[df["symbol"] == ticker]
+        avg_values = ticker_df[numeric_cols].mean(numeric_only=True)
+        avg_denom = _resolve_label(ticker_df["short_ratio_denominator_type"])
+        avg_quality = _resolve_label(ticker_df["data_quality"])
+        avg_pressure = _resolve_label(ticker_df["pressure_context_label"])
+
+        display_rows.append(
+            {
+                "date": "AVG",
+                "symbol": ticker,
+                "close": _format_ratio(avg_values.get("close")),
+                "return_1d": _format_pct(avg_values.get("return_1d")),
+                "return_z": _format_z(avg_values.get("return_z")),
+                "total_volume": _format_volume(avg_values.get("volume")),
+                "log_buy_sell": _format_log(avg_values.get("log_buy_sell")),
+                "buy_ratio": _format_ratio(avg_values.get("lit_buy_ratio")),
+                "bought": _format_volume(avg_values.get("otc_buy_volume")),
+                "sold": _format_volume(avg_values.get("otc_sell_volume")),
+                "short_ratio": _format_ratio(avg_values.get("short_ratio")),
+                "short_ratio_z": _format_z(avg_values.get("short_ratio_z")),
+                "short_denom_type": avg_denom,
+                "short_denom_value": _format_volume(avg_values.get("short_ratio_denominator_value")),
+                "otc_volume": _format_volume(avg_values.get("otc_off_exchange_volume")),
+                "data_quality": avg_quality,
+                "pressure_label": avg_pressure,
+                "_log_raw": avg_values.get("log_buy_sell"),
+                "_short_z_raw": avg_values.get("short_ratio_z"),
+                "_return_z_raw": avg_values.get("return_z"),
+                "_data_quality_color": _get_quality_color(avg_quality),
+                "_pressure_color": _get_pressure_color(avg_pressure),
+                "_row_type": "avg",
+                "_total_volume_raw": avg_values.get("volume"),
+                "_buy_raw": avg_values.get("otc_buy_volume"),
+                "_sell_raw": avg_values.get("otc_sell_volume"),
+                "_status": "avg",
+            }
+        )
+
+        for target_date in sorted_dates:
+            row_df = ticker_df[ticker_df["date"] == target_date]
             if row_df.empty:
                 display_rows.append(
                     {
@@ -158,7 +253,11 @@ def format_display_df(
                         "close": "NA",
                         "return_1d": "NA",
                         "return_z": "NA",
+                        "total_volume": "NA",
                         "log_buy_sell": "NA",
+                        "buy_ratio": "NA",
+                        "bought": "NA",
+                        "sold": "NA",
                         "short_ratio": "NA",
                         "short_ratio_z": "NA",
                         "short_denom_type": "NA",
@@ -171,12 +270,18 @@ def format_display_df(
                         "_return_z_raw": None,
                         "_data_quality_color": COLORS["text_muted"],
                         "_pressure_color": COLORS["text_muted"],
+                        "_row_type": "missing",
+                        "_total_volume_raw": None,
+                        "_buy_raw": None,
+                        "_sell_raw": None,
                         "_status": "missing",
                     }
                 )
                 continue
 
             row = row_df.iloc[0]
+            buy_val = row.get("otc_buy_volume")
+            sell_val = row.get("otc_sell_volume")
             display_rows.append(
                 {
                     "date": target_date.strftime("%Y-%m-%d"),
@@ -184,7 +289,11 @@ def format_display_df(
                     "close": _format_ratio(row.get("close")),
                     "return_1d": _format_pct(row.get("return_1d")),
                     "return_z": _format_z(row.get("return_z")),
+                    "total_volume": _format_volume(row.get("volume")),
                     "log_buy_sell": _format_log(row.get("log_buy_sell")),
+                    "buy_ratio": _format_ratio(row.get("lit_buy_ratio")),
+                    "bought": _format_volume(buy_val),
+                    "sold": _format_volume(sell_val),
                     "short_ratio": _format_ratio(row.get("short_ratio")),
                     "short_ratio_z": _format_z(row.get("short_ratio_z")),
                     "short_denom_type": row.get("short_ratio_denominator_type") or "NA",
@@ -197,6 +306,10 @@ def format_display_df(
                     "_return_z_raw": row.get("return_z"),
                     "_data_quality_color": _get_quality_color(row.get("data_quality")),
                     "_pressure_color": _get_pressure_color(row.get("pressure_context_label")),
+                    "_row_type": "data",
+                    "_total_volume_raw": row.get("volume"),
+                    "_buy_raw": buy_val,
+                    "_sell_raw": sell_val,
                     "_status": "ok",
                 }
             )
@@ -211,7 +324,13 @@ def build_styled_html(
 ) -> str:
     rows_html = ""
     for idx, row in df.iterrows():
+        row_type = row.get("_row_type")
         row_bg = COLORS["row_alt_bg"] if idx % 2 == 1 else COLORS["row_bg"]
+        row_class = ""
+        if row_type == "avg":
+            row_bg = COLORS["header_bg"]
+            row_class = "row-avg"
+
         log_color = _get_sign_color(row["_log_raw"])
         short_z_color = _get_sign_color(row["_short_z_raw"])
         return_z_color = _get_sign_color(row["_return_z_raw"])
@@ -219,13 +338,17 @@ def build_styled_html(
         pressure_color = row["_pressure_color"]
 
         rows_html += f"""
-        <tr style="background-color: {row_bg};">
+        <tr class="{row_class}" style="background-color: {row_bg};">
             <td class="col-date">{row['date']}</td>
             <td class="col-symbol">{row['symbol']}</td>
             <td class="col-numeric">{row['close']}</td>
             <td class="col-numeric" style="color: {return_z_color};">{row['return_1d']}</td>
             <td class="col-numeric" style="color: {return_z_color};">{row['return_z']}</td>
+            <td class="col-numeric">{row['total_volume']}</td>
             <td class="col-numeric" style="color: {log_color};">{row['log_buy_sell']}</td>
+            <td class="col-numeric">{row['buy_ratio']}</td>
+            <td class="col-numeric">{row['bought']}</td>
+            <td class="col-numeric">{row['sold']}</td>
             <td class="col-numeric">{row['short_ratio']}</td>
             <td class="col-numeric" style="color: {short_z_color};">{row['short_ratio_z']}</td>
             <td class="col-numeric">{row['short_denom_type']}</td>
@@ -235,6 +358,83 @@ def build_styled_html(
             <td class="col-quality" style="color: {pressure_color};">{row['pressure_label']}</td>
         </tr>
         """
+
+    if not df.empty and "_row_type" in df.columns:
+        data_rows = df[df["_row_type"] == "data"]
+    else:
+        data_rows = pd.DataFrame()
+    total_volume = data_rows["_total_volume_raw"].sum(min_count=1) if not data_rows.empty else pd.NA
+    total_bought = data_rows["_buy_raw"].sum(min_count=1) if not data_rows.empty else pd.NA
+    total_sold = data_rows["_sell_raw"].sum(min_count=1) if not data_rows.empty else pd.NA
+    avg_volume = data_rows["_total_volume_raw"].mean() if not data_rows.empty else pd.NA
+    avg_bought = data_rows["_buy_raw"].mean() if not data_rows.empty else pd.NA
+    avg_sold = data_rows["_sell_raw"].mean() if not data_rows.empty else pd.NA
+
+    summary_html = f"""
+        <div class="summary-panel">
+            <div class="summary-title">Table Summary (All Tickers / Dates)</div>
+            <div class="summary-grid">
+                <div class="summary-item">
+                    <span class="summary-label">Total Vol (Polygon)</span>
+                    <span class="summary-value">{_format_volume(total_volume)}</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">Total Bought (OTC)</span>
+                    <span class="summary-value">{_format_volume(total_bought)}</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">Total Sold (OTC)</span>
+                    <span class="summary-value">{_format_volume(total_sold)}</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">Average Vol (Polygon)</span>
+                    <span class="summary-value">{_format_volume(avg_volume)}</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">Average Buy Vol (OTC)</span>
+                    <span class="summary-value">{_format_volume(avg_bought)}</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">Average Sell Vol (OTC)</span>
+                    <span class="summary-value">{_format_volume(avg_sold)}</span>
+                </div>
+            </div>
+        </div>
+    """
+
+    definitions = [
+        ("Close", "Polygon daily close price."),
+        ("Return", "Close vs prior close (Pct)."),
+        ("Return Z", "Rolling z-score of Return."),
+        ("Total Vol", "Polygon daily total volume."),
+        ("Log(B/S)", "log(Lit Buy / Lit Sell) from Polygon trades."),
+        ("Buy Ratio", "Lit Buy / (Lit Buy + Lit Sell) from Polygon."),
+        ("Bought", "Inferred OTC buy volume = OTC Vol * Buy Ratio."),
+        ("Sold", "Inferred OTC sell volume = OTC Vol * (1 - Buy Ratio)."),
+        ("Short Ratio", "Short volume / Denom Vol (FINRA or Polygon)."),
+        ("Short Z", "Rolling z-score of Short Ratio."),
+        ("Denom", "Denominator source for Short Ratio."),
+        ("Denom Vol", "Denominator volume used for Short Ratio."),
+        ("OTC Vol", "FINRA weekly off-exchange volume."),
+        ("Quality", "OTC_ANCHORED if week covers date; else PRE_OTC."),
+        ("Pressure", "Short pressure vs price context label."),
+    ]
+    definition_items = "\n".join(
+        [f"<li><span class=\"def-term\">{term}</span> - {desc}</li>" for term, desc in definitions]
+    )
+
+    definitions_html = f"""
+        <div class="definitions-panel">
+            <div class="definitions-title">Column Definitions</div>
+            <ul class="definitions-list">
+                {definition_items}
+            </ul>
+            <div class="definitions-note">
+                Sources: OTC weekly = FINRA weekly summary. Short Ratio = FINRA Reg SHO daily.
+                Lit direction = Polygon trades. Price/Volume = Polygon daily aggregates.
+            </div>
+        </div>
+    """
 
     html = f"""
 <!DOCTYPE html>
@@ -263,7 +463,7 @@ def build_styled_html(
             background-color: {COLORS['background']};
             border-radius: 12px;
             padding: 24px;
-            max-width: 1400px;
+            max-width: 1800px;
             margin: 0 auto;
         }}
 
@@ -338,6 +538,87 @@ def build_styled_html(
             font-weight: 600;
         }}
 
+        .row-avg td {{
+            font-weight: 600;
+        }}
+
+        .summary-panel {{
+            margin-top: 18px;
+            padding: 16px;
+            border: 1px solid {COLORS['border']};
+            border-radius: 10px;
+            background-color: {COLORS['panel_bg']};
+        }}
+
+        .summary-title {{
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: {COLORS['text_muted']};
+            margin-bottom: 12px;
+        }}
+
+        .summary-grid {{
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px 18px;
+        }}
+
+        .summary-item {{
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            font-size: 12px;
+        }}
+
+        .summary-label {{
+            color: {COLORS['text_muted']};
+        }}
+
+        .summary-value {{
+            color: {COLORS['white']};
+            font-variant-numeric: tabular-nums;
+        }}
+
+        .definitions-panel {{
+            margin-top: 16px;
+            padding: 16px;
+            border: 1px solid {COLORS['border']};
+            border-radius: 10px;
+            background-color: {COLORS['panel_bg']};
+        }}
+
+        .definitions-title {{
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: {COLORS['text_muted']};
+            margin-bottom: 10px;
+        }}
+
+        .definitions-list {{
+            list-style: none;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 6px 16px;
+            font-size: 11px;
+        }}
+
+        .definitions-list li {{
+            color: {COLORS['text']};
+        }}
+
+        .def-term {{
+            color: {COLORS['cyan']};
+            font-weight: 600;
+        }}
+
+        .definitions-note {{
+            margin-top: 10px;
+            font-size: 11px;
+            color: {COLORS['text_muted']};
+        }}
+
         .footer {{
             margin-top: 18px;
             padding-top: 12px;
@@ -363,7 +644,11 @@ def build_styled_html(
                     <th class="col-numeric">Close</th>
                     <th class="col-numeric">Return</th>
                     <th class="col-numeric">Return Z</th>
+                    <th class="col-numeric">Total Vol</th>
                     <th class="col-numeric">Log(B/S)</th>
+                    <th class="col-numeric">Buy Ratio</th>
+                    <th class="col-numeric">Bought</th>
+                    <th class="col-numeric">Sold</th>
                     <th class="col-numeric">Short Ratio</th>
                     <th class="col-numeric">Short Z</th>
                     <th class="col-numeric">Denom</th>
@@ -378,8 +663,11 @@ def build_styled_html(
             </tbody>
         </table>
 
+        {summary_html}
+        {definitions_html}
+
         <div class="footer">
-            FINRA does not publish trade direction. Short data is pressure only.
+            FINRA does not publish trade direction. OTC volume is weekly; short sale data is daily pressure only.
         </div>
     </div>
 </body>
@@ -397,7 +685,7 @@ def render_html_to_png(html_path: Path, png_path: Path, selector: str = "#table-
 
         with sync_playwright() as p:
             browser = p.chromium.launch()
-            page = browser.new_page(viewport={"width": 1500, "height": 900}, device_scale_factor=2)
+            page = browser.new_page(viewport={"width": 1900, "height": 1200}, device_scale_factor=2)
             page.goto(f"file://{html_path.resolve()}")
             page.wait_for_load_state("networkidle")
             element = page.locator(selector)
@@ -413,7 +701,7 @@ def render_html_to_png(html_path: Path, png_path: Path, selector: str = "#table-
     try:
         import imgkit
 
-        options = {"format": "png", "width": 1500, "quality": 100, "enable-local-file-access": None}
+        options = {"format": "png", "width": 1900, "quality": 100, "enable-local-file-access": None}
         imgkit.from_file(str(html_path), str(png_path), options=options)
         logger.info("Rendered PNG using imgkit: %s", png_path)
         return

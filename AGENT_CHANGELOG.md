@@ -196,3 +196,7 @@ Format:
 - [x] Fixed FINRA domainFilters payloads to use the required `values` list for OTC and short sale API calls.
 - [x] Normalized daily metrics date typing to avoid mixed Timestamp/date sort failures.
 - [x] Updated AGENT docs with the corrected domainFilters example.
+## 2025-12-25 Session Summary (Codex)
+- [x] Updated the daily metrics table to group by ticker with average rows, add inferred buy/sell and volume fields, and include summary/definition panels.
+- [x] Added a short-only plot mode alongside layered plots and wired the orchestrator to generate both outputs.
+- [x] Documented plot modes in `darkpool_analysis/README.md`.
