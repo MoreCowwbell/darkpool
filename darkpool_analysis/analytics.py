@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 import logging
 from pathlib import Path
 from typing import Optional
@@ -34,39 +34,48 @@ def _aggregate_finra_weekly(finra_weekly_df: pd.DataFrame) -> pd.DataFrame:
     return grouped
 
 
-def _aggregate_short_raw(
-    short_raw_df: pd.DataFrame, preferred_source: str
-) -> pd.DataFrame:
+def _aggregate_short_raw(short_raw_df: pd.DataFrame) -> pd.DataFrame:
     if short_raw_df.empty:
         return short_raw_df
     df = short_raw_df.copy()
     df["short_exempt_volume"] = df["short_exempt_volume"].fillna(0.0)
-    df["short_volume_total"] = df["short_volume"] + df["short_exempt_volume"]
-
-    has_preferred = df["source"].fillna("").str.upper() == preferred_source
-    preferred_df = df[has_preferred].copy()
-    if not preferred_df.empty:
-        logger.info("Using preferred short sale source: %s", preferred_source)
-        source_df = preferred_df
-        source_label = preferred_source
-    else:
-        source_df = df
-        source_label = "SUM"
-
     grouped = (
-        source_df.groupby(["symbol", "trade_date"], as_index=False)
+        df.groupby(["symbol", "trade_date"], as_index=False)
         .agg(
             {
                 "short_volume": "sum",
                 "short_exempt_volume": "sum",
-                "short_volume_total": "sum",
                 "total_volume": "sum",
             }
         )
         .rename(columns={"total_volume": "short_total_volume"})
     )
-    grouped["short_ratio_source"] = source_label
+    grouped["short_volume_total"] = (
+        grouped["short_volume"].fillna(0.0) + grouped["short_exempt_volume"].fillna(0.0)
+    )
+    grouped["short_ratio_source"] = "CONSOLIDATED"
     return grouped
+
+
+def _compute_weekly_lit_ratio(lit_df: pd.DataFrame) -> pd.DataFrame:
+    if lit_df.empty:
+        return lit_df
+    df = lit_df.copy()
+    df["date"] = pd.to_datetime(df["date"]).dt.date
+    df["week_start_date"] = df["date"].apply(lambda d: d - timedelta(days=d.weekday()))
+    df["lit_buy_volume"] = pd.to_numeric(df["lit_buy_volume"], errors="coerce").fillna(0.0)
+    df["lit_sell_volume"] = pd.to_numeric(df["lit_sell_volume"], errors="coerce").fillna(0.0)
+    weekly = (
+        df.groupby(["symbol", "week_start_date"], as_index=False)
+        .agg({"lit_buy_volume": "sum", "lit_sell_volume": "sum"})
+    )
+    weekly["lit_week_total"] = weekly["lit_buy_volume"] + weekly["lit_sell_volume"]
+    weekly["otc_weekly_buy_ratio"] = pd.NA
+    ratio_mask = weekly["lit_week_total"] > 0
+    weekly.loc[ratio_mask, "otc_weekly_buy_ratio"] = (
+        weekly.loc[ratio_mask, "lit_buy_volume"] / weekly.loc[ratio_mask, "lit_week_total"]
+    )
+    return weekly[["symbol", "week_start_date", "otc_weekly_buy_ratio"]]
 
 
 def _compute_price_context(
@@ -93,26 +102,14 @@ def _label_pressure_context(
     config: Config,
 ) -> str:
     if short_z is None or pd.isna(short_z):
-        return "NEUTRAL"
-
-    if return_z is not None and not pd.isna(return_z):
-        if abs(return_z) < config.return_z_min:
-            return "NEUTRAL"
-        return_sign = 1 if return_z > 0 else -1
-    elif return_1d is not None and not pd.isna(return_1d):
-        return_sign = 1 if return_1d > 0 else -1
-    else:
-        return "NEUTRAL"
-
-    if short_z >= config.short_z_high and return_sign > 0:
-        return "SHORT_INTO_STRENGTH"
-    if short_z >= config.short_z_high and return_sign < 0:
-        return "SHORT_ON_WEAKNESS"
-    if short_z <= config.short_z_low and return_sign > 0:
-        return "LOW_SHORT_STRONG_UP"
-    if short_z <= config.short_z_low and return_sign < 0:
-        return "LOW_SHORT_SELL_OFF"
-    return "NEUTRAL"
+        return "Neutral"
+    if return_z is None or pd.isna(return_z):
+        return "Neutral"
+    if short_z >= config.short_z_high and return_z >= config.return_z_min:
+        return "Accumulating"
+    if short_z <= config.short_z_low and return_z <= -config.return_z_min:
+        return "Distribution"
+    return "Neutral"
 
 
 def build_daily_metrics(
@@ -127,11 +124,8 @@ def build_daily_metrics(
         return pd.DataFrame()
 
     all_dates = pd.to_datetime(pd.Series(target_dates)).dt.date.unique().tolist()
-    start_date = min(all_dates)
-    end_date = max(all_dates)
-
     otc_weekly = _aggregate_finra_weekly(finra_weekly_df)
-    short_daily = _aggregate_short_raw(short_raw_df, config.short_sale_preferred_source)
+    short_daily = _aggregate_short_raw(short_raw_df)
     price_context = _compute_price_context(daily_agg_df, config)
 
     if short_daily.empty:
@@ -169,11 +163,15 @@ def build_daily_metrics(
         columns=["symbol", "date"],
     )
 
-    merged = daily_base.merge(
-        lit_df[["symbol", "date", "log_buy_sell"]],
-        on=["symbol", "date"],
-        how="left",
-    )
+    lit_cols = [
+        "symbol",
+        "date",
+        "log_buy_sell",
+        "lit_buy_volume",
+        "lit_sell_volume",
+        "lit_buy_ratio",
+    ]
+    merged = daily_base.merge(lit_df[lit_cols], on=["symbol", "date"], how="left")
     merged = merged.merge(
         short_daily.rename(columns={"trade_date": "date"}),
         on=["symbol", "date"],
@@ -219,10 +217,21 @@ def build_daily_metrics(
     if "otc_week_used" in merged.columns:
         merged["otc_week_used"] = pd.to_datetime(merged["otc_week_used"])
 
+    # Weekly lit buy ratio proxy for OTC weekly buy ratio
+    weekly_lit = _compute_weekly_lit_ratio(lit_df)
+    if not weekly_lit.empty and "otc_week_used" in merged.columns:
+        weekly_lit = weekly_lit.rename(columns={"week_start_date": "otc_week_used"})
+        weekly_lit["otc_week_used"] = pd.to_datetime(weekly_lit["otc_week_used"])
+        merged = merged.merge(
+            weekly_lit,
+            on=["symbol", "otc_week_used"],
+            how="left",
+        )
+    else:
+        merged["otc_weekly_buy_ratio"] = pd.NA
+
     # Short ratio denominator logic
-    merged["short_volume_total"] = (
-        merged["short_volume"].fillna(0) + merged["short_exempt_volume"].fillna(0)
-    )
+    merged["short_buy_volume"] = pd.to_numeric(merged["short_volume"], errors="coerce")
     merged["short_ratio_denominator_type"] = pd.NA
     merged["short_ratio_denominator_value"] = pd.NA
     merged["short_ratio"] = pd.NA
@@ -239,11 +248,23 @@ def build_daily_metrics(
         needs_polygon_total, "volume"
     ]
 
+    merged["short_ratio_denominator_value"] = pd.to_numeric(
+        merged["short_ratio_denominator_value"], errors="coerce"
+    )
     denom_ready = merged["short_ratio_denominator_value"].notna()
     merged.loc[denom_ready, "short_ratio"] = (
-        merged.loc[denom_ready, "short_volume_total"]
+        merged.loc[denom_ready, "short_buy_volume"]
         / merged.loc[denom_ready, "short_ratio_denominator_value"]
     )
+    merged["short_sell_volume"] = pd.NA
+    merged.loc[denom_ready, "short_sell_volume"] = (
+        merged.loc[denom_ready, "short_ratio_denominator_value"]
+        - merged.loc[denom_ready, "short_buy_volume"]
+    )
+    merged["short_sell_volume"] = pd.to_numeric(merged["short_sell_volume"], errors="coerce")
+    merged.loc[denom_ready, "short_sell_volume"] = merged.loc[
+        denom_ready, "short_sell_volume"
+    ].clip(lower=0.0)
 
     # Ensure numeric dtype for rolling calculations (pd.NA -> np.nan)
     merged["short_ratio"] = pd.to_numeric(merged["short_ratio"], errors="coerce")
@@ -254,9 +275,34 @@ def build_daily_metrics(
         .transform(lambda s: _rolling_zscore(s, config.short_z_window, config.zscore_min_periods))
     )
 
+    merged["lit_total_volume"] = merged["lit_buy_volume"] + merged["lit_sell_volume"]
+    merged["lit_buy_ratio"] = pd.to_numeric(merged["lit_buy_ratio"], errors="coerce")
+    merged["lit_buy_ratio_z"] = (
+        merged.sort_values(["symbol", "date"])
+        .groupby("symbol")["lit_buy_ratio"]
+        .transform(lambda s: _rolling_zscore(s, config.short_z_window, config.zscore_min_periods))
+    )
+
+    merged["otc_buy_volume"] = pd.NA
+    merged["otc_sell_volume"] = pd.NA
+    if "otc_weekly_buy_ratio" in merged.columns:
+        merged["otc_buy_volume"] = merged["otc_off_exchange_volume"] * merged["otc_weekly_buy_ratio"]
+        merged["otc_sell_volume"] = merged["otc_off_exchange_volume"] - merged["otc_buy_volume"]
+        merged["otc_sell_volume"] = pd.to_numeric(merged["otc_sell_volume"], errors="coerce")
+        merged["otc_sell_volume"] = merged["otc_sell_volume"].clip(lower=0.0)
+
+    merged["otc_weekly_buy_ratio"] = pd.to_numeric(
+        merged.get("otc_weekly_buy_ratio"), errors="coerce"
+    )
+    merged["otc_buy_ratio_z"] = (
+        merged.sort_values(["symbol", "date"])
+        .groupby("symbol")["otc_weekly_buy_ratio"]
+        .transform(lambda s: _rolling_zscore(s, config.short_z_window, config.zscore_min_periods))
+    )
+
     merged["has_otc"] = merged["otc_off_exchange_volume"].notna()
     merged["has_short"] = merged["short_ratio"].notna()
-    merged["has_lit"] = merged["log_buy_sell"].notna()
+    merged["has_lit"] = merged["lit_buy_ratio"].notna()
     merged["has_price"] = merged["close"].notna()
 
     merged["data_quality"] = "PRE_OTC"
@@ -266,6 +312,11 @@ def build_daily_metrics(
             merged["otc_week_used"], week_end
         )
         merged.loc[anchored, "data_quality"] = "OTC_ANCHORED"
+
+    merged["otc_status"] = "None"
+    merged.loc[merged["has_otc"], "otc_status"] = "Staled"
+    if "otc_week_used" in merged.columns:
+        merged.loc[anchored, "otc_status"] = "Anchored"
 
     merged["pressure_context_label"] = merged.apply(
         lambda row: _label_pressure_context(
@@ -286,11 +337,18 @@ def build_daily_metrics(
             "short_volume",
             "short_exempt_volume",
             "short_total_volume",
+            "short_buy_volume",
+            "short_sell_volume",
             "short_ratio",
             "short_ratio_z",
             "short_ratio_denominator_type",
             "short_ratio_denominator_value",
             "short_ratio_source",
+            "lit_buy_volume",
+            "lit_sell_volume",
+            "lit_total_volume",
+            "lit_buy_ratio",
+            "lit_buy_ratio_z",
             "close",
             "vwap",
             "high",
@@ -301,6 +359,11 @@ def build_daily_metrics(
             "range_pct",
             "otc_off_exchange_volume",
             "otc_week_used",
+            "otc_weekly_buy_ratio",
+            "otc_buy_volume",
+            "otc_sell_volume",
+            "otc_buy_ratio_z",
+            "otc_status",
             "data_quality",
             "has_otc",
             "has_short",
@@ -371,10 +434,7 @@ def build_index_constituent_short_agg(
         for trade_date in target_dates:
             subset = daily[(daily["symbol"].isin(members)) & (daily["date"] == trade_date)]
             coverage_count = int(subset["has_short"].sum()) if not subset.empty else 0
-            total_short = (
-                subset["short_volume"].fillna(0).sum()
-                + subset["short_exempt_volume"].fillna(0).sum()
-            )
+            total_short = subset["short_buy_volume"].fillna(0).sum()
             total_denom = subset["short_ratio_denominator_value"].sum(min_count=1)
 
             denom_types = subset["short_ratio_denominator_type"].dropna().unique().tolist()

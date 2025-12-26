@@ -200,3 +200,7 @@ Format:
 - [x] Updated the daily metrics table to group by ticker with average rows, add inferred buy/sell and volume fields, and include summary/definition panels.
 - [x] Added a short-only plot mode alongside layered plots and wired the orchestrator to generate both outputs.
 - [x] Documented plot modes in `darkpool_analysis/README.md`.
+## 2025-12-25 Session Summary (Codex)
+- [x] Reworked daily metrics to compute short-sale buy ratios, lit ratios, and OTC weekly proxy ratios with consolidated short totals and OTC status.
+- [x] Rebuilt table layout with short/lit/OTC sections, updated summaries/definitions, and added OTC week/status columns.
+- [x] Updated plots to show short sale buy ratio, lit buy/log ratios, OTC buy/sell with a decision strip, and set orchestrator to layered mode.

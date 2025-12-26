@@ -172,7 +172,7 @@ def main() -> None:
             output_dir=config.plot_dir,
             dates=config.target_dates,
             tickers=config.tickers,
-            mode="both",
+            mode="layered",
         )
     except Exception as exc:
         logging.error("Failed to render metrics plots: %s", exc)

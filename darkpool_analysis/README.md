@@ -103,7 +103,7 @@ Open and run:
 - Plots: darkpool_analysis/output/plots/ (multi-panel PNG per ticker)
 
 ## Plot Modes
-- layered (default): log(Buy/Sell), short ratio z-score, OTC volume.
+- layered (default): short sale buy ratio, lit buy ratios (lit + log), OTC buy/sell with decision strip.
 - short_only: short ratio, short sale volume, close price.
 - both: render layered and short_only together.
 
@@ -115,8 +115,8 @@ python plotter.py --dates 2025-12-20 --mode short_only
 ## Notes on Inference
 - Lit trades are classified NBBO-first, TICK fallback.
 - log(Buy/Sell) is computed only when both buy and sell volumes are > 0.
-- Short ratio uses (ShortVolume + ShortExemptVolume) / TotalVolume when available; otherwise uses Polygon daily volume as the denominator and flags it as POLYGON_TOTAL.
-- OTC weekly data is delayed; daily metrics are labeled OTC_ANCHORED or PRE_OTC accordingly.
+- Short Sale Buy Ratio uses ShortVolume / TotalVolume (short-exempt excluded); if total volume is missing, Polygon daily volume is used as the denominator and flagged as POLYGON_TOTAL.
+- OTC weekly data is delayed; OTC status is Anchored, Staled, or None based on the week used.
 - Price context is sourced from Polygon daily aggregates only.
 - Constituent aggregation requires a maintained index list; see data/constituents/spx_sample.csv as a format example.
 

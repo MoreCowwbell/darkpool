@@ -94,11 +94,18 @@ def init_db(conn: duckdb.DuckDBPyConnection) -> None:
             short_volume DOUBLE,
             short_exempt_volume DOUBLE,
             short_total_volume DOUBLE,
+            short_buy_volume DOUBLE,
+            short_sell_volume DOUBLE,
             short_ratio DOUBLE,
             short_ratio_z DOUBLE,
             short_ratio_denominator_type TEXT,
             short_ratio_denominator_value DOUBLE,
             short_ratio_source TEXT,
+            lit_buy_volume DOUBLE,
+            lit_sell_volume DOUBLE,
+            lit_total_volume DOUBLE,
+            lit_buy_ratio DOUBLE,
+            lit_buy_ratio_z DOUBLE,
             close DOUBLE,
             vwap DOUBLE,
             high DOUBLE,
@@ -109,6 +116,11 @@ def init_db(conn: duckdb.DuckDBPyConnection) -> None:
             range_pct DOUBLE,
             otc_off_exchange_volume DOUBLE,
             otc_week_used DATE,
+            otc_weekly_buy_ratio DOUBLE,
+            otc_buy_volume DOUBLE,
+            otc_sell_volume DOUBLE,
+            otc_buy_ratio_z DOUBLE,
+            otc_status TEXT,
             data_quality TEXT,
             has_otc BOOLEAN,
             has_short BOOLEAN,
@@ -119,6 +131,22 @@ def init_db(conn: duckdb.DuckDBPyConnection) -> None:
         )
         """
     )
+    daily_metrics_columns = [
+        "short_buy_volume DOUBLE",
+        "short_sell_volume DOUBLE",
+        "lit_buy_volume DOUBLE",
+        "lit_sell_volume DOUBLE",
+        "lit_total_volume DOUBLE",
+        "lit_buy_ratio DOUBLE",
+        "lit_buy_ratio_z DOUBLE",
+        "otc_weekly_buy_ratio DOUBLE",
+        "otc_buy_volume DOUBLE",
+        "otc_sell_volume DOUBLE",
+        "otc_buy_ratio_z DOUBLE",
+        "otc_status TEXT",
+    ]
+    for column_def in daily_metrics_columns:
+        conn.execute(f"ALTER TABLE daily_metrics ADD COLUMN IF NOT EXISTS {column_def}")
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS index_constituent_short_agg_daily (

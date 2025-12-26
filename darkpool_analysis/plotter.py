@@ -2,7 +2,7 @@
 Multi-panel dark-theme plotter for daily metrics.
 
 Generates PNG visualizations from DuckDB daily_metrics data:
-- Layered: log(Buy/Sell) directional flow, short ratio z-score, OTC volume
+- Layered: short sale buy ratio, lit buy ratios, OTC buy/sell with decision strip
 - Short-only: short ratio, short sale volume, close price
 """
 from __future__ import annotations
@@ -36,11 +36,6 @@ COLORS = {
     "neutral": "#6b6b6b",
 }
 
-# Thresholds for log(Buy/Sell)
-LOG_THRESHOLD_HIGH = 0.223  # ln(1.25) - accumulation signal
-LOG_THRESHOLD_LOW = -0.223  # ln(0.80) - distribution signal
-
-
 def fetch_metrics_for_plot(
     conn: duckdb.DuckDBPyConnection,
     symbol: str,
@@ -55,16 +50,26 @@ def fetch_metrics_for_plot(
         SELECT
             date,
             symbol,
-            log_buy_sell,
             short_ratio,
             short_ratio_z,
-            short_total_volume,
             short_ratio_denominator_type,
+            short_ratio_denominator_value,
+            short_buy_volume,
+            log_buy_sell,
+            lit_buy_ratio,
+            lit_buy_ratio_z,
+            lit_buy_volume,
+            lit_sell_volume,
+            lit_total_volume,
+            otc_off_exchange_volume,
+            otc_buy_volume,
+            otc_sell_volume,
+            otc_weekly_buy_ratio,
+            otc_buy_ratio_z,
             close,
             return_1d,
             return_z,
-            otc_off_exchange_volume,
-            data_quality,
+            otc_status,
             pressure_context_label
         FROM daily_metrics
         WHERE symbol = ? AND date IN ({date_placeholders})
@@ -75,17 +80,6 @@ def fetch_metrics_for_plot(
     if not df.empty:
         df["date"] = pd.to_datetime(df["date"])
     return df
-
-
-def _get_point_color(value: float, high: float, low: float) -> str:
-    """Return color based on threshold crossing."""
-    if pd.isna(value):
-        return COLORS["neutral"]
-    if value > high:
-        return COLORS["green"]
-    if value < low:
-        return COLORS["red"]
-    return COLORS["cyan"]
 
 
 def _get_denom_color(value: str) -> str:
@@ -141,11 +135,12 @@ def plot_symbol_metrics(
     title_suffix: str = "",
 ) -> Path:
     """
-    Generate a 3-panel plot for a single symbol.
+    Generate a 3-panel plot plus decision strip for a single symbol.
 
-    Panel 1: log(Buy/Sell) with accumulation/distribution thresholds
-    Panel 2: Short ratio z-score with high/low thresholds
-    Panel 3: OTC off-exchange volume bars
+    Panel 1: Short Sale Buy Ratio
+    Panel 2: Lit Buy Ratio + Log Buy Ratio
+    Panel 3: OTC buy/sell volumes + OTC Weekly Buy Ratio
+    Decision strip: Accumulating/Distribution/Neutral labels
     """
     if df.empty:
         logger.warning("No data to plot for %s", symbol)
@@ -153,7 +148,13 @@ def plot_symbol_metrics(
 
     # Set up dark theme
     plt.style.use("dark_background")
-    fig, axes = plt.subplots(3, 1, figsize=(12, 10), sharex=True)
+    fig, axes = plt.subplots(
+        4,
+        1,
+        figsize=(12, 12),
+        sharex=True,
+        gridspec_kw={"height_ratios": [3, 3, 3, 0.7]},
+    )
     fig.patch.set_facecolor(COLORS["background"])
 
     for ax in axes:
@@ -167,78 +168,101 @@ def plot_symbol_metrics(
 
     dates = df["date"]
 
-    # Panel 1: log(Buy/Sell)
+    # Panel 1: Short Sale Buy Ratio
     ax1 = axes[0]
-    log_bs = df["log_buy_sell"]
-    colors1 = [_get_point_color(v, LOG_THRESHOLD_HIGH, LOG_THRESHOLD_LOW) for v in log_bs]
+    short_ratio = df["short_ratio"]
 
-    ax1.axhline(y=0, color=COLORS["neutral"], linestyle="-", linewidth=1, alpha=0.5)
-    ax1.axhline(y=LOG_THRESHOLD_HIGH, color=COLORS["green"], linestyle="--", linewidth=1, alpha=0.7)
-    ax1.axhline(y=LOG_THRESHOLD_LOW, color=COLORS["red"], linestyle="--", linewidth=1, alpha=0.7)
-
-    # Plot smooth line and scatter
-    valid_mask = ~log_bs.isna()
+    valid_mask = ~short_ratio.isna()
     if valid_mask.any():
-        _plot_smooth_line(ax1, dates, log_bs, COLORS["cyan"], valid_mask)
-        ax1.scatter(dates, log_bs, c=colors1, s=60, zorder=5, edgecolors=COLORS["white"], linewidths=0.5)
+        _plot_smooth_line(ax1, dates, short_ratio, COLORS["cyan"], valid_mask)
+        ax1.scatter(dates, short_ratio, c=COLORS["cyan"], s=60, zorder=5, edgecolors=COLORS["white"], linewidths=0.5)
 
-    ax1.set_ylabel("log(Buy/Sell)", color=COLORS["text"], fontsize=10)
-    ax1.set_title(f"{symbol} - Directional Flow", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
+    ax1.axhline(y=0.5, color=COLORS["neutral"], linestyle="--", linewidth=1, alpha=0.6)
+    ax1.set_ylabel("Short Sale Buy Ratio", color=COLORS["text"], fontsize=10)
+    ax1.set_title(f"{symbol} - Short Sale Buy Ratio", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
 
-    # Add threshold labels
-    ax1.text(0.99, 0.95, "Accumulation", transform=ax1.transAxes, fontsize=8,
-             color=COLORS["green"], ha="right", va="top")
-    ax1.text(0.99, 0.05, "Distribution", transform=ax1.transAxes, fontsize=8,
-             color=COLORS["red"], ha="right", va="bottom")
-
-    # Panel 2: Short ratio z-score
+    # Panel 2: Lit Buy Ratio + Log Buy Ratio
     ax2 = axes[1]
-    short_z = df["short_ratio_z"]
-    colors2 = [_get_point_color(v, 1.0, -1.0) for v in short_z]
+    lit_buy_ratio = df["lit_buy_ratio"]
+    log_buy_ratio = df["log_buy_sell"]
 
-    ax2.axhline(y=0, color=COLORS["neutral"], linestyle="-", linewidth=1, alpha=0.5)
-    ax2.axhline(y=1.0, color=COLORS["red"], linestyle="--", linewidth=1, alpha=0.7)
-    ax2.axhline(y=-1.0, color=COLORS["green"], linestyle="--", linewidth=1, alpha=0.7)
-
-    valid_mask2 = ~short_z.isna()
+    valid_mask2 = ~lit_buy_ratio.isna()
     if valid_mask2.any():
-        _plot_smooth_line(ax2, dates, short_z, COLORS["yellow"], valid_mask2)
-        ax2.scatter(dates, short_z, c=colors2, s=60, zorder=5, edgecolors=COLORS["white"], linewidths=0.5)
+        _plot_smooth_line(ax2, dates, lit_buy_ratio, COLORS["cyan"], valid_mask2)
+        ax2.plot(dates[valid_mask2], lit_buy_ratio[valid_mask2], color=COLORS["cyan"], alpha=0.0, label="Lit Buy Ratio")
+        ax2.scatter(dates, lit_buy_ratio, c=COLORS["cyan"], s=40, zorder=5, edgecolors=COLORS["white"], linewidths=0.4)
 
-    ax2.set_ylabel("Short Ratio Z", color=COLORS["text"], fontsize=10)
-    ax2.set_title("Short Pressure (Z-Score)", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
+    ax2b = ax2.twinx()
+    ax2b.tick_params(colors=COLORS["text"], labelsize=9)
+    ax2b.spines["top"].set_visible(False)
+    ax2b.spines["right"].set_color(COLORS["grid"])
+    valid_mask2b = ~log_buy_ratio.isna()
+    if valid_mask2b.any():
+        _plot_smooth_line(ax2b, dates, log_buy_ratio, COLORS["yellow"], valid_mask2b)
+        ax2b.plot(dates[valid_mask2b], log_buy_ratio[valid_mask2b], color=COLORS["yellow"], alpha=0.0, label="Log Buy Ratio")
+        ax2b.scatter(dates, log_buy_ratio, c=COLORS["yellow"], s=40, zorder=5, edgecolors=COLORS["white"], linewidths=0.4)
 
-    ax2.text(0.99, 0.95, "High Pressure", transform=ax2.transAxes, fontsize=8,
-             color=COLORS["red"], ha="right", va="top")
-    ax2.text(0.99, 0.05, "Low Pressure", transform=ax2.transAxes, fontsize=8,
-             color=COLORS["green"], ha="right", va="bottom")
+    ax2.set_ylabel("Lit Buy Ratio", color=COLORS["cyan"], fontsize=10)
+    ax2b.set_ylabel("Log Buy Ratio", color=COLORS["yellow"], fontsize=10)
+    ax2.set_title("Lit Directional Flow", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
+    handles, labels = [], []
+    for axis in (ax2, ax2b):
+        h, l = axis.get_legend_handles_labels()
+        handles.extend(h)
+        labels.extend(l)
+    if handles:
+        ax2.legend(handles, labels, loc="upper left", fontsize=8, frameon=False)
 
-    # Panel 3: OTC Volume bars
+    # Panel 3: OTC Buy/Sell Volumes + Weekly Buy Ratio
     ax3 = axes[2]
-    otc_vol = df["otc_off_exchange_volume"]
-    data_quality = df["data_quality"]
+    otc_buy = df["otc_buy_volume"]
+    otc_sell = df["otc_sell_volume"]
+    otc_ratio = df["otc_weekly_buy_ratio"]
 
-    bar_colors = [COLORS["green"] if q == "OTC_ANCHORED" else COLORS["yellow"] for q in data_quality]
-
-    valid_mask3 = ~otc_vol.isna()
+    valid_mask3 = ~otc_buy.isna() & ~otc_sell.isna()
     if valid_mask3.any():
-        ax3.bar(dates[valid_mask3], otc_vol[valid_mask3], color=[bar_colors[i] for i, v in enumerate(valid_mask3) if v],
-                alpha=0.8, width=0.8)
+        ax3.bar(dates[valid_mask3], otc_buy[valid_mask3], color=COLORS["green"], alpha=0.75, width=0.8, label="OTC Buy")
+        ax3.bar(dates[valid_mask3], otc_sell[valid_mask3], bottom=otc_buy[valid_mask3], color=COLORS["red"], alpha=0.65, width=0.8, label="OTC Sell")
 
-    ax3.set_ylabel("OTC Volume", color=COLORS["text"], fontsize=10)
-    ax3.set_title("Off-Exchange Participation", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
+    ax3.set_ylabel("OTC Vol", color=COLORS["text"], fontsize=10)
+    ax3.set_title("OTC Weekly Anchor", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
     ax3.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: _format_volume(x)))
+    if valid_mask3.any():
+        ax3.legend(loc="upper left", fontsize=8, frameon=False)
 
-    # Legend for data quality
-    ax3.text(0.99, 0.95, "OTC_ANCHORED", transform=ax3.transAxes, fontsize=8,
-             color=COLORS["green"], ha="right", va="top")
-    ax3.text(0.99, 0.85, "PRE_OTC", transform=ax3.transAxes, fontsize=8,
-             color=COLORS["yellow"], ha="right", va="top")
+    ax3b = ax3.twinx()
+    ax3b.tick_params(colors=COLORS["text"], labelsize=9)
+    ax3b.spines["top"].set_visible(False)
+    ax3b.spines["right"].set_color(COLORS["grid"])
+    valid_mask3b = ~otc_ratio.isna()
+    if valid_mask3b.any():
+        _plot_smooth_line(ax3b, dates, otc_ratio, COLORS["yellow"], valid_mask3b)
+        ax3b.scatter(dates, otc_ratio, c=COLORS["yellow"], s=40, zorder=5, edgecolors=COLORS["white"], linewidths=0.4)
+    ax3b.set_ylabel("OTC Buy Ratio", color=COLORS["yellow"], fontsize=10)
+
+    # Decision strip
+    ax4 = axes[3]
+    decisions = df["pressure_context_label"].fillna("Neutral").tolist()
+    decision_colors = []
+    for label in decisions:
+        if label == "Accumulating":
+            decision_colors.append(COLORS["green"])
+        elif label == "Distribution":
+            decision_colors.append(COLORS["red"])
+        else:
+            decision_colors.append(COLORS["neutral"])
+    ax4.bar(dates, [1] * len(dates), color=decision_colors, width=0.8)
+    ax4.set_ylim(0, 1)
+    ax4.set_yticks([])
+    ax4.set_ylabel("Decision", color=COLORS["text_muted"], fontsize=8)
+    ax4.grid(False)
+    for spine in ax4.spines.values():
+        spine.set_visible(False)
 
     # Format x-axis dates
-    ax3.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d"))
-    ax3.xaxis.set_major_locator(mdates.DayLocator(interval=max(1, len(dates) // 10)))
-    plt.setp(ax3.xaxis.get_majorticklabels(), rotation=45, ha="right")
+    ax4.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d"))
+    ax4.xaxis.set_major_locator(mdates.DayLocator(interval=max(1, len(dates) // 10)))
+    plt.setp(ax4.xaxis.get_majorticklabels(), rotation=45, ha="right")
 
     # Title and footer
     fig.suptitle(
@@ -251,7 +275,7 @@ def plot_symbol_metrics(
 
     fig.text(
         0.5, 0.01,
-        "FINRA does not publish trade direction. All buy/sell values are inferred estimates.",
+        "Short sale volume is a buy-side proxy. OTC buy/sell is inferred from weekly lit ratios.",
         ha="center",
         fontsize=8,
         color=COLORS["text_muted"],
@@ -305,8 +329,8 @@ def plot_short_only_metrics(
         _plot_smooth_line(ax1, dates, short_ratio, COLORS["cyan"], valid_mask)
         ax1.scatter(dates, short_ratio, c=colors1, s=60, zorder=5, edgecolors=COLORS["white"], linewidths=0.5)
 
-    ax1.set_ylabel("Short Ratio", color=COLORS["text"], fontsize=10)
-    ax1.set_title(f"{symbol} - Short Ratio (Daily Short Sale)", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
+    ax1.set_ylabel("Short Sale Buy Ratio", color=COLORS["text"], fontsize=10)
+    ax1.set_title(f"{symbol} - Short Sale Buy Ratio", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
     ax1.text(0.99, 0.95, "FINRA_TOTAL", transform=ax1.transAxes, fontsize=8,
              color=COLORS["cyan"], ha="right", va="top")
     ax1.text(0.99, 0.85, "POLYGON_TOTAL", transform=ax1.transAxes, fontsize=8,
@@ -314,7 +338,7 @@ def plot_short_only_metrics(
 
     # Panel 2: Short Sale Volume
     ax2 = axes[1]
-    short_vol = df["short_total_volume"]
+    short_vol = df["short_buy_volume"]
     valid_mask2 = ~short_vol.isna()
     if valid_mask2.any():
         ax2.bar(dates[valid_mask2], short_vol[valid_mask2], color=COLORS["yellow"], alpha=0.8, width=0.8)
