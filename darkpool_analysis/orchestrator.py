@@ -65,6 +65,7 @@ def main() -> None:
 
     logging.info("Fetch mode: %s, dates to process: %d", config.fetch_mode, len(config.target_dates))
     logging.info("Polygon trades mode: %s", config.polygon_trades_mode)
+    logging.info("Cache enabled: %s", config.skip_cached)
 
     max_date = max(config.target_dates)
     conn = get_connection(config.db_path)
@@ -106,18 +107,33 @@ def main() -> None:
                 upsert_dataframe(conn, "finra_short_daily_raw", short_df, ["symbol", "trade_date"])
             short_frames.append(short_df)
 
-            trades_df, failures = fetch_polygon_trades(config, symbols_to_fetch, run_date)
+            trades_df, failures, trades_cache_stats = fetch_polygon_trades(
+                config, symbols_to_fetch, run_date, conn=conn
+            )
+            if trades_cache_stats["cached"] > 0 or trades_cache_stats["fetched"] > 0:
+                logging.info(
+                    "Trades cache: %d cached, %d fetched (%s mode)",
+                    trades_cache_stats["cached"], trades_cache_stats["fetched"],
+                    trades_cache_stats["data_source"]
+                )
             if failures:
                 logging.warning("Polygon trade fetch failures: %s", ", ".join(failures))
             if not trades_df.empty:
-                upsert_dataframe(conn, "polygon_equity_trades_raw", trades_df, ["symbol", "timestamp"])
+                upsert_dataframe(conn, "polygon_equity_trades_raw", trades_df, ["symbol", "timestamp", "data_source"])
 
             lit_df = compute_lit_directional_flow(trades_df, symbols_to_fetch, run_date, config)
             upsert_dataframe(conn, "lit_direction_daily", lit_df, ["symbol", "date"])
             lit_frames.append(lit_df)
 
             try:
-                agg_df = fetch_polygon_daily_agg(config, symbols_to_fetch, run_date)
+                agg_df, agg_cache_stats = fetch_polygon_daily_agg(
+                    config, symbols_to_fetch, run_date, conn=conn
+                )
+                if agg_cache_stats["cached"] > 0 or agg_cache_stats["fetched"] > 0:
+                    logging.info(
+                        "Daily agg cache: %d cached, %d fetched",
+                        agg_cache_stats["cached"], agg_cache_stats["fetched"]
+                    )
             except Exception as exc:
                 logging.warning("Polygon daily agg fetch failed for %s: %s", run_date.isoformat(), exc)
                 agg_df = pd.DataFrame()

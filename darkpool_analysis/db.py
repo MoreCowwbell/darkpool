@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date, datetime
 from pathlib import Path
 from typing import Iterable
 
@@ -189,6 +190,28 @@ def init_db(conn: duckdb.DuckDBPyConnection) -> None:
         )
         """
     )
+    # Polygon ingestion state for caching (avoid re-fetching)
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS polygon_ingestion_state (
+            symbol TEXT,
+            trade_date DATE,
+            data_source TEXT,
+            fetch_timestamp TIMESTAMP,
+            record_count INTEGER,
+            status TEXT,
+            PRIMARY KEY (symbol, trade_date, data_source)
+        )
+        """
+    )
+    # Add data_source column to polygon_equity_trades_raw if missing
+    conn.execute(
+        "ALTER TABLE polygon_equity_trades_raw ADD COLUMN IF NOT EXISTS data_source TEXT DEFAULT 'tick'"
+    )
+    # Add fetch_timestamp column to polygon_daily_agg_raw if missing
+    conn.execute(
+        "ALTER TABLE polygon_daily_agg_raw ADD COLUMN IF NOT EXISTS fetch_timestamp TIMESTAMP"
+    )
 
 
 def upsert_dataframe(
@@ -210,3 +233,78 @@ def upsert_dataframe(
         f"INSERT INTO {table_name} ({column_list}) SELECT {column_list} FROM df_view"
     )
     conn.unregister("df_view")
+
+
+# =============================================================================
+# Polygon Ingestion State (Caching) Helpers
+# =============================================================================
+
+def check_ingestion_state(
+    conn: duckdb.DuckDBPyConnection,
+    symbol: str,
+    trade_date: date,
+    data_source: str,
+) -> bool:
+    """Return True if symbol+date+source already fetched successfully."""
+    result = conn.execute(
+        """
+        SELECT COUNT(*) as cnt FROM polygon_ingestion_state
+        WHERE symbol = ? AND trade_date = ? AND data_source = ? AND status = 'COMPLETE'
+        """,
+        [symbol, trade_date, data_source],
+    ).fetchone()
+    return result[0] > 0 if result else False
+
+
+def mark_ingestion_complete(
+    conn: duckdb.DuckDBPyConnection,
+    symbol: str,
+    trade_date: date,
+    data_source: str,
+    record_count: int,
+) -> None:
+    """Mark a symbol+date+source as successfully fetched."""
+    now = datetime.utcnow()
+    conn.execute(
+        """
+        INSERT INTO polygon_ingestion_state (symbol, trade_date, data_source, fetch_timestamp, record_count, status)
+        VALUES (?, ?, ?, ?, ?, 'COMPLETE')
+        ON CONFLICT (symbol, trade_date, data_source) DO UPDATE SET
+            fetch_timestamp = EXCLUDED.fetch_timestamp,
+            record_count = EXCLUDED.record_count,
+            status = EXCLUDED.status
+        """,
+        [symbol, trade_date, data_source, now, record_count],
+    )
+
+
+def get_cached_symbols(
+    conn: duckdb.DuckDBPyConnection,
+    symbols: list[str],
+    trade_date: date,
+    data_source: str,
+) -> set[str]:
+    """Return set of symbols that are already cached for a given date+source."""
+    if not symbols:
+        return set()
+    placeholders = ", ".join(["?" for _ in symbols])
+    result = conn.execute(
+        f"""
+        SELECT symbol FROM polygon_ingestion_state
+        WHERE trade_date = ? AND data_source = ? AND status = 'COMPLETE'
+        AND symbol IN ({placeholders})
+        """,
+        [trade_date, data_source] + symbols,
+    ).fetchall()
+    return {row[0] for row in result}
+
+
+def get_uncached_symbols(
+    conn: duckdb.DuckDBPyConnection,
+    symbols: list[str],
+    trade_date: date,
+    data_source: str,
+) -> list[str]:
+    """Return list of symbols that are NOT cached for a given date+source."""
+    cached = get_cached_symbols(conn, symbols, trade_date, data_source)
+    return [s for s in symbols if s not in cached]

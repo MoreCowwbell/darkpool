@@ -82,6 +82,9 @@
   - "tick": Fetch individual trades with bid/ask for NBBO classification (accurate, slow)
   - "minute": Fetch 1-min bars, synthesize bid/ask from OHLC (faster, less accurate)
   - "daily": Skip lit inference entirely, use only short-sale ratio for pressure signals (fastest)
+- Caching (SKIP_CACHED=True by default):
+  - polygon_ingestion_state table tracks fetched (symbol, trade_date, data_source) combinations.
+  - Set SKIP_CACHED=False to force re-fetching all data.
 - FINRA_SHORT_SALE_* env vars control short sale ingestion (file or API).
 - FINRA_OTC_* env vars control weekly OTC ingestion.
 - POLYGON_DAILY_AGG_* env vars control daily aggregates ingestion.

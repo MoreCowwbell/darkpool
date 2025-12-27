@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 # =============================================================================
 # Default Configuration (can be overridden via .env)
 # =============================================================================
-DEFAULT_TICKERS = ["RGTI", "TSLA"]
+DEFAULT_TICKERS = ["RGTI"]
 EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 
 ### US_SECTOR_CORE
@@ -69,6 +69,14 @@ DEFAULT_POLYGON_TRADES_MODE = "tick"
 # This string is stored in the database to track which algorithm version
 # produced the data. Useful for debugging and reproducibility.
 DEFAULT_INFERENCE_VERSION = "PhaseA_v1"
+
+# -----------------------------------------------------------------------------
+# Caching (skip already-fetched data)
+# -----------------------------------------------------------------------------
+# When True, check polygon_ingestion_state before fetching and skip symbols
+# that have already been fetched for a given date+source. No TTL (cache forever).
+DEFAULT_SKIP_CACHED = True
+
 DEFAULT_EXPORT_CSV = False  # Export tables to CSV files
 DEFAULT_INCLUDE_POLYGON_ONLY_TICKERS = True  # Include tickers without FINRA data (Polygon-only)
 DEFAULT_SHORT_Z_WINDOW = 20
@@ -231,6 +239,7 @@ class Config:
     rth_end: time
     inference_version: str
     polygon_trades_mode: str  # "tick", "minute", or "daily"
+    skip_cached: bool  # Skip fetching if already in DB
     export_csv: bool
     polygon_api_key: Optional[str]
     polygon_base_url: str
@@ -325,6 +334,7 @@ def load_config() -> Config:
         rth_end=rth_end,
         inference_version=os.getenv("INFERENCE_VERSION", DEFAULT_INFERENCE_VERSION),
         polygon_trades_mode=os.getenv("POLYGON_TRADES_MODE", DEFAULT_POLYGON_TRADES_MODE).lower(),
+        skip_cached=os.getenv("SKIP_CACHED", str(DEFAULT_SKIP_CACHED)).lower() in ("true", "1", "yes"),
         export_csv=os.getenv("EXPORT_CSV", str(DEFAULT_EXPORT_CSV)).lower() in ("true", "1", "yes"),
         polygon_api_key=os.getenv("POLYGON_API_KEY"),
         polygon_base_url=os.getenv("POLYGON_BASE_URL", DEFAULT_POLYGON_BASE_URL),

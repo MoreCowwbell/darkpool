@@ -53,6 +53,13 @@
 8. Aggregate constituent short pressure to index-level daily totals.
 9. Render daily table outputs (HTML/PNG) and layered plots with decision strip.
 
+## Caching and Ingestion State
+- polygon_ingestion_state table tracks (symbol, trade_date, data_source) combinations.
+- data_source values: "tick", "minute", "daily".
+- Fetchers check cache before API calls when SKIP_CACHED=True.
+- polygon_equity_trades_raw now has data_source column to distinguish tick vs minute data.
+- polygon_daily_agg_raw now has fetch_timestamp column.
+
 ## Data and Storage Details
 - DuckDB is the single source of truth.
 - Raw tables:
@@ -84,6 +91,9 @@
   - "tick": Fetch individual trades for NBBO classification (accurate, slow)
   - "minute": Fetch 1-min bars, synthesize bid/ask from OHLC (faster, less accurate)
   - "daily": Skip lit inference entirely, use only short-sale ratio (fastest)
+- SKIP_CACHED (default: True): Skip fetching symbol+date combinations already in DB.
+  - Uses polygon_ingestion_state table to track fetched data.
+  - No TTL (cache forever, unless forced).
 - FINRA_SHORT_SALE_* env vars control daily short sale ingestion.
 - FINRA_OTC_* env vars control weekly OTC ingestion.
 - POLYGON_* env vars control Polygon ingestion.

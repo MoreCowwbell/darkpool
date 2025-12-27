@@ -6,14 +6,18 @@ import json
 import logging
 import os
 from pathlib import Path
+from typing import Optional, Tuple
 
+import duckdb
 import pandas as pd
 import requests
 
 try:
     from .config import Config
+    from .db import get_uncached_symbols, mark_ingestion_complete
 except ImportError:
     from config import Config
+    from db import get_uncached_symbols, mark_ingestion_complete
 
 logger = logging.getLogger(__name__)
 
@@ -121,44 +125,89 @@ def _fetch_daily_agg_for_symbol(config: Config, symbol: str, trade_date: date) -
     )
 
 
-def fetch_polygon_daily_agg(config: Config, symbols: list[str], trade_date: date) -> pd.DataFrame:
+def fetch_polygon_daily_agg(
+    config: Config,
+    symbols: list[str],
+    trade_date: date,
+    conn: Optional[duckdb.DuckDBPyConnection] = None,
+) -> Tuple[pd.DataFrame, dict]:
+    """
+    Fetch Polygon daily aggregates (OHLCV) for price context.
+
+    If conn is provided and config.skip_cached is True, skips symbols that
+    are already in polygon_ingestion_state for this date+source.
+
+    Returns:
+        Tuple of (DataFrame, cache_stats dict)
+        cache_stats: {"cached": int, "fetched": int}
+    """
+    cache_stats = {"cached": 0, "fetched": 0}
+
     if config.polygon_daily_agg_file:
         logger.info("Loading Polygon daily agg from file: %s", config.polygon_daily_agg_file)
         df = _load_daily_agg_file(config.polygon_daily_agg_file)
+        df["fetch_timestamp"] = datetime.utcnow()
     elif config.polygon_daily_agg_dir:
         logger.info("Loading Polygon daily agg from dir: %s", config.polygon_daily_agg_dir)
         df = _load_daily_agg_dir(config.polygon_daily_agg_dir)
+        df["fetch_timestamp"] = datetime.utcnow()
     else:
+        # Check cache if enabled
+        symbols_to_fetch = symbols
+        if conn is not None and config.skip_cached:
+            symbols_to_fetch = get_uncached_symbols(conn, symbols, trade_date, "daily")
+            cache_stats["cached"] = len(symbols) - len(symbols_to_fetch)
+            if cache_stats["cached"] > 0:
+                logger.info(
+                    "Cache hit: %d/%d symbols already fetched for %s (daily agg)",
+                    cache_stats["cached"], len(symbols), trade_date.isoformat()
+                )
+            if not symbols_to_fetch:
+                logger.info("All symbols cached for %s (daily agg), skipping fetch", trade_date.isoformat())
+                return pd.DataFrame(), cache_stats
+
         max_workers = int(os.getenv("POLYGON_MAX_WORKERS", "4"))
         frames = []
         failures = []
+        fetched_symbols = []
 
-        def fetch_one(symbol: str) -> pd.DataFrame | None:
+        def fetch_one(symbol: str) -> Tuple[str, pd.DataFrame | None]:
             try:
                 logger.info("Fetching Polygon daily agg for %s on %s", symbol, trade_date.isoformat())
                 result = _fetch_daily_agg_for_symbol(config, symbol, trade_date)
-                return result if not result.empty else None
+                return symbol, result if not result.empty else None
             except Exception as exc:  # pylint: disable=broad-except
                 logger.warning("Polygon daily agg fetch failed for %s: %s", symbol, exc)
                 failures.append(symbol)
-                return None
+                return symbol, None
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(fetch_one, sym): sym for sym in symbols}
+            futures = {executor.submit(fetch_one, sym): sym for sym in symbols_to_fetch}
             for future in as_completed(futures):
-                df = future.result()
-                if df is not None:
-                    frames.append(df)
+                symbol, result_df = future.result()
+                if result_df is not None:
+                    frames.append(result_df)
+                    fetched_symbols.append(symbol)
+
+        cache_stats["fetched"] = len(fetched_symbols)
+
+        # Update ingestion state for successfully fetched symbols
+        if conn is not None and fetched_symbols:
+            for symbol in fetched_symbols:
+                mark_ingestion_complete(conn, symbol, trade_date, "daily", 1)
 
         if not frames:
-            return pd.DataFrame()
+            return pd.DataFrame(), cache_stats
         df = pd.concat(frames, ignore_index=True)
+        df["fetch_timestamp"] = datetime.utcnow()
 
     if df.empty:
-        return df
+        return df, cache_stats
 
     df = _normalize_daily_agg(df)
+    # Re-add fetch_timestamp after normalization (it gets dropped)
+    df["fetch_timestamp"] = datetime.utcnow()
     df = df[df["trade_date"] == trade_date].copy()
     if symbols:
         df = df[df["symbol"].isin([s.upper() for s in symbols])].copy()
-    return df
+    return df, cache_stats

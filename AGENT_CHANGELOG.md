@@ -234,3 +234,10 @@ Format:
 - [x] Updated orchestrator to log the polygon trades mode at startup.
 - [x] Updated AGENT_CONTEXT.md and AGENT_INSTRUCTIONS.md with new config option documentation.
 - [x] Updated plotter.py: dates now shown on ALL panels (top, middle, bottom), every day labeled (no skipping).
+- [x] Implemented Polygon data caching to avoid re-fetching:
+  - Added `polygon_ingestion_state` table to track fetched (symbol, trade_date, data_source) combinations.
+  - Added `data_source` column to `polygon_equity_trades_raw` to distinguish tick vs minute data.
+  - Added `fetch_timestamp` column to `polygon_daily_agg_raw`.
+  - Added `SKIP_CACHED` config option (default: True).
+  - Updated `fetch_polygon_equity.py` and `fetch_polygon_agg.py` to check cache before fetching.
+  - Updated orchestrator to pass conn to fetchers and log cache hit/miss stats.

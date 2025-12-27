@@ -5,15 +5,18 @@ from datetime import date, datetime, timedelta, timezone
 import json
 import logging
 import os
-from typing import Tuple
+from typing import Optional, Tuple
 
+import duckdb
 import pandas as pd
 import requests
 
 try:
     from .config import Config
+    from .db import get_uncached_symbols, mark_ingestion_complete
 except ImportError:
     from config import Config
+    from db import get_uncached_symbols, mark_ingestion_complete
 
 logger = logging.getLogger(__name__)
 
@@ -211,65 +214,106 @@ def _fetch_trades_for_symbol(
 
 
 def fetch_polygon_trades(
-    config: Config, symbols: list[str], trade_date: date
-) -> Tuple[pd.DataFrame, list[str]]:
+    config: Config,
+    symbols: list[str],
+    trade_date: date,
+    conn: Optional[duckdb.DuckDBPyConnection] = None,
+) -> Tuple[pd.DataFrame, list[str], dict]:
     """
     Fetch Polygon trade data based on config.polygon_trades_mode:
     - "tick": Fetch individual trades (accurate NBBO, slow)
     - "minute": Fetch 1-min bars directly (faster, less accurate)
     - "daily": Skip entirely, return empty (fastest, no lit inference)
+
+    If conn is provided and config.skip_cached is True, skips symbols that
+    are already in polygon_ingestion_state for this date+source.
+
+    Returns:
+        Tuple of (DataFrame, failures list, cache_stats dict)
+        cache_stats: {"cached": int, "fetched": int, "data_source": str}
     """
-    empty_df = pd.DataFrame(columns=["symbol", "timestamp", "price", "size", "bid", "ask"])
+    empty_df = pd.DataFrame(columns=["symbol", "timestamp", "price", "size", "bid", "ask", "data_source"])
+    cache_stats = {"cached": 0, "fetched": 0, "data_source": config.polygon_trades_mode}
 
     # Handle "daily" mode: skip lit inference entirely
     if config.polygon_trades_mode == "daily":
         logger.info("polygon_trades_mode=daily: skipping trade fetching for lit inference")
-        return empty_df, []
+        return empty_df, [], cache_stats
+
+    # Determine data source for caching
+    data_source = config.polygon_trades_mode  # "tick" or "minute"
+
+    # Check cache if enabled
+    symbols_to_fetch = symbols
+    if conn is not None and config.skip_cached:
+        symbols_to_fetch = get_uncached_symbols(conn, symbols, trade_date, data_source)
+        cache_stats["cached"] = len(symbols) - len(symbols_to_fetch)
+        if cache_stats["cached"] > 0:
+            logger.info(
+                "Cache hit: %d/%d symbols already fetched for %s (%s mode)",
+                cache_stats["cached"], len(symbols), trade_date.isoformat(), data_source
+            )
+        if not symbols_to_fetch:
+            logger.info("All symbols cached for %s, skipping fetch", trade_date.isoformat())
+            return empty_df, [], cache_stats
 
     if config.polygon_trades_file:
         logger.info("Loading Polygon trades from file: %s", config.polygon_trades_file)
-        return _load_trades_from_file(config.polygon_trades_file), []
+        df = _load_trades_from_file(config.polygon_trades_file)
+        df["data_source"] = "file"
+        return df, [], cache_stats
 
     max_workers = int(os.getenv("POLYGON_MAX_WORKERS", "4"))
     failures = []
     frames = []
+    fetched_symbols = []
 
-    def fetch_one(symbol: str) -> Tuple[str, pd.DataFrame | None, Exception | None]:
+    def fetch_one(symbol: str) -> Tuple[str, pd.DataFrame | None, str, Exception | None]:
+        """Returns (symbol, df, actual_data_source, exception)."""
         try:
             # Handle "minute" mode: go directly to minute aggregates
             if config.polygon_trades_mode == "minute":
                 logger.info("Fetching Polygon minute bars for %s on %s", symbol, trade_date.isoformat())
                 df = _fetch_aggregates_for_symbol(config, symbol, trade_date)
-                return symbol, df if not df.empty else None, None
+                return symbol, df if not df.empty else None, "minute", None
 
             # Default "tick" mode: fetch individual trades
             logger.info("Fetching Polygon trades for %s on %s", symbol, trade_date.isoformat())
             df = _fetch_trades_for_symbol(config, symbol, trade_date)
-            return symbol, df if not df.empty else None, None
+            return symbol, df if not df.empty else None, "tick", None
         except requests.HTTPError as exc:
             if exc.response is not None and exc.response.status_code == 403:
                 logger.info("Trades 403 for %s, falling back to aggregates", symbol)
                 try:
                     df = _fetch_aggregates_for_symbol(config, symbol, trade_date)
-                    return symbol, df if not df.empty else None, None
+                    return symbol, df if not df.empty else None, "minute", None
                 except Exception as agg_exc:
-                    return symbol, None, agg_exc
-            return symbol, None, exc
+                    return symbol, None, data_source, agg_exc
+            return symbol, None, data_source, exc
         except Exception as exc:  # pylint: disable=broad-except
-            return symbol, None, exc
+            return symbol, None, data_source, exc
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(fetch_one, sym): sym for sym in symbols}
+        futures = {executor.submit(fetch_one, sym): sym for sym in symbols_to_fetch}
         for future in as_completed(futures):
-            symbol, df, exc = future.result()
+            symbol, df, actual_source, exc = future.result()
             if exc:
                 logger.warning("Polygon fetch failed for %s: %s", symbol, exc)
                 failures.append(symbol)
             elif df is not None:
+                df["data_source"] = actual_source
                 frames.append(df)
+                fetched_symbols.append((symbol, actual_source, len(df)))
+
+    cache_stats["fetched"] = len(fetched_symbols)
+
+    # Update ingestion state for successfully fetched symbols
+    if conn is not None and fetched_symbols:
+        for symbol, actual_source, record_count in fetched_symbols:
+            mark_ingestion_complete(conn, symbol, trade_date, actual_source, record_count)
 
     if not frames:
-        return empty_df, failures
+        return empty_df, failures, cache_stats
 
     combined = pd.concat(frames, ignore_index=True)
-    return combined, failures
+    return combined, failures, cache_stats
