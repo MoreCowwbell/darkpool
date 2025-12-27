@@ -225,3 +225,11 @@ Format:
 - [x] Colored pressure text for Accumulating/Distribution in the table.
 ## 2025-12-25 Session Summary (Codex)
 - [x] Reorganized table summary panel into aligned short/lit/OTC grids with larger summary fonts.
+
+## 2025-12-26 Session Summary (Claude Code)
+- [x] Added `POLYGON_TRADES_MODE` config option to control data granularity for lit inference.
+- [x] Three modes supported: "tick" (accurate/slow), "minute" (faster/less accurate), "daily" (skip lit inference).
+- [x] Updated `fetch_polygon_equity.py` to branch on mode.
+- [x] Added detailed docstrings explaining `DEFAULT_POLYGON_TRADES_MODE` and `DEFAULT_INFERENCE_VERSION`.
+- [x] Updated orchestrator to log the polygon trades mode at startup.
+- [x] Updated AGENT_CONTEXT.md and AGENT_INSTRUCTIONS.md with new config option documentation.

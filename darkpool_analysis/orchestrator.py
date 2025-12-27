@@ -64,6 +64,7 @@ def main() -> None:
         raise RuntimeError("No tickers configured.")
 
     logging.info("Fetch mode: %s, dates to process: %d", config.fetch_mode, len(config.target_dates))
+    logging.info("Polygon trades mode: %s", config.polygon_trades_mode)
 
     max_date = max(config.target_dates)
     conn = get_connection(config.db_path)

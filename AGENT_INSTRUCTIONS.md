@@ -78,6 +78,10 @@
 - .env (project root): only API secrets (POLYGON_API_KEY, FINRA_API_KEY, FINRA_API_SECRET).
 - config.py: defaults for tickers, dates, URLs, and pipeline behavior.
 - Fetch modes (FETCH_MODE): "single", "daily", or "weekly".
+- Polygon trades modes (POLYGON_TRADES_MODE):
+  - "tick": Fetch individual trades with bid/ask for NBBO classification (accurate, slow)
+  - "minute": Fetch 1-min bars, synthesize bid/ask from OHLC (faster, less accurate)
+  - "daily": Skip lit inference entirely, use only short-sale ratio for pressure signals (fastest)
 - FINRA_SHORT_SALE_* env vars control short sale ingestion (file or API).
 - FINRA_OTC_* env vars control weekly OTC ingestion.
 - POLYGON_DAILY_AGG_* env vars control daily aggregates ingestion.

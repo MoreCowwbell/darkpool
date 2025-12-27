@@ -80,6 +80,10 @@
 ## Configuration Notes
 - .env holds API secrets only (POLYGON_API_KEY, FINRA_API_KEY, FINRA_API_SECRET).
 - config.py defines defaults (tickers, dates, RTH window, fetch mode, API URLs).
+- POLYGON_TRADES_MODE controls data granularity for lit inference:
+  - "tick": Fetch individual trades for NBBO classification (accurate, slow)
+  - "minute": Fetch 1-min bars, synthesize bid/ask from OHLC (faster, less accurate)
+  - "daily": Skip lit inference entirely, use only short-sale ratio (fastest)
 - FINRA_SHORT_SALE_* env vars control daily short sale ingestion.
 - FINRA_OTC_* env vars control weekly OTC ingestion.
 - POLYGON_* env vars control Polygon ingestion.

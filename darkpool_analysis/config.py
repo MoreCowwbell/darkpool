@@ -45,13 +45,29 @@ EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 
 
 # Analysis defaults
-DEFAULT_TARGET_DATE = "2025-12-19"  # Last trading day (Monday)
+DEFAULT_TARGET_DATE = "2025-12-26"  # Last trading day (Monday)
 DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
-DEFAULT_BACKFILL_COUNT = 20  # Number of periods to fetch (days for daily, weeks for weekly)
+DEFAULT_BACKFILL_COUNT = 30  # Number of periods to fetch (days for daily, weeks for weekly)
 DEFAULT_MIN_LIT_VOLUME = 10000
 DEFAULT_MARKET_TZ = "US/Eastern"
 DEFAULT_RTH_START = "09:30"
 DEFAULT_RTH_END = "16:15"
+# -----------------------------------------------------------------------------
+# Polygon Trades Mode (controls data granularity for lit direction inference)
+# -----------------------------------------------------------------------------
+# - "tick"  : Fetch individual trades with bid/ask for NBBO classification.
+#             Most accurate but slowest (1000s of records, paginated requests).
+# - "minute": Fetch 1-minute bars, synthesize bid/ask from OHLC.
+#             Faster but less accurate (bid/ask approximated from bar range).
+# - "daily" : Skip lit inference entirely, use only short-sale ratio.
+#             Fastest option when you only need short pressure signals.
+DEFAULT_POLYGON_TRADES_MODE = "tick"
+
+# -----------------------------------------------------------------------------
+# Inference Version (provenance label, NOT a mode selector)
+# -----------------------------------------------------------------------------
+# This string is stored in the database to track which algorithm version
+# produced the data. Useful for debugging and reproducibility.
 DEFAULT_INFERENCE_VERSION = "PhaseA_v1"
 DEFAULT_EXPORT_CSV = False  # Export tables to CSV files
 DEFAULT_INCLUDE_POLYGON_ONLY_TICKERS = True  # Include tickers without FINRA data (Polygon-only)
@@ -214,6 +230,7 @@ class Config:
     rth_start: time
     rth_end: time
     inference_version: str
+    polygon_trades_mode: str  # "tick", "minute", or "daily"
     export_csv: bool
     polygon_api_key: Optional[str]
     polygon_base_url: str
@@ -307,6 +324,7 @@ def load_config() -> Config:
         rth_start=rth_start,
         rth_end=rth_end,
         inference_version=os.getenv("INFERENCE_VERSION", DEFAULT_INFERENCE_VERSION),
+        polygon_trades_mode=os.getenv("POLYGON_TRADES_MODE", DEFAULT_POLYGON_TRADES_MODE).lower(),
         export_csv=os.getenv("EXPORT_CSV", str(DEFAULT_EXPORT_CSV)).lower() in ("true", "1", "yes"),
         polygon_api_key=os.getenv("POLYGON_API_KEY"),
         polygon_base_url=os.getenv("POLYGON_BASE_URL", DEFAULT_POLYGON_BASE_URL),

@@ -213,6 +213,19 @@ def _fetch_trades_for_symbol(
 def fetch_polygon_trades(
     config: Config, symbols: list[str], trade_date: date
 ) -> Tuple[pd.DataFrame, list[str]]:
+    """
+    Fetch Polygon trade data based on config.polygon_trades_mode:
+    - "tick": Fetch individual trades (accurate NBBO, slow)
+    - "minute": Fetch 1-min bars directly (faster, less accurate)
+    - "daily": Skip entirely, return empty (fastest, no lit inference)
+    """
+    empty_df = pd.DataFrame(columns=["symbol", "timestamp", "price", "size", "bid", "ask"])
+
+    # Handle "daily" mode: skip lit inference entirely
+    if config.polygon_trades_mode == "daily":
+        logger.info("polygon_trades_mode=daily: skipping trade fetching for lit inference")
+        return empty_df, []
+
     if config.polygon_trades_file:
         logger.info("Loading Polygon trades from file: %s", config.polygon_trades_file)
         return _load_trades_from_file(config.polygon_trades_file), []
@@ -223,6 +236,13 @@ def fetch_polygon_trades(
 
     def fetch_one(symbol: str) -> Tuple[str, pd.DataFrame | None, Exception | None]:
         try:
+            # Handle "minute" mode: go directly to minute aggregates
+            if config.polygon_trades_mode == "minute":
+                logger.info("Fetching Polygon minute bars for %s on %s", symbol, trade_date.isoformat())
+                df = _fetch_aggregates_for_symbol(config, symbol, trade_date)
+                return symbol, df if not df.empty else None, None
+
+            # Default "tick" mode: fetch individual trades
             logger.info("Fetching Polygon trades for %s on %s", symbol, trade_date.isoformat())
             df = _fetch_trades_for_symbol(config, symbol, trade_date)
             return symbol, df if not df.empty else None, None
@@ -249,7 +269,7 @@ def fetch_polygon_trades(
                 frames.append(df)
 
     if not frames:
-        return pd.DataFrame(columns=["symbol", "timestamp", "price", "size", "bid", "ask"]), failures
+        return empty_df, failures
 
     combined = pd.concat(frames, ignore_index=True)
     return combined, failures
