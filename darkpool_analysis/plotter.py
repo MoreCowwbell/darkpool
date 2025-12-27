@@ -537,10 +537,12 @@ def plot_symbol_metrics(
     ]
     _add_panel_legend(ax4, legend_handles_4, [h.get_label() for h in legend_handles_4], loc="upper right")
 
-    # Format x-axis dates
-    ax4.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d"))
-    ax4.xaxis.set_major_locator(mdates.DayLocator(interval=max(1, len(dates) // 10)))
-    plt.setp(ax4.xaxis.get_majorticklabels(), rotation=45, ha="right")
+    # Format x-axis dates on ALL panels (not just bottom)
+    for ax in [axes[0], axes[1], axes[2], ax4]:
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d"))
+        ax.xaxis.set_major_locator(mdates.DayLocator(interval=1))  # Show every day
+        ax.tick_params(axis="x", labelbottom=True)  # Enable x labels on all panels
+        plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha="right", fontsize=8)
 
     # Title and footer
     fig.suptitle(
@@ -690,9 +692,12 @@ def plot_short_only_metrics(
     ]
     _add_panel_legend(ax3, legend_handles_3, [h.get_label() for h in legend_handles_3], loc="upper left")
 
-    ax3.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d"))
-    ax3.xaxis.set_major_locator(mdates.DayLocator(interval=max(1, len(dates) // 10)))
-    plt.setp(ax3.xaxis.get_majorticklabels(), rotation=45, ha="right")
+    # Format x-axis dates on ALL panels (not just bottom)
+    for ax in axes:
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d"))
+        ax.xaxis.set_major_locator(mdates.DayLocator(interval=1))  # Show every day
+        ax.tick_params(axis="x", labelbottom=True)  # Enable x labels on all panels
+        plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha="right", fontsize=8)
 
     fig.suptitle(
         f"Short Sale Pressure (Daily){title_suffix}",

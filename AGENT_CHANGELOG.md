@@ -233,3 +233,4 @@ Format:
 - [x] Added detailed docstrings explaining `DEFAULT_POLYGON_TRADES_MODE` and `DEFAULT_INFERENCE_VERSION`.
 - [x] Updated orchestrator to log the polygon trades mode at startup.
 - [x] Updated AGENT_CONTEXT.md and AGENT_INSTRUCTIONS.md with new config option documentation.
+- [x] Updated plotter.py: dates now shown on ALL panels (top, middle, bottom), every day labeled (no skipping).
