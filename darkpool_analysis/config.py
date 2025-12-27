@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 # =============================================================================
 # Default Configuration (can be overridden via .env)
 # =============================================================================
-DEFAULT_TICKERS = ["RGTI", "TSLA"]
+DEFAULT_TICKERS = ["TQQQ"]
 EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 
 ### US_SECTOR_CORE
@@ -47,7 +47,7 @@ EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 # Analysis defaults
 DEFAULT_TARGET_DATE = "2025-12-26"  # Last trading day (Monday)
 DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
-DEFAULT_BACKFILL_COUNT = 10  # Number of periods to fetch (days for daily, weeks for weekly)
+DEFAULT_BACKFILL_COUNT = 20  # Number of periods to fetch (days for daily, weeks for weekly)
 DEFAULT_MIN_LIT_VOLUME = 10000
 DEFAULT_MARKET_TZ = "US/Eastern"
 DEFAULT_RTH_START = "09:30"
@@ -149,6 +149,17 @@ DEFAULT_FINRA_OTC_URL = "https://api.finra.org/data/group/otcMarket/name/weeklyS
 DEFAULT_FINRA_SHORT_SALE_URL = "https://api.finra.org/data/group/otcMarket/name/regShoDaily"
 DEFAULT_FINRA_TOKEN_URL = "https://ews.fip.finra.org/fip/rest/ews/oauth2/access_token?grant_type=client_credentials"
 DEFAULT_FINRA_REQUEST_METHOD = "POST"
+DEFAULT_FINRA_CDN_URL = "https://cdn.finra.org/equity/regsho/daily"
+
+# Scanner defaults (FINRA CDN full-list short sale scan)
+DEFAULT_SCANNER_LOOKBACK_DAYS = 90
+DEFAULT_SCANNER_TREND_DAYS = 3
+DEFAULT_SCANNER_TOP_N = 50
+DEFAULT_SCANNER_OUTLIER_Z = 2.0
+DEFAULT_SCANNER_VOLUME_Z = 2.0
+DEFAULT_SCANNER_RATIO_Z = 2.0
+DEFAULT_SCANNER_EXPORT_FULL = True
+DEFAULT_SCANNER_INFERENCE_VERSION = "Scanner_v1"
 
 
 def _parse_date(value: Optional[str]) -> Optional[date]:
@@ -226,6 +237,7 @@ class Config:
     output_dir: Path
     table_dir: Path
     plot_dir: Path
+    scanner_output_dir: Path
     db_path: Path
     tickers: list[str]
     finra_tickers: list[str]
@@ -254,6 +266,7 @@ class Config:
     finra_api_key: Optional[str]
     finra_api_secret: Optional[str]
     finra_token_url: Optional[str]
+    finra_cdn_url: str
     finra_request_method: str
     finra_request_json: Optional[dict]
     finra_request_params: Optional[dict]
@@ -273,6 +286,14 @@ class Config:
     index_constituents_file: Optional[str]
     index_proxy_map: dict
     table_style: dict
+    scanner_lookback_days: int
+    scanner_trend_days: int
+    scanner_top_n: int
+    scanner_outlier_z: float
+    scanner_volume_z: float
+    scanner_ratio_z: float
+    scanner_export_full: bool
+    scanner_inference_version: str
 
 
 def load_config() -> Config:
@@ -321,6 +342,7 @@ def load_config() -> Config:
         output_dir=root_dir / "output",
         table_dir=root_dir / "output" / "tables",
         plot_dir=root_dir / "output" / "plots",
+        scanner_output_dir=root_dir / "output" / "scanner",
         db_path=root_dir / "data" / "darkpool.duckdb",
         tickers=tickers,
         finra_tickers=finra_tickers,
@@ -349,6 +371,7 @@ def load_config() -> Config:
         finra_api_key=os.getenv("FINRA_API_KEY"),
         finra_api_secret=os.getenv("FINRA_API_SECRET"),
         finra_token_url=os.getenv("FINRA_TOKEN_URL", DEFAULT_FINRA_TOKEN_URL),
+        finra_cdn_url=os.getenv("FINRA_CDN_URL", DEFAULT_FINRA_CDN_URL),
         finra_request_method=os.getenv("FINRA_REQUEST_METHOD", DEFAULT_FINRA_REQUEST_METHOD).upper(),
         finra_request_json=_parse_json_env("FINRA_REQUEST_JSON"),
         finra_request_params=_parse_json_env("FINRA_REQUEST_PARAMS"),
@@ -372,4 +395,16 @@ def load_config() -> Config:
         index_constituents_file=index_constituents_file,
         index_proxy_map=_parse_json_env("INDEX_PROXY_MAP") or DEFAULT_INDEX_PROXY_MAP,
         table_style=deepcopy(DEFAULT_TABLE_STYLE),
+        scanner_lookback_days=int(os.getenv("SCANNER_LOOKBACK_DAYS", str(DEFAULT_SCANNER_LOOKBACK_DAYS))),
+        scanner_trend_days=int(os.getenv("SCANNER_TREND_DAYS", str(DEFAULT_SCANNER_TREND_DAYS))),
+        scanner_top_n=int(os.getenv("SCANNER_TOP_N", str(DEFAULT_SCANNER_TOP_N))),
+        scanner_outlier_z=float(os.getenv("SCANNER_OUTLIER_Z", str(DEFAULT_SCANNER_OUTLIER_Z))),
+        scanner_volume_z=float(os.getenv("SCANNER_VOLUME_Z", str(DEFAULT_SCANNER_VOLUME_Z))),
+        scanner_ratio_z=float(os.getenv("SCANNER_RATIO_Z", str(DEFAULT_SCANNER_RATIO_Z))),
+        scanner_export_full=os.getenv(
+            "SCANNER_EXPORT_FULL", str(DEFAULT_SCANNER_EXPORT_FULL)
+        ).lower() in ("true", "1", "yes"),
+        scanner_inference_version=os.getenv(
+            "SCANNER_INFERENCE_VERSION", DEFAULT_SCANNER_INFERENCE_VERSION
+        ),
     )

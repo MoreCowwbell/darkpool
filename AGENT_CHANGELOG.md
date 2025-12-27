@@ -28,6 +28,10 @@ Format:
 
 ---
 ## Start of Changelog below:
+## 2025-12-27 Session Summary (Codex)
+- [x] Added FINRA CDN full-list short sale scanner with new raw/metrics tables and scoring.
+- [x] Added scanner orchestration, renderer outputs to output/scanner/YYYY-MM-DD, and -scanner CLI flag.
+- [x] Updated config/env and README/AGENT_CONTEXT docs for scanner settings and outputs.
 ## 2025-12-21 Session Summary (Codex)
 - [x] Updated `darkpool/AGENT_CONTEXT.md` to reflect the Option B dark pool ETF analysis plan and execution flow.
 - [x] Updated `darkpool/AGENT_INSTRUCTIONS.md` with inference rules, table requirements, outputs, and error handling.

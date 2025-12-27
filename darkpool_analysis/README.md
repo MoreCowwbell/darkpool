@@ -78,6 +78,17 @@ FINRA daily short sale:
 - FINRA_SHORT_SALE_URL (API endpoint, optional)
 - FINRA_SHORT_SALE_FILE (optional single file override)
 - FINRA_SHORT_SALE_DIR (optional directory of daily files)
+- FINRA_CDN_URL (scanner CDN base, default https://cdn.finra.org/equity/regsho/daily)
+
+Scanner:
+- SCANNER_LOOKBACK_DAYS (default 90)
+- SCANNER_TREND_DAYS (default 3)
+- SCANNER_TOP_N (default 50)
+- SCANNER_OUTLIER_Z (default 2.0)
+- SCANNER_VOLUME_Z (default 2.0)
+- SCANNER_RATIO_Z (default 2.0)
+- SCANNER_EXPORT_FULL (true/false, default true)
+- SCANNER_INFERENCE_VERSION (default Scanner_v1)
 
 Polygon aggregates:
 - POLYGON_DAILY_AGG_FILE (optional single file override)
@@ -91,6 +102,7 @@ Index constituents:
 ## Run
 ```
 python orchestrator.py
+python main.py -scanner
 ```
 
 ## Validation (Required Before Plotting)
@@ -101,6 +113,15 @@ Open and run:
 - DuckDB database: darkpool_analysis/data/darkpool.duckdb
 - Tables: darkpool_analysis/output/tables/ (HTML/PNG)
 - Plots: darkpool_analysis/output/plots/ (multi-panel PNG per ticker)
+- Scanner: darkpool_analysis/output/scanner/YYYY-MM-DD/
+  - scanner_metrics.csv (all symbols)
+  - scanner_top.csv (top N by scanner score)
+  - scanner_top.png (bar chart of top N)
+  - scanner_scores.png (score distribution histogram)
+
+## Scanner Notes
+- Scanner uses FINRA CDN short sale data only (no Polygon tick/minute data).
+- Results are written to scanner_daily_metrics and ranked by trend/outlier/volume z-scores.
 
 ## Table Styling
 Table presentation is controlled by `DEFAULT_TABLE_STYLE` in `darkpool_analysis/config.py`.

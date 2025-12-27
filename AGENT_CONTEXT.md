@@ -18,6 +18,7 @@
 - Polygon daily aggregates ingestion for price context.
 - Lit inference using NBBO/TICK and log(Buy/Sell).
 - Daily metrics include short/lit/OTC buy/sell volumes, buy ratios, and rolling z-scores.
+- FINRA CDN full-list short sale scanner with trend/outlier scoring and top-N outputs.
 - Table renderer for daily outputs (HTML/PNG) grouped by ticker with summary/definition panels.
 - Multi-panel plotter (Phase C): short sale buy ratio, lit buy + log buy ratios, OTC buy/sell with weekly ratio overlay, plus decision strip per ticker.
 - Index-level constituent aggregation for short pressure.
@@ -30,10 +31,14 @@
 - darkpool_analysis/db.py - DuckDB schema and upsert
 - darkpool_analysis/fetch_finra_otc.py - OTC weekly ingestion
 - darkpool_analysis/fetch_finra_short.py - short sale daily ingestion
+- darkpool_analysis/fetch_finra_short_cdn.py - full-list CDN short sale ingestion for scanner
 - darkpool_analysis/fetch_polygon_equity.py - Polygon trades fetcher
 - darkpool_analysis/fetch_polygon_agg.py - Polygon daily aggregates (price/volume)
 - darkpool_analysis/infer_buy_sell.py - lit-direction classification
 - darkpool_analysis/analytics.py - lit_direction_daily + daily_metrics + index aggregation
+- darkpool_analysis/scanner_orchestrator.py - short sale scanner driver
+- darkpool_analysis/scanner_analytics.py - scanner metrics and scoring
+- darkpool_analysis/scanner_renderer.py - scanner CSV/plot outputs
 - darkpool_analysis/table_renderer.py - daily table outputs (HTML/PNG)
 - darkpool_analysis/plotter.py - multi-panel metric plots (Phase C)
 - darkpool_analysis/data/darkpool.duckdb - persistent storage
@@ -65,11 +70,13 @@
 - Raw tables:
   - finra_otc_weekly_raw: symbol, week_start_date, off_exchange_volume, trade_count, tier/participant metadata
   - finra_short_daily_raw: symbol, trade_date, short_volume, short_exempt_volume, total_volume, market, source_file
+  - finra_short_daily_all_raw: symbol, trade_date, short_volume, short_exempt_volume, total_volume, market, source_file
   - polygon_equity_trades_raw: symbol, timestamp, price, size, bid, ask
   - polygon_daily_agg_raw: symbol, trade_date, open, high, low, close, vwap, volume
 - Derived tables:
   - lit_direction_daily: symbol, date, lit_buy_volume, lit_sell_volume, lit_buy_ratio, log_buy_sell, classification_method, coverage, inference_version
   - daily_metrics: symbol, date, short/lit/OTC buy/sell volumes, buy ratios, z-scores, short_ratio_denominator_type/value, otc_status, otc_week_used, price/return context, pressure_context_label, data_quality, provenance flags, inference_version
+  - scanner_daily_metrics: symbol, date, short ratio/volume z-scores, trend/outlier scoring, scanner_score
   - index_constituent_short_agg_daily: index_symbol, trade_date, agg_short_ratio, coverage stats, index_return, interpretation_label
   - composite_signal (Phase C only)
 
@@ -97,6 +104,8 @@
 - FINRA_SHORT_SALE_* env vars control daily short sale ingestion.
 - FINRA_OTC_* env vars control weekly OTC ingestion.
 - POLYGON_* env vars control Polygon ingestion.
+- FINRA_CDN_URL controls scanner CDN base URL.
+- SCANNER_* env vars control scanner windows, thresholds, and output behavior.
 
 ## FINRA API Authentication
 - FINRA Query API requires OAuth 2.0 client_credentials flow.

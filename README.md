@@ -6,3 +6,6 @@ Mandatory disclaimer:
 "FINRA does not publish trade direction for off-exchange volume. Buy/Sell values are inferred estimates derived from lit-market equity trades and applied proportionally to FINRA OTC volume."
 
 See `darkpool_analysis/README.md` for setup, configuration, and pipeline details.
+
+Scanner:
+- `python main.py -scanner` (FINRA CDN full-list scan, outputs to darkpool_analysis/output/scanner/YYYY-MM-DD)

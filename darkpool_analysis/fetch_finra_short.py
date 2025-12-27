@@ -93,6 +93,10 @@ def _normalize_short_sale_df(df: pd.DataFrame, source_file: Optional[str]) -> pd
     ]
 
 
+def normalize_short_sale_df(df: pd.DataFrame, source_file: Optional[str]) -> pd.DataFrame:
+    return _normalize_short_sale_df(df, source_file)
+
+
 def _load_short_sale_file(path: str) -> pd.DataFrame:
     df = pd.read_csv(path, sep="|")
     return _normalize_short_sale_df(df, Path(path).name)

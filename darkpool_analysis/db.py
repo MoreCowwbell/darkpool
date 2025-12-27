@@ -47,6 +47,20 @@ def init_db(conn: duckdb.DuckDBPyConnection) -> None:
     )
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS finra_short_daily_all_raw (
+            symbol TEXT,
+            trade_date DATE,
+            short_volume DOUBLE,
+            short_exempt_volume DOUBLE,
+            total_volume DOUBLE,
+            market TEXT,
+            source TEXT,
+            source_file TEXT
+        )
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS polygon_equity_trades_raw (
             symbol TEXT,
             timestamp TIMESTAMP,
@@ -152,6 +166,60 @@ def init_db(conn: duckdb.DuckDBPyConnection) -> None:
     ]
     for column_def in daily_metrics_columns:
         conn.execute(f"ALTER TABLE daily_metrics ADD COLUMN IF NOT EXISTS {column_def}")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS scanner_daily_metrics (
+            date DATE,
+            symbol TEXT,
+            short_volume DOUBLE,
+            short_exempt_volume DOUBLE,
+            total_volume DOUBLE,
+            short_total_volume DOUBLE,
+            short_buy_volume DOUBLE,
+            short_sell_volume DOUBLE,
+            short_ratio DOUBLE,
+            short_ratio_z DOUBLE,
+            short_buy_sell_ratio DOUBLE,
+            short_buy_sell_ratio_z DOUBLE,
+            short_total_volume_z DOUBLE,
+            trend_score DOUBLE,
+            trend_label TEXT,
+            scanner_direction TEXT,
+            trend_days INTEGER,
+            outlier_score DOUBLE,
+            is_outlier BOOLEAN,
+            is_unusual_volume BOOLEAN,
+            is_unusual_ratio BOOLEAN,
+            scanner_score DOUBLE,
+            inference_version TEXT
+        )
+        """
+    )
+    scanner_metric_columns = [
+        "short_volume DOUBLE",
+        "short_exempt_volume DOUBLE",
+        "total_volume DOUBLE",
+        "short_total_volume DOUBLE",
+        "short_buy_volume DOUBLE",
+        "short_sell_volume DOUBLE",
+        "short_ratio DOUBLE",
+        "short_ratio_z DOUBLE",
+        "short_buy_sell_ratio DOUBLE",
+        "short_buy_sell_ratio_z DOUBLE",
+        "short_total_volume_z DOUBLE",
+        "trend_score DOUBLE",
+        "trend_label TEXT",
+        "scanner_direction TEXT",
+        "trend_days INTEGER",
+        "outlier_score DOUBLE",
+        "is_outlier BOOLEAN",
+        "is_unusual_volume BOOLEAN",
+        "is_unusual_ratio BOOLEAN",
+        "scanner_score DOUBLE",
+        "inference_version TEXT",
+    ]
+    for column_def in scanner_metric_columns:
+        conn.execute(f"ALTER TABLE scanner_daily_metrics ADD COLUMN IF NOT EXISTS {column_def}")
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS index_constituent_short_agg_daily (
