@@ -142,6 +142,9 @@ def fetch_polygon_daily_agg(
         cache_stats: {"cached": int, "fetched": int}
     """
     cache_stats = {"cached": 0, "fetched": 0}
+    empty_df = pd.DataFrame(columns=[
+        "symbol", "trade_date", "open", "high", "low", "close", "vwap", "volume", "fetch_timestamp"
+    ])
 
     if config.polygon_daily_agg_file:
         logger.info("Loading Polygon daily agg from file: %s", config.polygon_daily_agg_file)
@@ -164,7 +167,7 @@ def fetch_polygon_daily_agg(
                 )
             if not symbols_to_fetch:
                 logger.info("All symbols cached for %s (daily agg), skipping fetch", trade_date.isoformat())
-                return pd.DataFrame(), cache_stats
+                return empty_df, cache_stats
 
         max_workers = int(os.getenv("POLYGON_MAX_WORKERS", "4"))
         frames = []
@@ -197,7 +200,7 @@ def fetch_polygon_daily_agg(
                 mark_ingestion_complete(conn, symbol, trade_date, "daily", 1)
 
         if not frames:
-            return pd.DataFrame(), cache_stats
+            return empty_df, cache_stats
         df = pd.concat(frames, ignore_index=True)
         df["fetch_timestamp"] = datetime.utcnow()
 

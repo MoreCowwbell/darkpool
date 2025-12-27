@@ -162,6 +162,21 @@ def build_daily_metrics(
         [(symbol, d) for symbol in config.tickers for d in all_dates],
         columns=["symbol", "date"],
     )
+    # Normalize date column to datetime64 for consistent merging with DB-sourced DataFrames
+    daily_base["date"] = pd.to_datetime(daily_base["date"])
+
+    # Normalize lit_df date column if not empty
+    if not lit_df.empty and "date" in lit_df.columns:
+        lit_df = lit_df.copy()
+        lit_df["date"] = pd.to_datetime(lit_df["date"])
+
+    # Normalize short_daily and price_context trade_date columns
+    if not short_daily.empty and "trade_date" in short_daily.columns:
+        short_daily = short_daily.copy()
+        short_daily["trade_date"] = pd.to_datetime(short_daily["trade_date"])
+    if not price_context.empty and "trade_date" in price_context.columns:
+        price_context = price_context.copy()
+        price_context["trade_date"] = pd.to_datetime(price_context["trade_date"])
 
     lit_cols = [
         "symbol",

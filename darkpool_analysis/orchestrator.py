@@ -49,9 +49,16 @@ def _export_table(df: pd.DataFrame, path) -> None:
 
 
 def _concat_frames(frames: list[pd.DataFrame]) -> pd.DataFrame:
-    non_empty = [df for df in frames if not df.empty]
+    # Filter to non-empty frames that have at least one non-NA value
+    non_empty = [df for df in frames if not df.empty and not df.isna().all().all()]
     if not non_empty:
+        # Preserve column structure from first frame with columns
+        for df in frames:
+            if len(df.columns) > 0:
+                return df.head(0)  # Empty DataFrame with same columns
         return pd.DataFrame()
+    if len(non_empty) == 1:
+        return non_empty[0].reset_index(drop=True)
     return pd.concat(non_empty, ignore_index=True)
 
 
@@ -121,9 +128,12 @@ def main() -> None:
             if not trades_df.empty:
                 upsert_dataframe(conn, "polygon_equity_trades_raw", trades_df, ["symbol", "timestamp", "data_source"])
 
-            lit_df = compute_lit_directional_flow(trades_df, symbols_to_fetch, run_date, config)
-            upsert_dataframe(conn, "lit_direction_daily", lit_df, ["symbol", "date"])
-            lit_frames.append(lit_df)
+            # Only compute lit direction if we fetched new trades (not cached)
+            # Avoid overwriting real data with placeholder NA values
+            if trades_cache_stats["fetched"] > 0:
+                lit_df = compute_lit_directional_flow(trades_df, symbols_to_fetch, run_date, config)
+                upsert_dataframe(conn, "lit_direction_daily", lit_df, ["symbol", "date"])
+                lit_frames.append(lit_df)
 
             try:
                 agg_df, agg_cache_stats = fetch_polygon_daily_agg(
@@ -142,8 +152,19 @@ def main() -> None:
             agg_frames.append(agg_df)
 
         short_all = _concat_frames(short_frames)
-        lit_all = _concat_frames(lit_frames)
         agg_all = _concat_frames(agg_frames)
+
+        # Read lit_direction_daily from DB (includes cached + newly computed)
+        # This ensures we have complete lit data even when trades were cached
+        lit_all = conn.execute(
+            """
+            SELECT symbol, date, lit_buy_volume, lit_sell_volume, lit_buy_ratio,
+                   log_buy_sell, classification_method, lit_coverage_pct, inference_version
+            FROM lit_direction_daily
+            WHERE date >= ? AND date <= ?
+            """,
+            [min(config.target_dates), max(config.target_dates)],
+        ).fetchdf()
 
         daily_metrics_df = build_daily_metrics(
             finra_all_df,

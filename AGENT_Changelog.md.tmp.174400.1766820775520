@@ -250,8 +250,3 @@ Format:
 - [x] Fixed FutureWarning about DataFrame concatenation with empty/all-NA entries:
   - Added filter to exclude all-NA DataFrames before concat.
   - Added early return for single-frame case to avoid unnecessary concat.
-- [x] Fixed lit direction data being overwritten with NA when trades cached:
-  - Root cause: `compute_lit_directional_flow` returned placeholder rows with NA values when trades_df was empty.
-  - These placeholder rows were upserting and overwriting real lit_direction_daily data.
-  - Fix: Only compute and upsert lit direction when `trades_cache_stats["fetched"] > 0`.
-  - Now read lit_direction_daily from database for all dates (includes cached + newly computed).
