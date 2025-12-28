@@ -69,6 +69,9 @@ def render_scanner_outputs(
     if daily.empty:
         return
 
+    daily = daily[daily["scanner_score"].notna()].copy()
+    if daily.empty:
+        return
     daily = daily.sort_values(["scanner_score"], ascending=False)
     top_df = daily.head(top_n).copy()
     top_df["rank"] = range(1, len(top_df) + 1)

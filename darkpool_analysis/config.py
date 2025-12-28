@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 # =============================================================================
 # Default Configuration (can be overridden via .env)
 # =============================================================================
-DEFAULT_TICKERS = ["TQQQ"]
+DEFAULT_TICKERS = ["RGTI", "TSLA"]
 EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 
 ### US_SECTOR_CORE
