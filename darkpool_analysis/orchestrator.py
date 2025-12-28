@@ -21,6 +21,7 @@ try:
     from .fetch_polygon_equity import fetch_polygon_trades
     from .infer_buy_sell import compute_lit_directional_flow
     from .plotter import render_metrics_plots
+    from .plotter_chart import render_price_charts
     from .table_renderer import render_daily_metrics_table
 except ImportError:
     from analytics import build_daily_metrics, build_index_constituent_short_agg
@@ -32,6 +33,7 @@ except ImportError:
     from fetch_polygon_equity import fetch_polygon_trades
     from infer_buy_sell import compute_lit_directional_flow
     from plotter import render_metrics_plots
+    from plotter_chart import render_price_charts
     from table_renderer import render_daily_metrics_table
 
 
@@ -39,6 +41,7 @@ def _ensure_dirs(config) -> None:
     config.data_dir.mkdir(parents=True, exist_ok=True)
     config.table_dir.mkdir(parents=True, exist_ok=True)
     config.plot_dir.mkdir(parents=True, exist_ok=True)
+    config.price_chart_dir.mkdir(parents=True, exist_ok=True)
 
 
 def _export_table(df: pd.DataFrame, path) -> None:
@@ -73,6 +76,11 @@ def main() -> None:
     logging.info("Fetch mode: %s, dates to process: %d", config.fetch_mode, len(config.target_dates))
     logging.info("Polygon trades mode: %s", config.polygon_trades_mode)
     logging.info("Cache enabled: %s", config.skip_cached)
+    logging.info(
+        "Price charts: %s (timeframe=%s)",
+        config.render_price_charts,
+        config.price_bar_timeframe,
+    )
 
     max_date = max(config.target_dates)
     min_date = min(config.target_dates)
@@ -228,6 +236,18 @@ def main() -> None:
         )
     except Exception as exc:
         logging.error("Failed to render metrics plots: %s", exc)
+
+    if config.render_price_charts:
+        try:
+            render_price_charts(
+                db_path=config.db_path,
+                output_dir=config.price_chart_dir,
+                dates=config.target_dates,
+                tickers=config.tickers,
+                timeframe=config.price_bar_timeframe,
+            )
+        except Exception as exc:
+            logging.error("Failed to render price charts: %s", exc)
 
     logging.info("Analysis complete. Processed %d dates.", len(config.target_dates))
 

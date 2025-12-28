@@ -274,3 +274,7 @@ Format:
 
 ## 2025-12-28 Session Summary (Codex)
 - [x] Extended FINRA OTC API date range to cover the full target-date span and wired the range into orchestrator calls.
+
+## 2025-12-28 Session Summary (Codex)
+- [x] Added standalone OHLCV price chart renderer with accumulation signal markers and dark-theme styling.
+- [x] Wired price chart rendering into config/orchestrator and documented new outputs/options.

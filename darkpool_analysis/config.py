@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 # =============================================================================
 # Default Configuration (can be overridden via .env)
 # =============================================================================
-DEFAULT_TICKERS = ["VIXY"]
+DEFAULT_TICKERS = ["META"]
 EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 
 # ### US_SECTOR_CORE
@@ -99,6 +99,8 @@ DEFAULT_RETURN_Z_MIN = 0.5
 DEFAULT_SHORT_SALE_PREFERRED_SOURCE = "CNMS"
 DEFAULT_INDEX_CONSTITUENTS_DIR = "data/constituents"
 DEFAULT_INDEX_PROXY_MAP = {"SPX": "SPY"}
+DEFAULT_RENDER_PRICE_CHARTS = True
+DEFAULT_PRICE_BAR_TIMEFRAME = "daily"
 
 DEFAULT_TABLE_STYLE = {
     "mode": "scan",
@@ -257,6 +259,7 @@ class Config:
     output_dir: Path
     table_dir: Path
     plot_dir: Path
+    price_chart_dir: Path
     scanner_output_dir: Path
     db_path: Path
     tickers: list[str]
@@ -273,6 +276,8 @@ class Config:
     polygon_trades_mode: str  # "tick", "minute", or "daily"
     skip_cached: bool  # Skip fetching if already in DB
     export_csv: bool
+    render_price_charts: bool
+    price_bar_timeframe: str
     polygon_api_key: Optional[str]
     polygon_base_url: str
     polygon_trades_file: Optional[str]
@@ -369,6 +374,7 @@ def load_config() -> Config:
         output_dir=root_dir / "output",
         table_dir=root_dir / "output" / "tables",
         plot_dir=root_dir / "output" / "plots",
+        price_chart_dir=root_dir / "output" / "price_charts",
         scanner_output_dir=root_dir / "output" / "scanner",
         db_path=root_dir / "data" / "darkpool.duckdb",
         tickers=tickers,
@@ -385,6 +391,12 @@ def load_config() -> Config:
         polygon_trades_mode=os.getenv("POLYGON_TRADES_MODE", DEFAULT_POLYGON_TRADES_MODE).lower(),
         skip_cached=os.getenv("SKIP_CACHED", str(DEFAULT_SKIP_CACHED)).lower() in ("true", "1", "yes"),
         export_csv=os.getenv("EXPORT_CSV", str(DEFAULT_EXPORT_CSV)).lower() in ("true", "1", "yes"),
+        render_price_charts=os.getenv(
+            "RENDER_PRICE_CHARTS", str(DEFAULT_RENDER_PRICE_CHARTS)
+        ).lower() in ("true", "1", "yes"),
+        price_bar_timeframe=os.getenv(
+            "PRICE_BAR_TIMEFRAME", DEFAULT_PRICE_BAR_TIMEFRAME
+        ).lower(),
         polygon_api_key=os.getenv("POLYGON_API_KEY"),
         polygon_base_url=os.getenv("POLYGON_BASE_URL", DEFAULT_POLYGON_BASE_URL),
         polygon_trades_file=polygon_trades_file,

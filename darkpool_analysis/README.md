@@ -35,11 +35,13 @@ darkpool_analysis/
 ├── analytics.py
 ├── table_renderer.py
 ├── plotter.py
+├── plotter_chart.py
 ├── data/
 │   └── darkpool.duckdb
 └── output/
     ├── tables/
     └── plots/
+    └── price_charts/
 ```
 
 ## Setup
@@ -58,6 +60,8 @@ Core:
 - RTH_START, RTH_END (default 09:30, 16:15)
 - INFERENCE_VERSION (e.g., PhaseA_v1)
 - EXPORT_CSV (true/false)
+- RENDER_PRICE_CHARTS (true/false)
+- PRICE_BAR_TIMEFRAME (daily, weekly, monthly)
 
 Polygon:
 - POLYGON_API_KEY (required for API fetch)
@@ -113,6 +117,7 @@ Open and run:
 - DuckDB database: darkpool_analysis/data/darkpool.duckdb
 - Tables: darkpool_analysis/output/tables/ (HTML/PNG)
 - Plots: darkpool_analysis/output/plots/ (multi-panel PNG per ticker)
+- Price charts: darkpool_analysis/output/price_charts/ (OHLCV PNG per ticker)
 - Scanner: darkpool_analysis/output/scanner/YYYY-MM-DD/
   - scanner_metrics.csv (all symbols)
   - scanner_top.csv (top N by scanner score)
@@ -141,6 +146,7 @@ Key knobs:
 Example:
 ```
 python plotter.py --dates 2025-12-20 --mode short_only
+python plotter_chart.py --dates 2025-12-20 --timeframe daily
 ```
 
 ## How to Read the Plot (Layered Mode)
