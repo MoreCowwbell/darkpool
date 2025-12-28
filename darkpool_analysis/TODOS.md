@@ -55,4 +55,5 @@
 - [] Same scanner, if filtered for volume or market cap and tracked as a plot over time, could also give us a macro signal of the entire market.
 - [] Add figure expansion on width based on number of days being plotted
 - [] Add price chart at the bottom
+- [] don't overwrite tables
 
