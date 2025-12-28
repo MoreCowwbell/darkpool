@@ -20,7 +20,11 @@
 - Daily metrics include short/lit/OTC buy/sell volumes, buy ratios, and rolling z-scores.
 - FINRA CDN full-list short sale scanner with trend/outlier scoring and top-N outputs.
 - Table renderer for daily outputs (HTML/PNG) grouped by ticker with summary/definition panels.
-- Multi-panel plotter (Phase C): short sale buy ratio, lit buy + log buy ratios, OTC buy/sell with weekly ratio overlay, plus decision strip per ticker.
+- Multi-panel plotter (Phase C redesign):
+  - Panel 1: Short sale buy/sell ratio (~50% height) with agreement markers
+  - Panel 2: Lit flow imbalance (bounded [-1,+1]) for confirmation
+  - Panel 3: OTC participation rate (weekly step bands, not inferred direction)
+  - Panel 4: Composite accumulation score (0-100) with confidence bar
 - Index-level constituent aggregation for short pressure.
 - Pipeline validated and running end-to-end (2025-12-24).
 
@@ -76,6 +80,7 @@
 - Derived tables:
   - lit_direction_daily: symbol, date, lit_buy_volume, lit_sell_volume, lit_buy_ratio, log_buy_sell, classification_method, coverage, inference_version
   - daily_metrics: symbol, date, short/lit/OTC buy/sell volumes, buy ratios, z-scores, short_ratio_denominator_type/value, otc_status, otc_week_used, price/return context, pressure_context_label, data_quality, provenance flags, inference_version
+    - New columns: lit_flow_imbalance, lit_flow_imbalance_z, otc_participation_rate, otc_participation_z, otc_participation_delta, accumulation_score, accumulation_score_display, confidence
   - scanner_daily_metrics: symbol, date, short ratio/volume z-scores, trend/outlier scoring, scanner_score
   - index_constituent_short_agg_daily: index_symbol, trade_date, agg_short_ratio, coverage stats, index_return, interpretation_label
   - composite_signal (Phase C only)
@@ -120,10 +125,12 @@
 - Example: `{"domainFilters": [{"fieldName": "securitiesInformationProcessorSymbolIdentifier", "values": ["RGTI", "AMZN"]}]}`
 
 ## Known Gaps and Watchouts
+- **CRITICAL: OTC direction is NOT observable.** FINRA OTC data only provides volume, not buy/sell direction. Previous OTC buy/sell inference (applying lit ratios to OTC volume) has been replaced with OTC participation rate which measures institutional activity intensity only.
 - Short sale "TotalVolume" is facility-specific, not total market volume.
 - If total_volume is missing, short_ratio uses Polygon total volume and is marked as a proxy.
 - Short Sale Buy Ratio excludes short-exempt volume; short-exempt is kept separately for diagnostics.
 - OTC weekly data is delayed; daily metrics must flag PRE_OTC when stale.
+- OTC participation rate is a proxy: FINRA OTC = all-hours volume, Polygon weekly total = RTH-biased.
 - Some tickers may lack FINRA OTC coverage; keep rows with has_otc false.
 - Index aggregation requires a maintained constituent list; static lists may drift over time.
 

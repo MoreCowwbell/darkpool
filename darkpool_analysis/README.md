@@ -134,13 +134,74 @@ Key knobs:
 - `palette` (muted green/red and neutral tones)
 
 ## Plot Modes
-- layered (default): short sale buy ratio, lit buy ratios (lit + log), OTC buy/sell with decision strip.
+- layered (default): 4-panel visualization with short sale buy ratio, lit flow imbalance, OTC participation, and accumulation score.
 - short_only: short ratio, short sale volume, close price.
 - both: render layered and short_only together.
 
 Example:
 ```
 python plotter.py --dates 2025-12-20 --mode short_only
+```
+
+## How to Read the Plot (Layered Mode)
+
+**Panel 1: Short Sale Buy/Sell Ratio (~50% height)**
+- Primary signal: Short volume / (Total volume - Short volume)
+- Thresholds: >1.25 = Bullish (BOT), <0.75 = Bearish (SELL), ~1.0 = Neutral
+- Agreement markers: Green ▲ = short+lit both bullish, Red ▼ = both bearish, Yellow ◆ = divergence
+
+**Panel 2: Lit Flow Imbalance (~20% height)**
+- Confirmation signal: (LitBuy - LitSell) / (LitBuy + LitSell)
+- Range: [-1, +1], centered at 0
+- Thresholds: ±0.1 (weak signal), ±0.2 (strong signal)
+- NULL if lit volume < MIN_LIT_VOLUME (insufficient data)
+
+**Panel 3: OTC Participation (~15% height)**
+- Institutional activity intensity: OTC_weekly_volume / Weekly_total_volume
+- Color by z-score: Cyan (elevated), Yellow (normal), Gray (low/stale)
+- Week-over-week delta bars: Green = rising, Red = falling
+- NOTE: OTC direction is NOT observable; this measures participation only
+
+**Panel 4: Accumulation Score (~10% height)**
+- Composite score: 0-100 scale (Red <30 → Gray 50 → Green >70)
+- Weights: 55% short z-score, 30% lit z-score, 15% price z-score
+- Intensity modulation: High OTC participation amplifies signal, low OTC dampens
+- Confidence bar: White bar below shows data quality (higher = more reliable)
+
+## Key Metric Formulas
+
+**Short Sale Buy/Sell Ratio:**
+```
+short_buy_volume = short_volume (from FINRA)
+short_sell_volume = total_volume - short_volume
+short_buy_sell_ratio = short_buy_volume / short_sell_volume
+```
+
+**Lit Flow Imbalance (bounded [-1, +1]):**
+```
+lit_flow_imbalance = (lit_buy - lit_sell) / (lit_buy + lit_sell)
+NULL if (lit_buy + lit_sell) < MIN_LIT_VOLUME
+```
+
+**OTC Participation Rate (proxy):**
+```
+otc_participation_rate = otc_weekly_volume / weekly_total_volume
+⚠️ FINRA OTC = all-hours, Polygon = RTH-biased; ratio is a proxy
+```
+
+**Accumulation Score (0-100):**
+```
+raw_score = 0.55 * tanh(short_z * 0.5) + 0.30 * tanh(lit_z * 0.5) + 0.15 * tanh(price_z * 0.3)
+intensity_scale = 0.7 + 0.6 * sigmoid(otc_participation_z)  # range [0.7, 1.3]
+accumulation_score = clip(raw_score * intensity_scale, -1, 1)
+display_score = (accumulation_score + 1) * 50  # map to 0-100
+```
+
+**Confidence Score (0.25-1.0):**
+```
+staleness_penalty: Anchored=1.0, Staled=0.7, None=0.5
+coverage_penalty: all data=1.0, missing one=0.8, missing 2+=0.5
+confidence = staleness_penalty * coverage_penalty * (0.9 if lit_flow_imbalance NULL else 1.0)
 ```
 
 ## Notes on Inference

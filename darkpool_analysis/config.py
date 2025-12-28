@@ -161,6 +161,15 @@ DEFAULT_SCANNER_RATIO_Z = 2.0
 DEFAULT_SCANNER_EXPORT_FULL = True
 DEFAULT_SCANNER_INFERENCE_VERSION = "Scanner_v1"
 
+# Composite Score Weights (Phase 4)
+DEFAULT_COMPOSITE_W_SHORT = 0.55  # Short sale primary signal
+DEFAULT_COMPOSITE_W_LIT = 0.30    # Lit flow confirmation
+DEFAULT_COMPOSITE_W_PRICE = 0.15  # Price momentum
+
+# Intensity Scale Bounds (OTC participation modulation)
+DEFAULT_INTENSITY_SCALE_MIN = 0.7  # Low OTC dampens signal
+DEFAULT_INTENSITY_SCALE_MAX = 1.3  # High OTC amplifies signal
+
 
 def _parse_date(value: Optional[str]) -> Optional[date]:
     if not value:
@@ -294,6 +303,11 @@ class Config:
     scanner_ratio_z: float
     scanner_export_full: bool
     scanner_inference_version: str
+    composite_w_short: float
+    composite_w_lit: float
+    composite_w_price: float
+    intensity_scale_min: float
+    intensity_scale_max: float
 
 
 def load_config() -> Config:
@@ -407,4 +421,9 @@ def load_config() -> Config:
         scanner_inference_version=os.getenv(
             "SCANNER_INFERENCE_VERSION", DEFAULT_SCANNER_INFERENCE_VERSION
         ),
+        composite_w_short=float(os.getenv("COMPOSITE_W_SHORT", str(DEFAULT_COMPOSITE_W_SHORT))),
+        composite_w_lit=float(os.getenv("COMPOSITE_W_LIT", str(DEFAULT_COMPOSITE_W_LIT))),
+        composite_w_price=float(os.getenv("COMPOSITE_W_PRICE", str(DEFAULT_COMPOSITE_W_PRICE))),
+        intensity_scale_min=float(os.getenv("INTENSITY_SCALE_MIN", str(DEFAULT_INTENSITY_SCALE_MIN))),
+        intensity_scale_max=float(os.getenv("INTENSITY_SCALE_MAX", str(DEFAULT_INTENSITY_SCALE_MAX))),
     )

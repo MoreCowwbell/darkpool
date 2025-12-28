@@ -221,6 +221,8 @@ def fetch_metrics_for_plot(
             log_buy_sell,
             lit_buy_ratio,
             lit_buy_ratio_z,
+            lit_flow_imbalance,
+            lit_flow_imbalance_z,
             lit_buy_volume,
             lit_sell_volume,
             lit_total_volume,
@@ -229,10 +231,18 @@ def fetch_metrics_for_plot(
             otc_sell_volume,
             otc_weekly_buy_ratio,
             otc_buy_ratio_z,
+            otc_week_used,
+            weekly_total_volume,
+            otc_participation_rate,
+            otc_participation_z,
+            otc_participation_delta,
             close,
             return_1d,
             return_z,
             otc_status,
+            accumulation_score,
+            accumulation_score_display,
+            confidence,
             pressure_context_label
         FROM daily_metrics
         WHERE symbol = ? AND date IN ({date_placeholders})
@@ -330,9 +340,9 @@ def plot_symbol_metrics(
     fig, axes = plt.subplots(
         4,
         1,
-        figsize=(12, 12),
+        figsize=(12, 11),
         sharex=True,
-        gridspec_kw={"height_ratios": [3, 3, 3, 0.7]},
+        gridspec_kw={"height_ratios": [5, 2, 1.5, 1.0]},
     )
     fig.patch.set_facecolor(COLORS["background"])
 
@@ -358,6 +368,22 @@ def plot_symbol_metrics(
             linewidths=0.4,
         )
 
+    # Agreement markers: show when short and lit signals agree/disagree
+    lit_imbalance = df["lit_flow_imbalance"]
+    for i, (d, sr, li) in enumerate(zip(dates, short_ratio, lit_imbalance)):
+        if pd.isna(sr) or pd.isna(li):
+            continue
+        short_bullish = sr > BOT_THRESHOLD
+        short_bearish = sr < SELL_THRESHOLD
+        lit_bullish = li > 0.1
+        lit_bearish = li < -0.1
+        if short_bullish and lit_bullish:
+            ax1.scatter([d], [sr], c=COLORS["green"], s=80, marker="^", zorder=10, alpha=0.8)
+        elif short_bearish and lit_bearish:
+            ax1.scatter([d], [sr], c=COLORS["red"], s=80, marker="v", zorder=10, alpha=0.8)
+        elif (short_bullish and lit_bearish) or (short_bearish and lit_bullish):
+            ax1.scatter([d], [sr], c=COLORS["yellow"], s=60, marker="D", zorder=10, alpha=0.7)
+
     _set_abs_ratio_axis(
         ax1,
         short_ratio,
@@ -371,47 +397,25 @@ def plot_symbol_metrics(
     ax1.set_title(f"{symbol} - Short Sale Buy/Sell Ratio", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
     legend_handles_1 = [
         Line2D([0], [0], color=COLORS["cyan"], linewidth=MAIN_LINE_WIDTH, label="Short Sale Buy/Sell Ratio"),
-        Line2D(
-            [0], [0],
-            marker="o",
-            color="none",
-            markerfacecolor=COLORS["cyan"],
-            markeredgecolor=COLORS["white"],
-            markersize=4.5,
-            label="Observations",
-        ),
         Line2D([0], [0], color=COLORS["neutral"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="Neutral (1.0)"),
-        Line2D([0], [0], color=COLORS["green"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="BOT threshold (1.25)"),
-        Line2D([0], [0], color=COLORS["red"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="SELL threshold (0.75)"),
+        Line2D([0], [0], color=COLORS["green"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="BOT (1.25)"),
+        Line2D([0], [0], color=COLORS["red"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="SELL (0.75)"),
+        Line2D([0], [0], marker="^", color="none", markerfacecolor=COLORS["green"], markersize=6, label="Both Bullish"),
+        Line2D([0], [0], marker="v", color="none", markerfacecolor=COLORS["red"], markersize=6, label="Both Bearish"),
+        Line2D([0], [0], marker="D", color="none", markerfacecolor=COLORS["yellow"], markersize=5, label="Divergence"),
     ]
     _add_panel_legend(ax1, legend_handles_1, [h.get_label() for h in legend_handles_1], loc="upper left")
 
-    # Panel 2: Lit Buy Ratio + Log Buy Ratio
+    # Panel 2: Lit Flow Imbalance (bounded [-1, +1])
     ax2 = axes[1]
-    lit_buy_ratio = df["lit_buy_ratio"]
-    log_buy_ratio = df["log_buy_sell"]
+    lit_imbalance_series = df["lit_flow_imbalance"]
 
-    valid_mask2 = ~lit_buy_ratio.isna()
+    valid_mask2 = ~lit_imbalance_series.isna()
     if valid_mask2.any():
-        _plot_smooth_line(ax2, dates, lit_buy_ratio, COLORS["cyan"], valid_mask2, linewidth=MAIN_LINE_WIDTH)
+        _plot_smooth_line(ax2, dates, lit_imbalance_series, COLORS["yellow"], valid_mask2, linewidth=MAIN_LINE_WIDTH)
         ax2.scatter(
             dates,
-            lit_buy_ratio,
-            c=COLORS["cyan"],
-            s=MARKER_SIZE_SMALL,
-            zorder=5,
-            edgecolors=COLORS["white"],
-            linewidths=0.4,
-        )
-
-    ax2b = ax2.twinx()
-    _apply_secondary_axis_style(ax2b)
-    valid_mask2b = ~log_buy_ratio.isna()
-    if valid_mask2b.any():
-        _plot_smooth_line(ax2b, dates, log_buy_ratio, COLORS["yellow"], valid_mask2b, linewidth=SECONDARY_LINE_WIDTH)
-        ax2b.scatter(
-            dates,
-            log_buy_ratio,
+            lit_imbalance_series,
             c=COLORS["yellow"],
             s=MARKER_SIZE_SMALL,
             zorder=5,
@@ -419,121 +423,230 @@ def plot_symbol_metrics(
             linewidths=0.4,
         )
 
-    _set_abs_ratio_axis(
-        ax2,
-        lit_buy_ratio,
-        neutral_value=NEUTRAL_RATIO,
-        linestyle="--",
-        linewidth=THRESHOLD_LINE_WIDTH,
-        alpha=0.6,
-    )
-    _set_log_ratio_axis(
-        ax2b,
-        log_buy_ratio,
-        neutral_value=0.0,
-        linestyle="--",
-        linewidth=THRESHOLD_LINE_WIDTH,
-        alpha=0.6,
-    )
+    # Set y-axis bounds for [-1, +1] range
+    ax2.set_ylim(-1.0, 1.0)
+    ax2.set_yticks([-1.0, -0.5, -0.2, -0.1, 0, 0.1, 0.2, 0.5, 1.0])
+    ax2.axhline(y=0, color=COLORS["neutral"], linestyle="--", linewidth=THRESHOLD_LINE_WIDTH, alpha=0.6)
+    ax2.axhline(y=0.1, color=COLORS["green"], linestyle="--", linewidth=THRESHOLD_LINE_WIDTH, alpha=0.5)
+    ax2.axhline(y=-0.1, color=COLORS["red"], linestyle="--", linewidth=THRESHOLD_LINE_WIDTH, alpha=0.5)
+    ax2.axhline(y=0.2, color=COLORS["green"], linestyle=":", linewidth=THRESHOLD_LINE_WIDTH, alpha=0.4)
+    ax2.axhline(y=-0.2, color=COLORS["red"], linestyle=":", linewidth=THRESHOLD_LINE_WIDTH, alpha=0.4)
 
-    ax2.set_ylabel("Lit Buy Ratio", color=COLORS["cyan"], fontsize=10)
-    ax2b.set_ylabel("Log Buy Ratio", color=COLORS["yellow"], fontsize=10)
-    ax2.set_title("Lit Directional Flow", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
+    ax2.set_ylabel("Lit Flow Imbalance", color=COLORS["yellow"], fontsize=10)
+    ax2.set_title("Lit Flow Imbalance (Confirmation)", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
     legend_handles_2 = [
-        Line2D([0], [0], color=COLORS["cyan"], linewidth=MAIN_LINE_WIDTH, label="Lit Buy Ratio"),
-        Line2D([0], [0], color=COLORS["yellow"], linewidth=SECONDARY_LINE_WIDTH, label="Log Buy Ratio"),
-        Line2D([0], [0], color=COLORS["neutral"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="Neutral (1.0)"),
-        Line2D([0], [0], color=COLORS["neutral"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="Neutral (0.0)"),
+        Line2D([0], [0], color=COLORS["yellow"], linewidth=MAIN_LINE_WIDTH, label="Lit Imbalance"),
+        Line2D([0], [0], color=COLORS["neutral"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="Neutral (0)"),
+        Line2D([0], [0], color=COLORS["green"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="Bullish (±0.1)"),
+        Line2D([0], [0], color=COLORS["green"], linewidth=THRESHOLD_LINE_WIDTH, linestyle=":", label="Strong (±0.2)"),
     ]
     _add_panel_legend(ax2, legend_handles_2, [h.get_label() for h in legend_handles_2], loc="upper left")
 
-    # Panel 3: OTC Buy/Sell Volumes + Weekly Buy Ratio
+    # Panel 3: OTC Participation Rate (weekly step bands)
     ax3 = axes[2]
-    otc_buy = df["otc_buy_volume"]
-    otc_sell = df["otc_sell_volume"]
-    otc_ratio = df["otc_weekly_buy_ratio"]
+    otc_part_rate = df["otc_participation_rate"]
+    otc_part_z = df["otc_participation_z"]
+    otc_part_delta = df["otc_participation_delta"]
+    otc_week_used = df["otc_week_used"] if "otc_week_used" in df.columns else None
+    otc_status_series = df["otc_status"]
 
-    valid_mask3 = ~otc_buy.isna() & ~otc_sell.isna()
+    # Group data by week to draw step bands
+    valid_mask3 = ~otc_part_rate.isna()
+    if valid_mask3.any() and otc_week_used is not None:
+        # Get unique weeks and their data
+        week_groups = df[valid_mask3].groupby("otc_week_used")
+        for week_start, week_data in week_groups:
+            if pd.isna(week_start):
+                continue
+            week_dates = week_data["date"]
+            rate = week_data["otc_participation_rate"].iloc[0]
+            z_score = week_data["otc_participation_z"].iloc[0] if "otc_participation_z" in week_data.columns else 0
+            status = week_data["otc_status"].iloc[0] if "otc_status" in week_data.columns else None
+
+            # Color intensity based on z-score (higher z = darker/more intense)
+            if pd.isna(z_score):
+                z_score = 0
+            # Map z-score to alpha: z=0 -> 0.3, z=2 -> 0.6, z=-2 -> 0.15
+            alpha = np.clip(0.3 + z_score * 0.15, 0.1, 0.7)
+
+            # Gray out if stale
+            if status == "Staled":
+                color = COLORS["neutral"]
+                alpha = 0.2
+            else:
+                # Color based on z-score: positive = cyan (elevated), negative = muted
+                if z_score > 0.5:
+                    color = COLORS["cyan"]
+                elif z_score < -0.5:
+                    color = COLORS["text_muted"]
+                else:
+                    color = COLORS["yellow"]
+
+            # Draw horizontal band for this week
+            if len(week_dates) > 0:
+                x_start = mdates.date2num(week_dates.iloc[0]) - 0.4
+                x_end = mdates.date2num(week_dates.iloc[-1]) + 0.4
+                ax3.fill_between(
+                    [mdates.num2date(x_start), mdates.num2date(x_end)],
+                    [0, 0],
+                    [rate, rate],
+                    color=color,
+                    alpha=alpha,
+                    zorder=2,
+                )
+                # Add week label
+                mid_x = mdates.num2date((x_start + x_end) / 2)
+                week_label = pd.to_datetime(week_start).strftime("%m-%d")
+                label_text = f"Wk {week_label}"
+                if status == "Staled":
+                    label_text += " (STALE)"
+                ax3.text(
+                    mid_x,
+                    rate + 0.02,
+                    label_text,
+                    ha="center",
+                    va="bottom",
+                    fontsize=7,
+                    color=COLORS["text_muted"],
+                    zorder=5,
+                )
+
+    # Also show participation rate as line for trend visibility
     if valid_mask3.any():
-        ax3.bar(
+        ax3.plot(
             dates[valid_mask3],
-            otc_buy[valid_mask3],
-            color=COLORS["green"],
-            alpha=BAR_ALPHA_PRIMARY,
-            width=0.75,
-            label="OTC Buy",
-            zorder=2,
+            otc_part_rate[valid_mask3],
+            color=COLORS["yellow"],
+            linewidth=SECONDARY_LINE_WIDTH,
+            alpha=0.8,
+            zorder=4,
         )
-        ax3.bar(
+        ax3.scatter(
             dates[valid_mask3],
-            otc_sell[valid_mask3],
-            bottom=otc_buy[valid_mask3],
-            color=COLORS["red"],
-            alpha=BAR_ALPHA_SECONDARY,
-            width=0.75,
-            label="OTC Sell",
-            zorder=2,
-        )
-
-    ax3.set_ylabel("OTC Vol", color=COLORS["text"], fontsize=10)
-    ax3.set_title("OTC Weekly Anchor", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
-    ax3.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: _format_volume(x)))
-
-    ax3b = ax3.twinx()
-    _apply_secondary_axis_style(ax3b)
-    valid_mask3b = ~otc_ratio.isna()
-    if valid_mask3b.any():
-        _plot_smooth_line(ax3b, dates, otc_ratio, COLORS["yellow"], valid_mask3b, linewidth=SECONDARY_LINE_WIDTH)
-        ax3b.scatter(
-            dates,
-            otc_ratio,
+            otc_part_rate[valid_mask3],
             c=COLORS["yellow"],
             s=MARKER_SIZE_SMALL,
-            zorder=6,
+            zorder=5,
             edgecolors=COLORS["white"],
             linewidths=0.4,
         )
-    _set_abs_ratio_axis(
-        ax3b,
-        otc_ratio,
-        neutral_value=NEUTRAL_RATIO,
-        linestyle="--",
-        linewidth=THRESHOLD_LINE_WIDTH,
-        alpha=0.6,
-    )
-    ax3b.set_ylabel("OTC Buy Ratio", color=COLORS["yellow"], fontsize=10)
+
+    # Set y-axis for participation rate (0 to ~0.6 typical)
+    max_rate = otc_part_rate.max(skipna=True) if valid_mask3.any() else 0.4
+    if pd.isna(max_rate) or max_rate < 0.2:
+        max_rate = 0.4
+    y_upper = min(float(np.ceil(max_rate * 10) / 10 + 0.1), 1.0)
+    ax3.set_ylim(0, y_upper)
+    ax3.set_yticks(np.arange(0, y_upper + 0.05, 0.1))
+    ax3.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"{x:.0%}"))
+
+    ax3.set_ylabel("OTC Participation", color=COLORS["text"], fontsize=10)
+    ax3.set_title("OTC Participation (proxy)", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
+
+    # Delta indicator on secondary axis
+    ax3b = ax3.twinx()
+    _apply_secondary_axis_style(ax3b)
+    valid_delta = ~otc_part_delta.isna() if otc_part_delta is not None else pd.Series([False] * len(dates))
+    if valid_delta.any():
+        delta_colors = [COLORS["green"] if d > 0 else COLORS["red"] for d in otc_part_delta[valid_delta]]
+        ax3b.bar(
+            dates[valid_delta],
+            otc_part_delta[valid_delta],
+            color=delta_colors,
+            alpha=0.4,
+            width=0.3,
+            zorder=1,
+        )
+        max_delta = otc_part_delta.abs().max(skipna=True)
+        if pd.isna(max_delta) or max_delta < 0.05:
+            max_delta = 0.05
+        ax3b.set_ylim(-max_delta * 1.5, max_delta * 1.5)
+    ax3b.axhline(y=0, color=COLORS["neutral"], linestyle="--", linewidth=0.8, alpha=0.4)
+    ax3b.set_ylabel("WoW Delta", color=COLORS["text_muted"], fontsize=8)
+
     legend_handles_3 = [
-        Patch(facecolor=COLORS["green"], edgecolor="none", alpha=BAR_ALPHA_PRIMARY, label="OTC Buy"),
-        Patch(facecolor=COLORS["red"], edgecolor="none", alpha=BAR_ALPHA_SECONDARY, label="OTC Sell"),
-        Line2D([0], [0], color=COLORS["yellow"], linewidth=SECONDARY_LINE_WIDTH, label="OTC Buy Ratio"),
-        Line2D([0], [0], color=COLORS["neutral"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="Neutral (1.0)"),
+        Patch(facecolor=COLORS["cyan"], edgecolor="none", alpha=0.4, label="High Activity (z>0.5)"),
+        Patch(facecolor=COLORS["yellow"], edgecolor="none", alpha=0.3, label="Normal Activity"),
+        Patch(facecolor=COLORS["neutral"], edgecolor="none", alpha=0.2, label="Stale/Low"),
+        Line2D([0], [0], color=COLORS["yellow"], linewidth=SECONDARY_LINE_WIDTH, label="Participation Rate"),
     ]
     _add_panel_legend(ax3, legend_handles_3, [h.get_label() for h in legend_handles_3], loc="upper right")
 
-    # Decision strip
+    # Panel 4: Accumulation Score + Confidence Bar
     ax4 = axes[3]
     ax4.set_facecolor(COLORS["panel_bg"])
     ax4.tick_params(colors=COLORS["text"], labelsize=8)
-    decisions = df["pressure_context_label"].fillna("Neutral").tolist()
-    decision_colors = []
-    for label in decisions:
-        if label == "Accumulating":
-            decision_colors.append(COLORS["green"])
-        elif label == "Distribution":
-            decision_colors.append(COLORS["red"])
-        else:
-            decision_colors.append(COLORS["neutral"])
-    ax4.bar(dates, [1] * len(dates), color=decision_colors, width=0.8)
+
+    # Get score and confidence data
+    score_display = df["accumulation_score_display"].fillna(50)  # Default to neutral (50)
+    confidence = df["confidence"].fillna(0.5)
+
+    # Create RdYlGn-like gradient: Red (0) -> Gray (50) -> Green (100)
+    from matplotlib.colors import LinearSegmentedColormap
+
+    cmap_colors = [
+        (0.0, COLORS["red"]),      # 0 = Distribution
+        (0.5, "#888888"),          # 50 = Neutral (gray)
+        (1.0, COLORS["green"]),    # 100 = Accumulating
+    ]
+    score_cmap = LinearSegmentedColormap.from_list(
+        "score_cmap",
+        [(pos, color) for pos, color in cmap_colors]
+    )
+
+    # Draw score bars with gradient color
+    for i, (d, score, conf) in enumerate(zip(dates, score_display, confidence)):
+        if pd.isna(score):
+            score = 50
+        if pd.isna(conf):
+            conf = 0.5
+
+        # Normalize score to [0, 1] for colormap
+        norm_score = np.clip(score / 100.0, 0, 1)
+        bar_color = score_cmap(norm_score)
+
+        # Reduce opacity if low confidence
+        alpha = 0.8 if conf >= 0.6 else 0.4
+
+        # Main score bar (full height)
+        ax4.bar(d, 0.7, bottom=0.15, color=bar_color, alpha=alpha, width=0.8, zorder=2)
+
+        # Thin confidence bar below (shows confidence level)
+        conf_height = 0.1 * conf  # Scale confidence to bar height
+        ax4.bar(d, conf_height, bottom=0.02, color=COLORS["white"], alpha=0.5, width=0.6, zorder=3)
+
+        # Score label on bar
+        if not pd.isna(score):
+            ax4.text(
+                d,
+                0.5,
+                f"{score:.0f}",
+                ha="center",
+                va="center",
+                fontsize=7,
+                color=COLORS["white"],
+                fontweight="bold",
+                zorder=4,
+            )
+
+    # Threshold markers
     ax4.set_ylim(0, 1)
     ax4.set_yticks([])
-    ax4.set_ylabel("Decision", color=COLORS["text_muted"], fontsize=8)
+
+    # Add threshold reference lines (visual guides)
+    # Note: These are just for reference, the actual thresholds are in the score values
+
+    ax4.set_ylabel("Score", color=COLORS["text_muted"], fontsize=8)
+    ax4.set_title("Accumulation Score (0-100)", color=COLORS["white"], fontsize=9, fontweight="bold", loc="left")
     ax4.grid(False)
     for spine in ax4.spines.values():
         spine.set_visible(False)
+
     legend_handles_4 = [
-        Patch(facecolor=COLORS["green"], edgecolor="none", label="Accumulating"),
-        Patch(facecolor=COLORS["red"], edgecolor="none", label="Distribution"),
-        Patch(facecolor=COLORS["neutral"], edgecolor="none", label="Neutral"),
+        Patch(facecolor=COLORS["green"], edgecolor="none", alpha=0.8, label=">70 Accumulating"),
+        Patch(facecolor="#888888", edgecolor="none", alpha=0.8, label="30-70 Neutral"),
+        Patch(facecolor=COLORS["red"], edgecolor="none", alpha=0.8, label="<30 Distribution"),
+        Patch(facecolor=COLORS["white"], edgecolor="none", alpha=0.5, label="Confidence Bar"),
     ]
     _add_panel_legend(ax4, legend_handles_4, [h.get_label() for h in legend_handles_4], loc="upper right")
 
@@ -555,7 +668,7 @@ def plot_symbol_metrics(
 
     fig.text(
         0.5, 0.01,
-        "Short sale volume is a buy-side proxy. OTC buy/sell is inferred from weekly lit ratios.",
+        "Short sale = buy proxy. OTC participation = FINRA all-hours / Polygon RTH (proxy ratio). Direction not observable.",
         ha="center",
         fontsize=8,
         color=COLORS["text_muted"],

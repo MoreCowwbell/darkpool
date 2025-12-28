@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 
+import numpy as np
 import pandas as pd
 
 try:
@@ -108,6 +109,118 @@ def _label_pressure_context(
     if short_z >= config.short_z_high and return_z >= config.return_z_min:
         return "Accumulating"
     if short_z <= config.short_z_low and return_z <= -config.return_z_min:
+        return "Distribution"
+    return "Neutral"
+
+
+def _sigmoid(x: float) -> float:
+    """Sigmoid function for intensity scaling."""
+    return 1.0 / (1.0 + np.exp(-x))
+
+
+def _compute_composite_score(
+    short_z: Optional[float],
+    lit_z: Optional[float],
+    price_z: Optional[float],
+    otc_participation_z: Optional[float],
+    config: Config,
+) -> tuple[Optional[float], Optional[float]]:
+    """
+    Compute composite accumulation score with intensity modulation.
+
+    Returns:
+        (accumulation_score, accumulation_score_display) where:
+        - accumulation_score: [-1, +1] range
+        - accumulation_score_display: [0, 100] scale for visualization
+    """
+    # Handle missing data - require at least short_z
+    if short_z is None or pd.isna(short_z):
+        return pd.NA, pd.NA
+
+    # Default missing values to 0 (neutral)
+    lit_z = lit_z if lit_z is not None and not pd.isna(lit_z) else 0.0
+    price_z = price_z if price_z is not None and not pd.isna(price_z) else 0.0
+    otc_z = otc_participation_z if otc_participation_z is not None and not pd.isna(otc_participation_z) else 0.0
+
+    # Weighted sum of tanh-transformed z-scores
+    # tanh compresses extreme values to [-1, 1] range
+    raw_score = (
+        config.composite_w_short * np.tanh(short_z * 0.5) +
+        config.composite_w_lit * np.tanh(lit_z * 0.5) +
+        config.composite_w_price * np.tanh(price_z * 0.3)
+    )
+
+    # Intensity modulation: OTC participation modulates (multiplies) the score
+    # sigmoid(0) = 0.5, so at z=0, intensity_scale = 0.7 + 0.6*0.5 = 1.0 (neutral)
+    # sigmoid(2) ≈ 0.88, so at z=2, intensity_scale ≈ 0.7 + 0.6*0.88 ≈ 1.23
+    # sigmoid(-2) ≈ 0.12, so at z=-2, intensity_scale ≈ 0.7 + 0.6*0.12 ≈ 0.77
+    intensity_range = config.intensity_scale_max - config.intensity_scale_min
+    intensity_scale = config.intensity_scale_min + intensity_range * _sigmoid(otc_z)
+
+    # Apply intensity modulation and clamp to [-1, 1]
+    accumulation_score = np.clip(raw_score * intensity_scale, -1.0, 1.0)
+
+    # Display scale: map [-1, +1] to [0, 100]
+    accumulation_score_display = (accumulation_score + 1.0) * 50.0
+
+    return float(accumulation_score), float(accumulation_score_display)
+
+
+def _compute_confidence(
+    otc_status: Optional[str],
+    has_short: bool,
+    has_lit: bool,
+    has_price: bool,
+    lit_flow_imbalance: Optional[float],
+) -> float:
+    """
+    Compute data quality confidence score.
+
+    Returns:
+        confidence: [0.25, 1.0] range where higher = more reliable signal
+    """
+    base_confidence = 1.0
+
+    # Staleness penalty
+    if otc_status == "Anchored":
+        staleness_penalty = 1.0
+    elif otc_status == "Staled":
+        staleness_penalty = 0.7
+    else:  # "None" or missing
+        staleness_penalty = 0.5
+
+    # Coverage penalty: count missing data sources
+    missing_count = sum([
+        not has_short,
+        not has_lit,
+        not has_price,
+    ])
+    if missing_count == 0:
+        coverage_penalty = 1.0
+    elif missing_count == 1:
+        coverage_penalty = 0.8
+    else:  # missing 2+
+        coverage_penalty = 0.5
+
+    # Additional penalty if lit_flow_imbalance is NULL (low volume)
+    if lit_flow_imbalance is None or pd.isna(lit_flow_imbalance):
+        coverage_penalty *= 0.9
+
+    confidence = base_confidence * staleness_penalty * coverage_penalty
+    return max(0.25, min(1.0, confidence))
+
+
+def _label_from_score(score_display: Optional[float]) -> str:
+    """
+    Convert accumulation_score_display (0-100) to label.
+
+    Thresholds: <30 = Distribution, 30-70 = Neutral, >70 = Accumulating
+    """
+    if score_display is None or pd.isna(score_display):
+        return "Neutral"
+    if score_display > 70:
+        return "Accumulating"
+    if score_display < 30:
         return "Distribution"
     return "Neutral"
 
@@ -310,6 +423,23 @@ def build_daily_metrics(
         .transform(lambda s: _rolling_zscore(s, config.short_z_window, config.zscore_min_periods))
     )
 
+    # Lit flow imbalance: bounded [-1, +1], symmetric around 0
+    # Formula: (buy - sell) / (buy + sell)
+    merged["lit_flow_imbalance"] = pd.NA
+    lit_total = pd.to_numeric(merged["lit_buy_volume"], errors="coerce").fillna(0) + \
+                pd.to_numeric(merged["lit_sell_volume"], errors="coerce").fillna(0)
+    sufficient_volume = lit_total >= config.min_lit_volume
+    merged.loc[sufficient_volume, "lit_flow_imbalance"] = (
+        (merged.loc[sufficient_volume, "lit_buy_volume"] - merged.loc[sufficient_volume, "lit_sell_volume"])
+        / lit_total[sufficient_volume]
+    )
+    merged["lit_flow_imbalance"] = pd.to_numeric(merged["lit_flow_imbalance"], errors="coerce")
+    merged["lit_flow_imbalance_z"] = (
+        merged.sort_values(["symbol", "date"])
+        .groupby("symbol")["lit_flow_imbalance"]
+        .transform(lambda s: _rolling_zscore(s, config.short_z_window, config.zscore_min_periods))
+    )
+
     merged["otc_buy_volume"] = pd.NA
     merged["otc_sell_volume"] = pd.NA
     if "otc_weekly_buy_ratio" in merged.columns:
@@ -326,6 +456,56 @@ def build_daily_metrics(
         .groupby("symbol")["otc_weekly_buy_ratio"]
         .transform(lambda s: _rolling_zscore(s, config.short_z_window, config.zscore_min_periods))
     )
+
+    # OTC Participation Rate: measures institutional activity intensity (not direction)
+    # weekly_total_volume = sum of daily Polygon volumes for the OTC week
+    # otc_participation_rate = otc_weekly_volume / weekly_total_volume
+    merged["weekly_total_volume"] = pd.NA
+    merged["otc_participation_rate"] = pd.NA
+    merged["otc_participation_z"] = pd.NA
+    merged["otc_participation_delta"] = pd.NA
+
+    if "otc_week_used" in merged.columns and "volume" in merged.columns:
+        # Compute weekly total volume by summing daily Polygon volumes for each (symbol, week)
+        merged["volume"] = pd.to_numeric(merged["volume"], errors="coerce")
+        weekly_vol = (
+            merged.groupby(["symbol", "otc_week_used"])["volume"]
+            .transform("sum")
+        )
+        merged["weekly_total_volume"] = weekly_vol
+
+        # Compute participation rate
+        has_weekly_total = merged["weekly_total_volume"].notna() & (merged["weekly_total_volume"] > 0)
+        has_otc_vol = merged["otc_off_exchange_volume"].notna()
+        valid_participation = has_weekly_total & has_otc_vol
+        merged.loc[valid_participation, "otc_participation_rate"] = (
+            merged.loc[valid_participation, "otc_off_exchange_volume"]
+            / merged.loc[valid_participation, "weekly_total_volume"]
+        )
+
+        # Per-ticker rolling z-score (12-week window ~ 60 trading days)
+        merged["otc_participation_rate"] = pd.to_numeric(merged["otc_participation_rate"], errors="coerce")
+        merged["otc_participation_z"] = (
+            merged.sort_values(["symbol", "date"])
+            .groupby("symbol")["otc_participation_rate"]
+            .transform(lambda s: _rolling_zscore(s, window=60, min_periods=5))
+        )
+
+        # Week-over-week delta: change in participation rate from prior week
+        # Get unique (symbol, week) participation rates and compute delta
+        weekly_rates = merged.drop_duplicates(subset=["symbol", "otc_week_used"])[
+            ["symbol", "otc_week_used", "otc_participation_rate"]
+        ].copy()
+        weekly_rates = weekly_rates.sort_values(["symbol", "otc_week_used"])
+        weekly_rates["prior_rate"] = weekly_rates.groupby("symbol")["otc_participation_rate"].shift(1)
+        weekly_rates["otc_participation_delta"] = (
+            weekly_rates["otc_participation_rate"] - weekly_rates["prior_rate"]
+        )
+        # Merge delta back to main dataframe
+        delta_map = weekly_rates.set_index(["symbol", "otc_week_used"])["otc_participation_delta"].to_dict()
+        merged["otc_participation_delta"] = merged.apply(
+            lambda row: delta_map.get((row["symbol"], row.get("otc_week_used"))), axis=1
+        )
 
     merged["has_otc"] = merged["otc_off_exchange_volume"].notna()
     merged["has_short"] = merged["short_ratio"].notna()
@@ -345,15 +525,34 @@ def build_daily_metrics(
     if "otc_week_used" in merged.columns:
         merged.loc[anchored, "otc_status"] = "Anchored"
 
-    merged["pressure_context_label"] = merged.apply(
-        lambda row: _label_pressure_context(
-            row.get("return_z"),
-            row.get("return_1d"),
-            row.get("short_buy_sell_ratio_z"),
-            config,
+    # Compute composite accumulation score and confidence
+    def _apply_composite(row):
+        score, score_display = _compute_composite_score(
+            short_z=row.get("short_buy_sell_ratio_z"),
+            lit_z=row.get("lit_flow_imbalance_z"),
+            price_z=row.get("return_z"),
+            otc_participation_z=row.get("otc_participation_z"),
+            config=config,
+        )
+        return pd.Series({"accumulation_score": score, "accumulation_score_display": score_display})
+
+    composite_scores = merged.apply(_apply_composite, axis=1)
+    merged["accumulation_score"] = composite_scores["accumulation_score"]
+    merged["accumulation_score_display"] = composite_scores["accumulation_score_display"]
+
+    merged["confidence"] = merged.apply(
+        lambda row: _compute_confidence(
+            otc_status=row.get("otc_status"),
+            has_short=bool(row.get("has_short")),
+            has_lit=bool(row.get("has_lit")),
+            has_price=bool(row.get("has_price")),
+            lit_flow_imbalance=row.get("lit_flow_imbalance"),
         ),
         axis=1,
     )
+
+    # Update pressure_context_label to use new score thresholds
+    merged["pressure_context_label"] = merged["accumulation_score_display"].apply(_label_from_score)
     merged["inference_version"] = config.inference_version
 
     output = merged[
@@ -378,6 +577,8 @@ def build_daily_metrics(
             "lit_total_volume",
             "lit_buy_ratio",
             "lit_buy_ratio_z",
+            "lit_flow_imbalance",
+            "lit_flow_imbalance_z",
             "close",
             "vwap",
             "high",
@@ -392,12 +593,19 @@ def build_daily_metrics(
             "otc_buy_volume",
             "otc_sell_volume",
             "otc_buy_ratio_z",
+            "weekly_total_volume",
+            "otc_participation_rate",
+            "otc_participation_z",
+            "otc_participation_delta",
             "otc_status",
             "data_quality",
             "has_otc",
             "has_short",
             "has_lit",
             "has_price",
+            "accumulation_score",
+            "accumulation_score_display",
+            "confidence",
             "pressure_context_label",
             "inference_version",
         ]

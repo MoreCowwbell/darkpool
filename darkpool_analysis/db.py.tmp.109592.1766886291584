@@ -144,9 +144,6 @@ def init_db(conn: duckdb.DuckDBPyConnection) -> None:
             otc_participation_rate DOUBLE,
             otc_participation_z DOUBLE,
             otc_participation_delta DOUBLE,
-            accumulation_score DOUBLE,
-            accumulation_score_display DOUBLE,
-            confidence DOUBLE,
             data_quality TEXT,
             has_otc BOOLEAN,
             has_short BOOLEAN,
@@ -178,9 +175,6 @@ def init_db(conn: duckdb.DuckDBPyConnection) -> None:
         "otc_participation_rate DOUBLE",
         "otc_participation_z DOUBLE",
         "otc_participation_delta DOUBLE",
-        "accumulation_score DOUBLE",
-        "accumulation_score_display DOUBLE",
-        "confidence DOUBLE",
     ]
     for column_def in daily_metrics_columns:
         conn.execute(f"ALTER TABLE daily_metrics ADD COLUMN IF NOT EXISTS {column_def}")
