@@ -403,11 +403,11 @@ def plot_symbol_metrics(
         Line2D([0], [0], linestyle="none", marker="v", color=COLORS["red"], markersize=6, label="Both Bear"),
         Line2D([0], [0], linestyle="none", marker="D", color=COLORS["yellow"], markersize=5, label="Diverge"),
     ]
-    # Horizontal legend at top left
+    # Horizontal legend at top right
     legend1 = ax1.legend(
         legend_handles_1,
         [h.get_label() for h in legend_handles_1],
-        loc="upper left",
+        loc="upper right",
         ncol=len(legend_handles_1),
         fontsize=7,
         frameon=True,
@@ -459,7 +459,7 @@ def plot_symbol_metrics(
     legend_handles_2 = [
         Line2D([0], [0], color=COLORS["yellow"], linewidth=MAIN_LINE_WIDTH, label="Lit Imbalance"),
     ]
-    _add_panel_legend(ax2, legend_handles_2, [h.get_label() for h in legend_handles_2], loc="upper left")
+    _add_panel_legend(ax2, legend_handles_2, [h.get_label() for h in legend_handles_2], loc="upper right")
 
     # Panel 3: OTC Participation Rate (weekly step bands)
     ax3 = axes[2]
@@ -717,7 +717,7 @@ def plot_symbol_metrics(
 
     # Format x-axis dates on ALL panels (not just bottom)
     for ax in [axes[0], axes[1], axes[2], ax4]:
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d"))
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%y-%m-%d"))
         ax.xaxis.set_major_locator(mdates.DayLocator(interval=1))  # Show every day
         ax.tick_params(axis="x", labelbottom=True)  # Enable x labels on all panels
         plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha="right", fontsize=8)
@@ -731,25 +731,23 @@ def plot_symbol_metrics(
         y=0.98,
     )
 
-    # Footer definitions - one term per row
-    footer_lines = [
-        "Short Sale Ratio: Buy pressure proxy from FINRA short sale data (>1.25 = buying, <0.75 = selling)",
-        "Lit Imbalance: Net buying vs selling on lit exchanges (positive = buyers dominating)",
-        "OTC Participation: Off-exchange volume share - measures institutional dark pool activity",
-        "Accumulation Score: Combined signal (0-100) weighting short, lit, and price momentum",
+    # Footer definitions - left-justified at bottom left, terms in cyan
+    footer_y_start = 0.045
+    footer_line_height = 0.012
+    footer_definitions = [
+        ("Short Sale Ratio", "Buy pressure proxy from FINRA short sale data (>1.25 = buying, <0.75 = selling)"),
+        ("Lit Imbalance", "Net buying vs selling on lit exchanges (positive = buyers dominating)"),
+        ("OTC Participation", "Off-exchange volume share - measures institutional dark pool activity"),
+        ("Accumulation Score", "Combined signal (0-100) weighting short, lit, and price momentum"),
     ]
-    footer_text = "\n".join(footer_lines)
-    fig.text(
-        0.5, 0.01,
-        footer_text,
-        ha="center",
-        va="bottom",
-        fontsize=7,
-        color=COLORS["text_muted"],
-        linespacing=1.4,
-    )
+    for i, (term, definition) in enumerate(footer_definitions):
+        y_pos = footer_y_start - (i * footer_line_height)
+        # Term in cyan
+        fig.text(0.02, y_pos, f"{term}:", ha="left", va="top", fontsize=7, color=COLORS["cyan"], fontweight="bold")
+        # Definition in muted text, offset to the right
+        fig.text(0.14, y_pos, definition, ha="left", va="top", fontsize=7, color=COLORS["text_muted"])
 
-    plt.tight_layout(rect=[0, 0.06, 1, 0.96])  # More bottom space for multi-line footer
+    plt.tight_layout(rect=[0, 0.07, 1, 0.96])  # More bottom space for multi-line footer
 
     # Save
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -882,7 +880,7 @@ def plot_short_only_metrics(
 
     # Format x-axis dates on ALL panels (not just bottom)
     for ax in axes:
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d"))
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%y-%m-%d"))
         ax.xaxis.set_major_locator(mdates.DayLocator(interval=1))  # Show every day
         ax.tick_params(axis="x", labelbottom=True)  # Enable x labels on all panels
         plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha="right", fontsize=8)
