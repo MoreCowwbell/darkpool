@@ -259,3 +259,11 @@ Format:
   - These placeholder rows were upserting and overwriting real lit_direction_daily data.
   - Fix: Only compute and upsert lit direction when `trades_cache_stats["fetched"] > 0`.
   - Now read lit_direction_daily from database for all dates (includes cached + newly computed).
+
+
+## 2025-12-28 Session Summary (Codex)
+- [x] Updated plotter styling: larger agreement markers, thinner panel 1 line, added agreement markers/legend to panel 2, standardized Y-axis label styling, and clarified OTC panel title/legend.
+
+
+## 2025-12-28 Session Summary (Codex)
+- [x] Updated plot width scaling to use 12 inches per 50-day bucket for long date ranges.

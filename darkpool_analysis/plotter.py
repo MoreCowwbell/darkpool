@@ -45,6 +45,12 @@ CENTERLINE_WIDTH = 1.4
 GRID_ALPHA = 0.18
 MARKER_SIZE = 28
 MARKER_SIZE_SMALL = 22
+YLABEL_COLOR = COLORS["white"]
+YLABEL_SIZE = 10
+PANEL1_LINE_WIDTH = 1.7
+AGREEMENT_MARKER_SIZE = 120
+AGREEMENT_MARKER_SIZE_SMALL = 70
+AGREEMENT_MARKER_EDGE = 0.6
 BAR_ALPHA_PRIMARY = 0.35
 BAR_ALPHA_SECONDARY = 0.25
 BOT_THRESHOLD = 1.25
@@ -94,6 +100,13 @@ def compute_log_ratio_ylim(values: pd.Series, headroom: float = 0.08) -> tuple[f
         step = 1.0
     bound = float(np.ceil(bound / step) * step)
     return -bound, bound, step
+
+
+def _compute_fig_width(day_count: int) -> float:
+    if day_count <= 0:
+        return 12.0
+    buckets = int(np.ceil(day_count / 50))
+    return 12.0 * max(1, buckets)
 
 
 def _apply_primary_axis_style(ax) -> None:
@@ -335,12 +348,15 @@ def plot_symbol_metrics(
         logger.warning("No data to plot for %s", symbol)
         return output_path
 
+    day_count = df["date"].nunique()
+    fig_width = _compute_fig_width(day_count)
+
     # Set up dark theme
     plt.style.use("dark_background")
     fig, axes = plt.subplots(
         5,
         1,
-        figsize=(12, 18),  # Taller to accommodate footer panel
+        figsize=(fig_width, 18),  # Taller to accommodate footer panel
         gridspec_kw={"height_ratios": [3, 2, 2, 2, 1]},  # Panel 1-4 for data, Panel 5 for footer
     )
     fig.patch.set_facecolor(COLORS["background"])
@@ -356,7 +372,7 @@ def plot_symbol_metrics(
 
     valid_mask = ~short_ratio.isna()
     if valid_mask.any():
-        _plot_smooth_line(ax1, dates, short_ratio, COLORS["cyan"], valid_mask, linewidth=MAIN_LINE_WIDTH)
+        _plot_smooth_line(ax1, dates, short_ratio, COLORS["cyan"], valid_mask, linewidth=PANEL1_LINE_WIDTH)
         ax1.scatter(
             dates,
             short_ratio,
@@ -377,11 +393,41 @@ def plot_symbol_metrics(
         lit_bullish = li > 0.1
         lit_bearish = li < -0.1
         if short_bullish and lit_bullish:
-            ax1.scatter([d], [sr], c=COLORS["green"], s=80, marker="^", zorder=10, alpha=0.8)
+            ax1.scatter(
+                [d],
+                [sr],
+                c=COLORS["green"],
+                s=AGREEMENT_MARKER_SIZE,
+                marker="^",
+                zorder=10,
+                alpha=0.85,
+                edgecolors=COLORS["white"],
+                linewidths=AGREEMENT_MARKER_EDGE,
+            )
         elif short_bearish and lit_bearish:
-            ax1.scatter([d], [sr], c=COLORS["red"], s=80, marker="v", zorder=10, alpha=0.8)
+            ax1.scatter(
+                [d],
+                [sr],
+                c=COLORS["red"],
+                s=AGREEMENT_MARKER_SIZE,
+                marker="v",
+                zorder=10,
+                alpha=0.85,
+                edgecolors=COLORS["white"],
+                linewidths=AGREEMENT_MARKER_EDGE,
+            )
         elif (short_bullish and lit_bearish) or (short_bearish and lit_bullish):
-            ax1.scatter([d], [sr], c=COLORS["yellow"], s=60, marker="D", zorder=10, alpha=0.7)
+            ax1.scatter(
+                [d],
+                [sr],
+                c=COLORS["yellow"],
+                s=AGREEMENT_MARKER_SIZE,
+                marker="D",
+                zorder=10,
+                alpha=0.75,
+                edgecolors=COLORS["white"],
+                linewidths=AGREEMENT_MARKER_EDGE,
+            )
 
     _set_abs_ratio_axis(
         ax1,
@@ -392,14 +438,14 @@ def plot_symbol_metrics(
         alpha=0.6,
     )
     _add_ratio_thresholds(ax1, bot=BOT_THRESHOLD, sell=SELL_THRESHOLD)
-    ax1.set_ylabel("Short Sale Buy/Sell Ratio", color=COLORS["text"], fontsize=10)
+    ax1.set_ylabel("Short Sale Buy/Sell Ratio", color=YLABEL_COLOR, fontsize=YLABEL_SIZE)
     ax1.set_title("Short Sale Buy/Sell Ratio", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
     legend_handles_1 = [
         Line2D([0], [0], color=COLORS["cyan"], linewidth=MAIN_LINE_WIDTH, label="Ratio"),
         Line2D([0], [0], color=COLORS["green"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="BOT (1.25)"),
         Line2D([0], [0], color=COLORS["red"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="SELL (0.75)"),
-        Line2D([0], [0], linestyle="none", marker="^", color=COLORS["green"], markersize=6, label="Both Bull"),
-        Line2D([0], [0], linestyle="none", marker="v", color=COLORS["red"], markersize=6, label="Both Bear"),
+        Line2D([0], [0], linestyle="none", marker="^", color=COLORS["green"], markersize=6, label="Short+Lit Bull"),
+        Line2D([0], [0], linestyle="none", marker="v", color=COLORS["red"], markersize=6, label="Short+Lit Bear"),
         Line2D([0], [0], linestyle="none", marker="D", color=COLORS["yellow"], markersize=5, label="Diverge"),
     ]
     # Horizontal legend at top right
@@ -436,6 +482,50 @@ def plot_symbol_metrics(
             linewidths=0.4,
         )
 
+    for d, sr, li in zip(dates, short_ratio, lit_imbalance_series):
+        if pd.isna(sr) or pd.isna(li):
+            continue
+        short_bullish = sr > BOT_THRESHOLD
+        short_bearish = sr < SELL_THRESHOLD
+        lit_bullish = li > 0.1
+        lit_bearish = li < -0.1
+        if short_bullish and lit_bullish:
+            ax2.scatter(
+                [d],
+                [li],
+                c=COLORS["green"],
+                s=AGREEMENT_MARKER_SIZE_SMALL,
+                marker="^",
+                zorder=6,
+                alpha=0.85,
+                edgecolors=COLORS["white"],
+                linewidths=AGREEMENT_MARKER_EDGE,
+            )
+        elif short_bearish and lit_bearish:
+            ax2.scatter(
+                [d],
+                [li],
+                c=COLORS["red"],
+                s=AGREEMENT_MARKER_SIZE_SMALL,
+                marker="v",
+                zorder=6,
+                alpha=0.85,
+                edgecolors=COLORS["white"],
+                linewidths=AGREEMENT_MARKER_EDGE,
+            )
+        elif (short_bullish and lit_bearish) or (short_bearish and lit_bullish):
+            ax2.scatter(
+                [d],
+                [li],
+                c=COLORS["cyan"],
+                s=AGREEMENT_MARKER_SIZE_SMALL,
+                marker="D",
+                zorder=6,
+                alpha=0.8,
+                edgecolors=COLORS["white"],
+                linewidths=AGREEMENT_MARKER_EDGE,
+            )
+
     # Set y-axis bounds: default [-0.5, +0.5], expand if data exceeds
     max_abs = lit_imbalance_series.abs().max(skipna=True) if valid_mask2.any() else 0.3
     if pd.isna(max_abs):
@@ -453,10 +543,13 @@ def plot_symbol_metrics(
     ax2.axhline(y=0.2, color=COLORS["green"], linestyle=":", linewidth=THRESHOLD_LINE_WIDTH, alpha=0.4)
     ax2.axhline(y=-0.2, color=COLORS["red"], linestyle=":", linewidth=THRESHOLD_LINE_WIDTH, alpha=0.4)
 
-    ax2.set_ylabel("Lit Flow Imbalance", color=COLORS["yellow"], fontsize=10)
+    ax2.set_ylabel("Lit Flow Imbalance", color=YLABEL_COLOR, fontsize=YLABEL_SIZE)
     ax2.set_title("Lit Flow Imbalance (Confirmation)", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
     legend_handles_2 = [
         Line2D([0], [0], color=COLORS["yellow"], linewidth=MAIN_LINE_WIDTH, label="Lit Imbalance"),
+        Line2D([0], [0], linestyle="none", marker="^", color=COLORS["green"], markersize=6, label="Short+Lit Bull"),
+        Line2D([0], [0], linestyle="none", marker="v", color=COLORS["red"], markersize=6, label="Short+Lit Bear"),
+        Line2D([0], [0], linestyle="none", marker="D", color=COLORS["cyan"], markersize=6, label="Diverge"),
     ]
     _add_panel_legend(ax2, legend_handles_2, [h.get_label() for h in legend_handles_2], loc="upper right")
 
@@ -569,8 +662,8 @@ def plot_symbol_metrics(
     ax3.set_yticks(np.arange(0, y_upper + 0.05, 0.1))
     ax3.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"{x:.0%}"))
 
-    ax3.set_ylabel("OTC Participation", color=COLORS["text"], fontsize=10)
-    ax3.set_title("OTC Participation (proxy)", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
+    ax3.set_ylabel("OTC Participation", color=YLABEL_COLOR, fontsize=YLABEL_SIZE)
+    ax3.set_title("OTC Participation Rate - Weekly", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
 
     # Delta indicator on secondary axis
     ax3b = ax3.twinx()
@@ -591,13 +684,13 @@ def plot_symbol_metrics(
             max_delta = 0.05
         ax3b.set_ylim(-max_delta * 1.5, max_delta * 1.5)
     ax3b.axhline(y=0, color=COLORS["neutral"], linestyle="--", linewidth=0.8, alpha=0.4)
-    ax3b.set_ylabel("WoW Delta", color=COLORS["text_muted"], fontsize=8)
+    ax3b.set_ylabel("WoW Delta (pp)", color=YLABEL_COLOR, fontsize=YLABEL_SIZE)
 
     legend_handles_3 = [
         Patch(facecolor=COLORS["cyan"], edgecolor="none", alpha=0.4, label="High (z>0.5)"),
         Patch(facecolor=COLORS["yellow"], edgecolor="none", alpha=0.3, label="Normal"),
         Patch(facecolor=COLORS["neutral"], edgecolor="none", alpha=0.2, label="Stale/Low"),
-        Line2D([0], [0], color=COLORS["yellow"], linewidth=SECONDARY_LINE_WIDTH, label="Rate"),
+        Line2D([0], [0], color=COLORS["yellow"], linewidth=SECONDARY_LINE_WIDTH, label="OTC Participation Rate - Weekly"),
     ]
     # Horizontal legend at top right
     legend3 = ax3.legend(
@@ -691,7 +784,7 @@ def plot_symbol_metrics(
     ax4.set_yticks([0, 0.3, 0.5, 0.7, 1.0])
     ax4.set_yticklabels(["0", "30", "50", "70", "100"])
 
-    ax4.set_ylabel("Score", color=COLORS["text_muted"], fontsize=8)
+    ax4.set_ylabel("Score", color=YLABEL_COLOR, fontsize=YLABEL_SIZE)
     ax4.set_title("Accumulation Score (0-100)", color=COLORS["white"], fontsize=9, fontweight="bold", loc="left")
     ax4.grid(False)
     for spine in ax4.spines.values():

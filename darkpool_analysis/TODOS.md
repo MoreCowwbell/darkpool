@@ -46,3 +46,13 @@
 - [] user toggle to feth LIT data as OHLCV vs 1 min
 - [] refactor and identify onsolete part of code
 - [] figure out how to leverage OTC weelly and plot it porperly
+
+## overla taks
+- [] Work on how to best visualize panel 3 (OTC weekly) so that this plot is more intuitive and useful to look at.
+- [] if the OTC wekkly report is stable, don't carry it past it's know week.
+- [] Generate a merge Plot  and table for multiple tickers (key sector indicators), to get a bit more of a macro shift view
+- [] I built an automated daily scanner that reports the top 50 tickers whose z-score suddenly blow up (to catch tickers we would not usually look at from the 10,000 Finra daily list. I already have a foundation in place, but I need to improve the mathematical logic.
+- [] Same scanner, if filtered for volume or market cap and tracked as a plot over time, could also give us a macro signal of the entire market.
+- [] Add figure expansion on width based on number of days being plotted
+- [] Add price chart at the bottom
+
