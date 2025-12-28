@@ -338,15 +338,14 @@ def plot_symbol_metrics(
     # Set up dark theme
     plt.style.use("dark_background")
     fig, axes = plt.subplots(
-        4,
+        5,
         1,
-        figsize=(12, 16.5),  # 1.5x taller
-        sharex=True,
-        gridspec_kw={"height_ratios": [3, 2, 2, 2]},  # Panel 1 = 1/3, others equal
+        figsize=(12, 18),  # Taller to accommodate footer panel
+        gridspec_kw={"height_ratios": [3, 2, 2, 2, 1]},  # Panel 1-4 for data, Panel 5 for footer
     )
     fig.patch.set_facecolor(COLORS["background"])
 
-    for ax in axes:
+    for ax in axes[:4]:  # Only style the 4 data panels
         _apply_primary_axis_style(ax)
 
     dates = df["date"]
@@ -657,9 +656,15 @@ def plot_symbol_metrics(
         bar_height = score / 100.0  # Normalize to 0-1 range
         ax4.bar(d, bar_height, bottom=0, color=bar_color, alpha=alpha, width=0.8, zorder=2)
 
-        # Thin confidence bar below (shows confidence level)
+        # Thin confidence bar below (shows confidence level) - colored by confidence
         conf_height = 0.08 * conf  # Scale confidence to bar height
-        ax4.bar(d, conf_height, bottom=-0.12, color=COLORS["white"], alpha=0.5, width=0.6, zorder=3)
+        if conf >= 0.7:
+            conf_color = COLORS["green"]
+        elif conf >= 0.4:
+            conf_color = COLORS["yellow"]
+        else:
+            conf_color = COLORS["red"]
+        ax4.bar(d, conf_height, bottom=-0.12, color=conf_color, alpha=0.6, width=0.6, zorder=3)
 
         # Score label on bar (position at bar top or center, whichever is visible)
         if not pd.isna(score):
@@ -696,7 +701,9 @@ def plot_symbol_metrics(
         Patch(facecolor=COLORS["green"], edgecolor="none", alpha=0.8, label=">70 Accum"),
         Patch(facecolor="#888888", edgecolor="none", alpha=0.8, label="30-70 Neutral"),
         Patch(facecolor=COLORS["red"], edgecolor="none", alpha=0.8, label="<30 Distrib"),
-        Patch(facecolor=COLORS["white"], edgecolor="none", alpha=0.5, label="Confidence"),
+        Line2D([0], [0], color=COLORS["green"], linewidth=4, alpha=0.6, label="High Conf"),
+        Line2D([0], [0], color=COLORS["yellow"], linewidth=4, alpha=0.6, label="Med Conf"),
+        Line2D([0], [0], color=COLORS["red"], linewidth=4, alpha=0.6, label="Low Conf"),
     ]
     # Horizontal legend at top right
     legend4 = ax4.legend(
@@ -731,23 +738,64 @@ def plot_symbol_metrics(
         y=0.98,
     )
 
-    # Footer definitions - left-justified at bottom left, terms in cyan
-    footer_y_start = 0.045
-    footer_line_height = 0.012
+    # Panel 5: Footer with definitions and table (as proper subplot)
+    ax_footer = axes[4]
+    ax_footer.set_facecolor(COLORS["background"])
+    ax_footer.axis("off")  # Hide all axis elements
+
+    # Footer layout using axis coordinates (0-1)
+    footer_y_start = 0.95
+    footer_line_height = 0.16
+
+    # Left side: Definitions
     footer_definitions = [
-        ("Short Sale Ratio", "Buy pressure proxy from FINRA short sale data (>1.25 = buying, <0.75 = selling)"),
-        ("Lit Imbalance", "Net buying vs selling on lit exchanges (positive = buyers dominating)"),
-        ("OTC Participation", "Off-exchange volume share - measures institutional dark pool activity"),
-        ("Accumulation Score", "Combined signal (0-100) weighting short, lit, and price momentum"),
+        ("Short Sale Ratio", "Institutional buy/sell pressure proxy from FINRA 'Daily Short-Sale Volume'"),
+        ("Lit Imbalance", "Net buying vs selling on lit exchanges (positive = buyers dominate)"),
+        ("OTC Participation", "Institutional dark-pool activity proxy from FINRA 'Weekly Over-The-Counter(OTC) Report'"),
+        ("Accumulation Score", "Composite Signal 0-100 weighting short-sale pressure, lit imbalance, and price momentum"),
     ]
+
     for i, (term, definition) in enumerate(footer_definitions):
         y_pos = footer_y_start - (i * footer_line_height)
-        # Term in cyan
-        fig.text(0.02, y_pos, f"{term}:", ha="left", va="top", fontsize=7, color=COLORS["cyan"], fontweight="bold")
-        # Definition in muted text, offset to the right
-        fig.text(0.14, y_pos, definition, ha="left", va="top", fontsize=7, color=COLORS["text_muted"])
+        ax_footer.text(0.0, y_pos, f"{term}:", transform=ax_footer.transAxes,
+                       ha="left", va="top", fontsize=7, color=COLORS["cyan"], fontweight="bold")
+        ax_footer.text(0.1, y_pos, definition, transform=ax_footer.transAxes,
+                       ha="left", va="top", fontsize=7, color=COLORS["text_muted"])
 
-    plt.tight_layout(rect=[0, 0.07, 1, 0.96])  # More bottom space for multi-line footer
+    # Right side: Accumulation Score Components table
+    table_x_start = 0.6
+
+    # Table title
+    ax_footer.text(table_x_start, footer_y_start, "Accumulation Score Components:",
+                   transform=ax_footer.transAxes, ha="left", va="top",
+                   fontsize=7, color=COLORS["cyan"], fontweight="bold")
+
+    # Table data with tighter column spacing
+    score_inputs_table = [
+        ("Input", "Weight", "Source", "What it measures"),  # Header
+        ("short_buy_sell_ratio_z", "55%", "FINRA Daily Short", "Z-score of short sale ratio"),
+        ("lit_flow_imbalance_z", "30%", "Polygon Trades", "Z-score of lit imbalance"),
+        ("return_z", "15%", "Polygon Daily Agg", "Z-score of price momentum"),
+        ("otc_participation_z", "Mult.", "FINRA OTC Weekly", "Modulates score intensity"),
+    ]
+
+    # Column x positions (tighter spacing)
+    col_x = [table_x_start, table_x_start + 0.12, table_x_start + 0.17, table_x_start + 0.28]
+
+    for row_idx, row in enumerate(score_inputs_table):
+        y_pos = footer_y_start - ((row_idx + 1) * footer_line_height)
+        for col_idx, cell in enumerate(row):
+            color = COLORS["cyan"] if row_idx == 0 else COLORS["text_muted"]
+            weight = "bold" if row_idx == 0 else "normal"
+            ax_footer.text(col_x[col_idx], y_pos, cell, transform=ax_footer.transAxes,
+                           ha="left", va="top", fontsize=6, color=color, fontweight=weight)
+
+    # Soft line under table header row
+    header_line_y = footer_y_start - footer_line_height - 0.02
+    ax_footer.plot([table_x_start, 0.98], [header_line_y, header_line_y],
+                   transform=ax_footer.transAxes, color=COLORS["grid"], linewidth=0.5, alpha=0.5)
+
+    plt.tight_layout(rect=[0, 0.02, 1, 0.96])
 
     # Save
     output_path.parent.mkdir(parents=True, exist_ok=True)

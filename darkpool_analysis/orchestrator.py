@@ -154,6 +154,18 @@ def main() -> None:
         short_all = _concat_frames(short_frames)
         agg_all = _concat_frames(agg_frames)
 
+        # Read agg data from DB if frames are empty (all cached)
+        # This ensures volume data is available for OTC participation calculation
+        if agg_all.empty:
+            agg_all = conn.execute(
+                """
+                SELECT symbol, trade_date, open, high, low, close, vwap, volume, fetch_timestamp
+                FROM polygon_daily_agg_raw
+                WHERE trade_date >= ? AND trade_date <= ?
+                """,
+                [min(config.target_dates), max(config.target_dates)],
+            ).fetchdf()
+
         # Read lit_direction_daily from DB (includes cached + newly computed)
         # This ensures we have complete lit data even when trades were cached
         lit_all = conn.execute(
