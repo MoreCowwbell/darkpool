@@ -14,10 +14,10 @@ from dotenv import load_dotenv
 # =============================================================================
 # Default Configuration (can be overridden via .env)
 # =============================================================================
-DEFAULT_TICKERS = ["RGTI", "TSLA"]
+DEFAULT_TICKERS = ["TQQQ"]
 EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 
-### US_SECTOR_CORE
+# ### US_SECTOR_CORE
 # "XLK",  // Technology (platforms, software, mega-cap growth)
 # "SMH",  // Semiconductors (hardware + capex cycle)
 # "XLF",  // Financials (money-center banks, insurers)
@@ -29,9 +29,10 @@ EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 # "XLV",  // Health Care (defensive + policy)
 # "XLU",  // Utilities (rates, yield proxy)
 
-### Global macro / index rotation set (ETF proxies)
+# ### Global macro / index rotation set (ETF proxies)
 # "SPY",   // US large-cap core (S&P 500)
 # "QQQ",   // US growth / tech beta
+# "TQQQ",  // ProShares UltraPro QQQ ETF
 # "IWM",   // US small caps (domestic liquidity)
 # "EFA",   // Developed markets ex-US (EU + Japan)
 # "EEM",   // Emerging markets (global risk / China beta)
@@ -41,13 +42,23 @@ EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 # "TLT",   // US long rates (risk-off / duration)
 # "VIXY",  // Volatility (risk regime)
 # "UUP",   // US dollar (global liquidity / stress)
+# "DBC",   // Commodities broad basket (inflation / commodity cycle)
+# "UVIX",  // ProShares Ultra VIX Short-Term Futures ETF
+# "SVIX",  // ProShares Short VIX Short-Term Futures ETF
 
-
+# ### Commmoties / Thematic
+# "GLD",   // Gold ETF (inflation hedge)
+# "SLV",   // Silver ETF (inflation hedge)
+# "GDX",   // Gold miners (inflation hedge + equity beta)
+# "USO",   // Oil ETF (commodity cycle)
+# "UNG",   // Natural Gas ETF (commodity cycle)
+# "URA",   // Global Uranium ETF (energy transition theme)
+# -----------------------------------------------------------------------------
 
 # Analysis defaults
 DEFAULT_TARGET_DATE = "2025-12-26"  # Last trading day (Monday)
 DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
-DEFAULT_BACKFILL_COUNT = 30  # Number of periods to fetch (days for daily, weeks for weekly)
+DEFAULT_BACKFILL_COUNT = 60  # Number of periods to fetch (days for daily, weeks for weekly)
 DEFAULT_MIN_LIT_VOLUME = 10000
 DEFAULT_MARKET_TZ = "US/Eastern"
 DEFAULT_RTH_START = "09:30"
