@@ -71,6 +71,19 @@ def _build_finra_headers(config: Config) -> dict:
     return headers
 
 
+def _extract_week_start_from_filename(filename: str) -> Optional[date]:
+    """Extract week_start_date from filename pattern like OTC_ats_2025-12-01.txt."""
+    import re
+    # Match date pattern YYYY-MM-DD in filename
+    match = re.search(r"(\d{4}-\d{2}-\d{2})", filename)
+    if match:
+        try:
+            return date.fromisoformat(match.group(1))
+        except ValueError:
+            return None
+    return None
+
+
 def _load_finra_from_file(path: str) -> pd.DataFrame:
     file_path = Path(path)
     if file_path.suffix.lower() == ".json":
@@ -83,7 +96,54 @@ def _load_finra_from_file(path: str) -> pd.DataFrame:
         raise ValueError("Unsupported FINRA JSON file structure.")
 
     sep = "|" if file_path.suffix.lower() in {".txt", ".pipe"} else ","
-    return pd.read_csv(path, sep=sep)
+    df = pd.read_csv(path, sep=sep)
+
+    # If file doesn't have weekStartDate but has lastUpdateDate, try to extract from filename
+    if "weekStartDate" not in df.columns and "week_start_date" not in df.columns:
+        week_start = _extract_week_start_from_filename(file_path.name)
+        if week_start:
+            df["weekStartDate"] = week_start.isoformat()
+            logger.info("Extracted weekStartDate=%s from filename: %s", week_start, file_path.name)
+
+    return df
+
+
+def load_finra_otc_from_directory(
+    directory: str,
+    config: Config,
+    target_date: date,
+) -> pd.DataFrame:
+    """
+    Load and combine multiple FINRA OTC files from a directory.
+
+    Handles both ATS and Non-ATS files, extracts week_start from filenames,
+    and aggregates volumes by symbol.
+
+    File naming convention: OTC_ats_YYYY-MM-DD.txt, OTC_non_ats_YYYY-MM-DD.txt
+    """
+    dir_path = Path(directory)
+    if not dir_path.exists():
+        logger.warning("FINRA OTC directory does not exist: %s", directory)
+        return pd.DataFrame()
+
+    all_frames = []
+    for file_path in dir_path.glob("*.txt"):
+        try:
+            df = _load_finra_from_file(str(file_path))
+            df["source_file"] = file_path.name
+            all_frames.append(df)
+            logger.info("Loaded %d rows from %s", len(df), file_path.name)
+        except Exception as exc:
+            logger.warning("Failed to load %s: %s", file_path, exc)
+
+    if not all_frames:
+        logger.warning("No FINRA OTC files found in directory: %s", directory)
+        return pd.DataFrame()
+
+    combined = pd.concat(all_frames, ignore_index=True)
+    logger.info("Combined %d total rows from %d files", len(combined), len(all_frames))
+
+    return combined
 
 
 def _load_finra_from_api(
@@ -100,13 +160,22 @@ def _load_finra_from_api(
     payload = config.finra_request_json.copy() if config.finra_request_json else {}
     payload.setdefault("limit", 10000)
 
+    # Initialize domainFilters list
+    if "domainFilters" not in payload:
+        payload["domainFilters"] = []
+
+    # Add summaryTypeCode filter to get symbol-aggregated data (both ATS and Non-ATS)
+    # Without this filter, API returns per-ATS/per-firm breakdowns instead of symbol totals
+    payload["domainFilters"].append({
+        "fieldName": "summaryTypeCode",
+        "values": ["ATS_W_SMBL", "OTC_W_SMBL"],
+    })
+
     if symbols:
-        payload["domainFilters"] = [
-            {
-                "fieldName": "issueSymbolIdentifier",
-                "values": [sym.upper() for sym in symbols],
-            }
-        ]
+        payload["domainFilters"].append({
+            "fieldName": "issueSymbolIdentifier",
+            "values": [sym.upper() for sym in symbols],
+        })
 
     if target_date:
         week_start = target_date - timedelta(days=target_date.weekday())
@@ -250,7 +319,12 @@ def _normalize_finra_columns(df: pd.DataFrame, config: Config, source_file: Opti
 def fetch_finra_otc_weekly(
     config: Config, target_date: date
 ) -> Tuple[pd.DataFrame, pd.DataFrame, Optional[date]]:
-    if config.finra_otc_file:
+    # Priority: directory > file > API
+    if config.finra_otc_dir:
+        logger.info("Loading FINRA OTC data from directory: %s", config.finra_otc_dir)
+        raw_df = load_finra_otc_from_directory(config.finra_otc_dir, config, target_date)
+        source_file = "directory"
+    elif config.finra_otc_file:
         logger.info("Loading FINRA OTC data from file: %s", config.finra_otc_file)
         raw_df = _load_finra_from_file(config.finra_otc_file)
         source_file = Path(config.finra_otc_file).name
@@ -262,6 +336,30 @@ def fetch_finra_otc_weekly(
 
     normalized = _normalize_finra_columns(raw_df, config, source_file)
     normalized = normalized[normalized["symbol"].isin(config.finra_tickers)].copy()
+
+    # Aggregate volumes by (symbol, week_start_date) since raw data has per-market-participant rows
+    if not normalized.empty and "market_participant_name" in normalized.columns:
+        # Check if we have multiple rows per symbol/week (indicating per-participant data)
+        key_counts = normalized.groupby(["symbol", "week_start_date"]).size()
+        if key_counts.max() > 1:
+            logger.info("Aggregating %d rows by (symbol, week_start_date)...", len(normalized))
+            aggregated = (
+                normalized.groupby(["symbol", "week_start_date"], as_index=False)
+                .agg({
+                    "off_exchange_volume": "sum",
+                    "trade_count": "sum",
+                    "tier_identifier": "first",
+                    "tier_description": "first",
+                    "issue_name": "first",
+                    "last_update_date": "first",
+                    "source_file": "first",
+                })
+            )
+            aggregated["market_participant_name"] = "AGGREGATED"
+            aggregated["mpid"] = pd.NA
+            normalized = aggregated
+            logger.info("Aggregated to %d rows", len(normalized))
+
     if normalized.empty:
         logger.warning("FINRA OTC data returned no rows for configured tickers.")
         return pd.DataFrame(), pd.DataFrame(), None

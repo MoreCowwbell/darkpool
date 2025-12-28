@@ -47,7 +47,7 @@ EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 # Analysis defaults
 DEFAULT_TARGET_DATE = "2025-12-26"  # Last trading day (Monday)
 DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
-DEFAULT_BACKFILL_COUNT = 20  # Number of periods to fetch (days for daily, weeks for weekly)
+DEFAULT_BACKFILL_COUNT = 30  # Number of periods to fetch (days for daily, weeks for weekly)
 DEFAULT_MIN_LIT_VOLUME = 10000
 DEFAULT_MARKET_TZ = "US/Eastern"
 DEFAULT_RTH_START = "09:30"
@@ -269,6 +269,7 @@ class Config:
     polygon_daily_agg_dir: Optional[str]
     finra_otc_url: Optional[str]
     finra_otc_file: Optional[str]
+    finra_otc_dir: Optional[str]
     finra_short_sale_url: Optional[str]
     finra_short_sale_file: Optional[str]
     finra_short_sale_dir: Optional[str]
@@ -346,6 +347,7 @@ def load_config() -> Config:
     polygon_daily_agg_file = _resolve_path(root_dir, os.getenv("POLYGON_DAILY_AGG_FILE"))
     polygon_daily_agg_dir = _resolve_path(root_dir, os.getenv("POLYGON_DAILY_AGG_DIR"))
     finra_otc_file = _resolve_path(root_dir, os.getenv("FINRA_OTC_FILE"))
+    finra_otc_dir = _resolve_path(root_dir, os.getenv("FINRA_OTC_DIR"))
     finra_short_sale_file = _resolve_path(root_dir, os.getenv("FINRA_SHORT_SALE_FILE"))
     finra_short_sale_dir = _resolve_path(root_dir, os.getenv("FINRA_SHORT_SALE_DIR"))
     index_constituents_file = _resolve_path(root_dir, os.getenv("INDEX_CONSTITUENTS_FILE"))
@@ -379,6 +381,7 @@ def load_config() -> Config:
         polygon_daily_agg_dir=polygon_daily_agg_dir,
         finra_otc_url=os.getenv("FINRA_OTC_URL", DEFAULT_FINRA_OTC_URL),
         finra_otc_file=finra_otc_file,
+        finra_otc_dir=finra_otc_dir,
         finra_short_sale_url=os.getenv("FINRA_SHORT_SALE_URL", DEFAULT_FINRA_SHORT_SALE_URL),
         finra_short_sale_file=finra_short_sale_file,
         finra_short_sale_dir=finra_short_sale_dir,

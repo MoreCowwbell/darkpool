@@ -340,9 +340,9 @@ def plot_symbol_metrics(
     fig, axes = plt.subplots(
         4,
         1,
-        figsize=(12, 16.5),  # 1.5x taller
+        figsize=(12, 11),
         sharex=True,
-        gridspec_kw={"height_ratios": [3, 2, 2, 2]},  # Panel 1 = 1/3, others equal
+        gridspec_kw={"height_ratios": [5, 2, 1.5, 1.0]},
     )
     fig.patch.set_facecolor(COLORS["background"])
 
@@ -394,14 +394,15 @@ def plot_symbol_metrics(
     )
     _add_ratio_thresholds(ax1, bot=BOT_THRESHOLD, sell=SELL_THRESHOLD)
     ax1.set_ylabel("Short Sale Buy/Sell Ratio", color=COLORS["text"], fontsize=10)
-    ax1.set_title("Short Sale Buy/Sell Ratio", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
+    ax1.set_title(f"{symbol} - Short Sale Buy/Sell Ratio", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
     legend_handles_1 = [
         Line2D([0], [0], color=COLORS["cyan"], linewidth=MAIN_LINE_WIDTH, label="Ratio"),
-        Line2D([0], [0], color=COLORS["green"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="BOT (1.25)"),
-        Line2D([0], [0], color=COLORS["red"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="SELL (0.75)"),
-        Line2D([0], [0], linestyle="none", marker="^", color=COLORS["green"], markersize=6, label="Both Bull"),
-        Line2D([0], [0], linestyle="none", marker="v", color=COLORS["red"], markersize=6, label="Both Bear"),
-        Line2D([0], [0], linestyle="none", marker="D", color=COLORS["yellow"], markersize=5, label="Diverge"),
+        Line2D([0], [0], color=COLORS["neutral"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="1.0"),
+        Line2D([0], [0], color=COLORS["green"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="BOT"),
+        Line2D([0], [0], color=COLORS["red"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="SELL"),
+        Line2D([0], [0], marker="^", color="none", markerfacecolor=COLORS["green"], markersize=6, label="▲ Both Bull"),
+        Line2D([0], [0], marker="v", color="none", markerfacecolor=COLORS["red"], markersize=6, label="▼ Both Bear"),
+        Line2D([0], [0], marker="D", color="none", markerfacecolor=COLORS["yellow"], markersize=5, label="◆ Diverge"),
     ]
     # Horizontal legend at top left
     legend1 = ax1.legend(
@@ -437,17 +438,9 @@ def plot_symbol_metrics(
             linewidths=0.4,
         )
 
-    # Set y-axis bounds: default [-0.5, +0.5], expand if data exceeds
-    max_abs = lit_imbalance_series.abs().max(skipna=True) if valid_mask2.any() else 0.3
-    if pd.isna(max_abs):
-        max_abs = 0.3
-    y_bound = max(0.5, float(np.ceil(max_abs * 10) / 10))  # Round up to nearest 0.1
-    ax2.set_ylim(-y_bound, y_bound)
-    # Dynamic yticks based on range
-    if y_bound <= 0.5:
-        ax2.set_yticks([-0.5, -0.2, -0.1, 0, 0.1, 0.2, 0.5])
-    else:
-        ax2.set_yticks([-y_bound, -0.5, -0.2, -0.1, 0, 0.1, 0.2, 0.5, y_bound])
+    # Set y-axis bounds for [-1, +1] range
+    ax2.set_ylim(-1.0, 1.0)
+    ax2.set_yticks([-1.0, -0.5, -0.2, -0.1, 0, 0.1, 0.2, 0.5, 1.0])
     ax2.axhline(y=0, color=COLORS["neutral"], linestyle="--", linewidth=THRESHOLD_LINE_WIDTH, alpha=0.6)
     ax2.axhline(y=0.1, color=COLORS["green"], linestyle="--", linewidth=THRESHOLD_LINE_WIDTH, alpha=0.5)
     ax2.axhline(y=-0.1, color=COLORS["red"], linestyle="--", linewidth=THRESHOLD_LINE_WIDTH, alpha=0.5)
@@ -458,6 +451,9 @@ def plot_symbol_metrics(
     ax2.set_title("Lit Flow Imbalance (Confirmation)", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
     legend_handles_2 = [
         Line2D([0], [0], color=COLORS["yellow"], linewidth=MAIN_LINE_WIDTH, label="Lit Imbalance"),
+        Line2D([0], [0], color=COLORS["neutral"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="Neutral (0)"),
+        Line2D([0], [0], color=COLORS["green"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="Bullish (±0.1)"),
+        Line2D([0], [0], color=COLORS["green"], linewidth=THRESHOLD_LINE_WIDTH, linestyle=":", label="Strong (±0.2)"),
     ]
     _add_panel_legend(ax2, legend_handles_2, [h.get_label() for h in legend_handles_2], loc="upper left")
 
@@ -471,18 +467,7 @@ def plot_symbol_metrics(
 
     # Group data by week to draw step bands
     valid_mask3 = ~otc_part_rate.isna()
-    if not valid_mask3.any():
-        # No Weekly OTC Weekly Report available for this ticker - show placeholder message
-        ax3.text(
-            0.5, 0.5,
-            "No OTC Weekly Report Available for this Ticker",
-            ha="center", va="center",
-            transform=ax3.transAxes,
-            fontsize=10,
-            color=COLORS["text_muted"],
-            style="italic",
-        )
-    elif otc_week_used is not None:
+    if valid_mask3.any() and otc_week_used is not None:
         # Get unique weeks and their data
         week_groups = df[valid_mask3].groupby("otc_week_used")
         for week_start, week_data in week_groups:
@@ -595,27 +580,12 @@ def plot_symbol_metrics(
     ax3b.set_ylabel("WoW Delta", color=COLORS["text_muted"], fontsize=8)
 
     legend_handles_3 = [
-        Patch(facecolor=COLORS["cyan"], edgecolor="none", alpha=0.4, label="High (z>0.5)"),
-        Patch(facecolor=COLORS["yellow"], edgecolor="none", alpha=0.3, label="Normal"),
+        Patch(facecolor=COLORS["cyan"], edgecolor="none", alpha=0.4, label="High Activity (z>0.5)"),
+        Patch(facecolor=COLORS["yellow"], edgecolor="none", alpha=0.3, label="Normal Activity"),
         Patch(facecolor=COLORS["neutral"], edgecolor="none", alpha=0.2, label="Stale/Low"),
-        Line2D([0], [0], color=COLORS["yellow"], linewidth=SECONDARY_LINE_WIDTH, label="Rate"),
+        Line2D([0], [0], color=COLORS["yellow"], linewidth=SECONDARY_LINE_WIDTH, label="Participation Rate"),
     ]
-    # Horizontal legend at top right
-    legend3 = ax3.legend(
-        legend_handles_3,
-        [h.get_label() for h in legend_handles_3],
-        loc="upper right",
-        ncol=len(legend_handles_3),
-        fontsize=7,
-        frameon=True,
-        facecolor=COLORS["background"],
-        framealpha=0.7,
-        edgecolor=COLORS["grid"],
-        columnspacing=1.0,
-        handletextpad=0.4,
-    )
-    for text in legend3.get_texts():
-        text.set_color(COLORS["text"])
+    _add_panel_legend(ax3, legend_handles_3, [h.get_label() for h in legend_handles_3], loc="upper right")
 
     # Panel 4: Accumulation Score + Confidence Bar
     ax4 = axes[3]
@@ -653,20 +623,18 @@ def plot_symbol_metrics(
         # Reduce opacity if low confidence
         alpha = 0.8 if conf >= 0.6 else 0.4
 
-        # Main score bar - height proportional to score (0-100 -> 0.0-1.0)
-        bar_height = score / 100.0  # Normalize to 0-1 range
-        ax4.bar(d, bar_height, bottom=0, color=bar_color, alpha=alpha, width=0.8, zorder=2)
+        # Main score bar (full height)
+        ax4.bar(d, 0.7, bottom=0.15, color=bar_color, alpha=alpha, width=0.8, zorder=2)
 
         # Thin confidence bar below (shows confidence level)
-        conf_height = 0.08 * conf  # Scale confidence to bar height
-        ax4.bar(d, conf_height, bottom=-0.12, color=COLORS["white"], alpha=0.5, width=0.6, zorder=3)
+        conf_height = 0.1 * conf  # Scale confidence to bar height
+        ax4.bar(d, conf_height, bottom=0.02, color=COLORS["white"], alpha=0.5, width=0.6, zorder=3)
 
-        # Score label on bar (position at bar top or center, whichever is visible)
+        # Score label on bar
         if not pd.isna(score):
-            label_y = max(bar_height / 2, 0.15)  # Ensure label is visible even for low scores
             ax4.text(
                 d,
-                label_y,
+                0.5,
                 f"{score:.0f}",
                 ha="center",
                 va="center",
@@ -676,15 +644,12 @@ def plot_symbol_metrics(
                 zorder=4,
             )
 
-    # Threshold reference lines at 30%, 50%, 70%
-    ax4.axhline(y=0.30, color=COLORS["red"], linestyle="--", linewidth=0.8, alpha=0.4, zorder=1)
-    ax4.axhline(y=0.50, color=COLORS["neutral"], linestyle="--", linewidth=0.8, alpha=0.4, zorder=1)
-    ax4.axhline(y=0.70, color=COLORS["green"], linestyle="--", linewidth=0.8, alpha=0.4, zorder=1)
+    # Threshold markers
+    ax4.set_ylim(0, 1)
+    ax4.set_yticks([])
 
-    # Y-axis: extend below 0 to show confidence bar, main range is 0-1
-    ax4.set_ylim(-0.15, 1.05)
-    ax4.set_yticks([0, 0.3, 0.5, 0.7, 1.0])
-    ax4.set_yticklabels(["0", "30", "50", "70", "100"])
+    # Add threshold reference lines (visual guides)
+    # Note: These are just for reference, the actual thresholds are in the score values
 
     ax4.set_ylabel("Score", color=COLORS["text_muted"], fontsize=8)
     ax4.set_title("Accumulation Score (0-100)", color=COLORS["white"], fontsize=9, fontweight="bold", loc="left")
@@ -693,27 +658,12 @@ def plot_symbol_metrics(
         spine.set_visible(False)
 
     legend_handles_4 = [
-        Patch(facecolor=COLORS["green"], edgecolor="none", alpha=0.8, label=">70 Accum"),
+        Patch(facecolor=COLORS["green"], edgecolor="none", alpha=0.8, label=">70 Accumulating"),
         Patch(facecolor="#888888", edgecolor="none", alpha=0.8, label="30-70 Neutral"),
-        Patch(facecolor=COLORS["red"], edgecolor="none", alpha=0.8, label="<30 Distrib"),
-        Patch(facecolor=COLORS["white"], edgecolor="none", alpha=0.5, label="Confidence"),
+        Patch(facecolor=COLORS["red"], edgecolor="none", alpha=0.8, label="<30 Distribution"),
+        Patch(facecolor=COLORS["white"], edgecolor="none", alpha=0.5, label="Confidence Bar"),
     ]
-    # Horizontal legend at top right
-    legend4 = ax4.legend(
-        legend_handles_4,
-        [h.get_label() for h in legend_handles_4],
-        loc="upper right",
-        ncol=len(legend_handles_4),
-        fontsize=7,
-        frameon=True,
-        facecolor=COLORS["background"],
-        framealpha=0.7,
-        edgecolor=COLORS["grid"],
-        columnspacing=1.0,
-        handletextpad=0.4,
-    )
-    for text in legend4.get_texts():
-        text.set_color(COLORS["text"])
+    _add_panel_legend(ax4, legend_handles_4, [h.get_label() for h in legend_handles_4], loc="upper right")
 
     # Format x-axis dates on ALL panels (not just bottom)
     for ax in [axes[0], axes[1], axes[2], ax4]:
@@ -724,32 +674,22 @@ def plot_symbol_metrics(
 
     # Title and footer
     fig.suptitle(
-        f"{symbol} - Institutional Pressure Analysis{title_suffix}",
+        f"Institutional Pressure Analysis{title_suffix}",
         color=COLORS["white"],
         fontsize=14,
         fontweight="bold",
         y=0.98,
     )
 
-    # Footer definitions - one term per row
-    footer_lines = [
-        "Short Sale Ratio: Buy pressure proxy from FINRA short sale data (>1.25 = buying, <0.75 = selling)",
-        "Lit Imbalance: Net buying vs selling on lit exchanges (positive = buyers dominating)",
-        "OTC Participation: Off-exchange volume share - measures institutional dark pool activity",
-        "Accumulation Score: Combined signal (0-100) weighting short, lit, and price momentum",
-    ]
-    footer_text = "\n".join(footer_lines)
     fig.text(
         0.5, 0.01,
-        footer_text,
+        "Short sale = buy proxy. OTC participation = FINRA all-hours / Polygon RTH (proxy ratio). Direction not observable.",
         ha="center",
-        va="bottom",
-        fontsize=7,
+        fontsize=8,
         color=COLORS["text_muted"],
-        linespacing=1.4,
     )
 
-    plt.tight_layout(rect=[0, 0.06, 1, 0.96])  # More bottom space for multi-line footer
+    plt.tight_layout(rect=[0, 0.03, 1, 0.96])
 
     # Save
     output_path.parent.mkdir(parents=True, exist_ok=True)
