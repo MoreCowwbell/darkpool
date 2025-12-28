@@ -267,3 +267,10 @@ Format:
 
 ## 2025-12-28 Session Summary (Codex)
 - [x] Updated plot width scaling to use 12 inches per 50-day bucket for long date ranges.
+
+
+## 2025-12-28 Session Summary (Codex)
+- [x] Aligned panel 1/2 markers to valid data points and forced consistent x-limits/ticks across all panels (including OTC).
+
+## 2025-12-28 Session Summary (Codex)
+- [x] Extended FINRA OTC API date range to cover the full target-date span and wired the range into orchestrator calls.

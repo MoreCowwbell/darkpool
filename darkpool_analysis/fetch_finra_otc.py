@@ -150,6 +150,7 @@ def _load_finra_from_api(
     config: Config,
     symbols: list[str] | None = None,
     target_date: date | None = None,
+    start_date: date | None = None,
 ) -> pd.DataFrame:
     if not config.finra_otc_url:
         raise ValueError("FINRA_OTC_URL is required when FINRA_OTC_FILE is not set.")
@@ -179,11 +180,14 @@ def _load_finra_from_api(
 
     if target_date:
         week_start = target_date - timedelta(days=target_date.weekday())
-        start_date = week_start - timedelta(weeks=8)
+        if start_date:
+            start_week = start_date - timedelta(days=start_date.weekday())
+        else:
+            start_week = week_start - timedelta(weeks=8)
         payload["dateRangeFilters"] = [
             {
                 "fieldName": "weekStartDate",
-                "startDate": start_date.isoformat(),
+                "startDate": start_week.isoformat(),
                 "endDate": week_start.isoformat(),
             }
         ]
@@ -317,7 +321,9 @@ def _normalize_finra_columns(df: pd.DataFrame, config: Config, source_file: Opti
 
 
 def fetch_finra_otc_weekly(
-    config: Config, target_date: date
+    config: Config,
+    target_date: date,
+    range_start: Optional[date] = None,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, Optional[date]]:
     # Priority: directory > file > API
     if config.finra_otc_dir:
@@ -329,8 +335,23 @@ def fetch_finra_otc_weekly(
         raw_df = _load_finra_from_file(config.finra_otc_file)
         source_file = Path(config.finra_otc_file).name
     else:
-        logger.info("Fetching FINRA OTC data from API for symbols: %s", config.finra_tickers)
-        raw_df = _load_finra_from_api(config, symbols=config.finra_tickers, target_date=target_date)
+        if range_start:
+            start_week = range_start - timedelta(days=range_start.weekday())
+            end_week = target_date - timedelta(days=target_date.weekday())
+            logger.info(
+                "Fetching FINRA OTC data from API for symbols: %s (weeks %s to %s)",
+                config.finra_tickers,
+                start_week,
+                end_week,
+            )
+        else:
+            logger.info("Fetching FINRA OTC data from API for symbols: %s", config.finra_tickers)
+        raw_df = _load_finra_from_api(
+            config,
+            symbols=config.finra_tickers,
+            target_date=target_date,
+            start_date=range_start,
+        )
         source_file = None
         logger.info("Fetched %d rows from FINRA API", len(raw_df))
 

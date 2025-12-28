@@ -75,6 +75,7 @@ def main() -> None:
     logging.info("Cache enabled: %s", config.skip_cached)
 
     max_date = max(config.target_dates)
+    min_date = min(config.target_dates)
     conn = get_connection(config.db_path)
     short_frames = []
     lit_frames = []
@@ -83,7 +84,7 @@ def main() -> None:
     try:
         init_db(conn)
 
-        finra_all_df, _, _ = fetch_finra_otc_weekly(config, max_date)
+        finra_all_df, _, _ = fetch_finra_otc_weekly(config, max_date, range_start=min_date)
         if finra_all_df.empty:
             logging.warning("No FINRA OTC weekly data returned.")
         else:

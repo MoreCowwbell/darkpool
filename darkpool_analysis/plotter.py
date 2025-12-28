@@ -374,8 +374,8 @@ def plot_symbol_metrics(
     if valid_mask.any():
         _plot_smooth_line(ax1, dates, short_ratio, COLORS["cyan"], valid_mask, linewidth=PANEL1_LINE_WIDTH)
         ax1.scatter(
-            dates,
-            short_ratio,
+            dates[valid_mask],
+            short_ratio[valid_mask],
             c=COLORS["cyan"],
             s=MARKER_SIZE,
             zorder=5,
@@ -473,8 +473,8 @@ def plot_symbol_metrics(
     if valid_mask2.any():
         _plot_smooth_line(ax2, dates, lit_imbalance_series, COLORS["yellow"], valid_mask2, linewidth=MAIN_LINE_WIDTH)
         ax2.scatter(
-            dates,
-            lit_imbalance_series,
+            dates[valid_mask2],
+            lit_imbalance_series[valid_mask2],
             c=COLORS["yellow"],
             s=MARKER_SIZE_SMALL,
             zorder=5,
@@ -815,12 +815,20 @@ def plot_symbol_metrics(
     for text in legend4.get_texts():
         text.set_color(COLORS["text"])
 
+    x_min = dates.min()
+    x_max = dates.max()
+    x_locator = mdates.DayLocator(interval=1)
+    x_formatter = mdates.DateFormatter("%y-%m-%d")
+
     # Format x-axis dates on ALL panels (not just bottom)
     for ax in [axes[0], axes[1], axes[2], ax4]:
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%y-%m-%d"))
-        ax.xaxis.set_major_locator(mdates.DayLocator(interval=1))  # Show every day
+        ax.set_xlim(x_min, x_max)
+        ax.xaxis.set_major_formatter(x_formatter)
+        ax.xaxis.set_major_locator(x_locator)  # Show every day
         ax.tick_params(axis="x", labelbottom=True)  # Enable x labels on all panels
         plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha="right", fontsize=8)
+
+    ax3b.set_xlim(x_min, x_max)
 
     # Title and footer
     fig.suptitle(
