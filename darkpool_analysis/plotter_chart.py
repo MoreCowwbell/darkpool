@@ -34,6 +34,7 @@ COLORS = {
     "white": "#ffffff",
     "green": "#00ff88",
     "red": "#ff6b6b",
+    "yellow": "#ffd700",
     "blue": "#4aa3ff",
     "orange": "#ff9f43",
     "neutral": "#6b6b6b",
@@ -98,7 +99,8 @@ def fetch_price_data(
             p.low,
             p.close,
             p.volume,
-            d.accumulation_score_display
+            d.accumulation_score_display,
+            d.confidence
         FROM polygon_daily_agg_raw p
         LEFT JOIN daily_metrics d
             ON d.symbol = p.symbol AND d.date = p.trade_date
@@ -110,7 +112,7 @@ def fetch_price_data(
         return df
 
     df["date"] = pd.to_datetime(df["date"])
-    for col in ["open", "high", "low", "close", "volume", "accumulation_score_display"]:
+    for col in ["open", "high", "low", "close", "volume", "accumulation_score_display", "confidence"]:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
     return df
@@ -121,6 +123,8 @@ def _resample_ohlcv(df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
         return df
     if "accumulation_score_display" not in df.columns:
         df["accumulation_score_display"] = pd.NA
+    if "confidence" not in df.columns:
+        df["confidence"] = pd.NA
 
     timeframe = _resolve_timeframe(timeframe)
     if timeframe == "daily":
@@ -136,6 +140,7 @@ def _resample_ohlcv(df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
             "close": "last",
             "volume": "sum",
             "accumulation_score_display": "last",
+            "confidence": "last",
         }
     )
     aggregated = aggregated.dropna(subset=["open", "close"])
@@ -227,23 +232,24 @@ def plot_price_chart(
     fig_width = _compute_fig_width(len(df))
 
     plt.style.use("dark_background")
-    fig, (ax_price, ax_vol) = plt.subplots(
-        2,
+    fig, (ax_price, ax_vol, ax_score) = plt.subplots(
+        3,
         1,
-        figsize=(fig_width, 8),
-        gridspec_kw={"height_ratios": [4.5, 1]},
+        figsize=(fig_width, 10.5),
+        gridspec_kw={"height_ratios": [4.5, 1, 1.6]},
         sharex=True,
     )
     fig.patch.set_facecolor(COLORS["background"])
 
     _apply_axis_style(ax_price)
     _apply_axis_style(ax_vol)
+    _apply_axis_style(ax_score)
 
     dates, bar_width = _plot_ohlcv_bars(ax_price, df)
     _plot_volume_bars(ax_vol, df, dates, bar_width)
     if len(dates) > 0:
         pad = bar_width
-        ax_vol.set_xlim(dates.min() - pad, dates.max() + pad)
+        ax_score.set_xlim(dates.min() - pad, dates.max() + pad)
 
     y_min = df["low"].min()
     y_max = df["high"].max()
@@ -280,9 +286,102 @@ def plot_price_chart(
         locator = mdates.DayLocator(interval=1)
         formatter = mdates.DateFormatter("%y-%m-%d")
 
-    ax_vol.xaxis.set_major_locator(locator)
-    ax_vol.xaxis.set_major_formatter(formatter)
-    plt.setp(ax_vol.xaxis.get_majorticklabels(), rotation=45, ha="right", fontsize=8)
+    ax_price.tick_params(axis="x", labelbottom=False)
+    ax_vol.tick_params(axis="x", labelbottom=False)
+    ax_score.xaxis.set_major_locator(locator)
+    ax_score.xaxis.set_major_formatter(formatter)
+    plt.setp(ax_score.xaxis.get_majorticklabels(), rotation=45, ha="right", fontsize=8)
+
+    score_display = df["accumulation_score_display"].fillna(50)
+    confidence = df["confidence"].fillna(0.5)
+
+    from matplotlib.colors import LinearSegmentedColormap
+
+    score_cmap = LinearSegmentedColormap.from_list(
+        "score_cmap",
+        [
+            (0.0, COLORS["red"]),
+            (0.5, "#888888"),
+            (1.0, COLORS["green"]),
+        ],
+    )
+
+    for d, score, conf in zip(df["date"], score_display, confidence):
+        if pd.isna(score):
+            score = 50
+        if pd.isna(conf):
+            conf = 0.5
+
+        norm_score = np.clip(score / 100.0, 0, 1)
+        bar_color = score_cmap(norm_score)
+        alpha = 0.8 if conf >= 0.6 else 0.4
+        bar_height = score / 100.0
+        ax_score.bar(d, bar_height, bottom=0, color=bar_color, alpha=alpha, width=0.8, zorder=2)
+
+        conf_height = 0.08 * conf
+        if conf >= 0.7:
+            conf_color = COLORS["green"]
+        elif conf >= 0.4:
+            conf_color = COLORS["yellow"]
+        else:
+            conf_color = COLORS["red"]
+        ax_score.bar(d, conf_height, bottom=-0.12, color=conf_color, alpha=0.6, width=0.6, zorder=3)
+
+        label_y = max(bar_height / 2, 0.15)
+        ax_score.text(
+            d,
+            label_y,
+            f"{score:.0f}",
+            ha="center",
+            va="center",
+            fontsize=7,
+            color=COLORS["white"],
+            fontweight="bold",
+            zorder=4,
+        )
+
+    ax_score.axhline(y=0.30, color=COLORS["red"], linestyle="--", linewidth=0.8, alpha=0.4, zorder=1)
+    ax_score.axhline(y=0.50, color=COLORS["neutral"], linestyle="--", linewidth=0.8, alpha=0.4, zorder=1)
+    ax_score.axhline(y=0.70, color=COLORS["green"], linestyle="--", linewidth=0.8, alpha=0.4, zorder=1)
+
+    ax_score.set_ylim(-0.15, 1.05)
+    ax_score.set_yticks([0, 0.3, 0.5, 0.7, 1.0])
+    ax_score.set_yticklabels(["0", "30", "50", "70", "100"])
+    ax_score.set_ylabel("Score", color=COLORS["white"], fontsize=10)
+    ax_score.set_title(
+        "Accumulation Score (0-100)",
+        color=COLORS["white"],
+        fontsize=9,
+        fontweight="bold",
+        loc="left",
+    )
+    ax_score.grid(False)
+    for spine in ax_score.spines.values():
+        spine.set_visible(False)
+
+    legend_handles_score = [
+        Patch(facecolor=COLORS["green"], edgecolor="none", alpha=0.8, label=">70 Accum"),
+        Patch(facecolor="#888888", edgecolor="none", alpha=0.8, label="30-70 Neutral"),
+        Patch(facecolor=COLORS["red"], edgecolor="none", alpha=0.8, label="<30 Distrib"),
+        Line2D([0], [0], color=COLORS["green"], linewidth=4, alpha=0.6, label="High Conf"),
+        Line2D([0], [0], color=COLORS["yellow"], linewidth=4, alpha=0.6, label="Med Conf"),
+        Line2D([0], [0], color=COLORS["red"], linewidth=4, alpha=0.6, label="Low Conf"),
+    ]
+    legend = ax_score.legend(
+        legend_handles_score,
+        [h.get_label() for h in legend_handles_score],
+        loc="upper right",
+        ncol=len(legend_handles_score),
+        fontsize=7,
+        frameon=True,
+        facecolor=COLORS["background"],
+        framealpha=0.7,
+        edgecolor=COLORS["grid"],
+        columnspacing=1.0,
+        handletextpad=0.4,
+    )
+    for text in legend.get_texts():
+        text.set_color(COLORS["text"])
 
     legend_handles = [
         Line2D([0], [0], marker="o", color="none", markerfacecolor=COLORS["green"],

@@ -1,0 +1,1 @@
+For the bar chart figure, add the accumulation score plot at the bottom. That new panel should be identical to the one found in our Institutional Pressure Analysis figure.

@@ -283,3 +283,4 @@ Format:
 - [x] Added ticker group selection via TICKERS_TYPE and defined group lists in config.
 - [x] Removed up/down bar labels from the price chart legend.
 - [x] Increased OHLCV price panel height ratio by 1.5x.
+- [x] Added accumulation score panel to price charts using the same styling as the institutional plot.
