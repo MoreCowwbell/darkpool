@@ -173,8 +173,14 @@ def fetch_finra_short_daily(config: Config, target_date: date) -> pd.DataFrame:
         logger.info("Loading FINRA short sale files from dir: %s", config.finra_short_sale_dir)
         raw_df = _load_short_sale_dir(config.finra_short_sale_dir)
     else:
-        logger.info("Fetching FINRA short sale data from API for %s", target_date.isoformat())
-        raw_df = _load_short_sale_from_api(config, target_date)
+        # Use CDN as primary source (FINRA regShoDaily API deprecated - returns 204 No Content)
+        # Lazy import to avoid circular dependency (CDN module imports normalize_short_sale_df)
+        try:
+            from .fetch_finra_short_cdn import fetch_finra_short_cdn_daily
+        except ImportError:
+            from fetch_finra_short_cdn import fetch_finra_short_cdn_daily
+        logger.info("Fetching FINRA short sale data from CDN for %s", target_date.isoformat())
+        raw_df = fetch_finra_short_cdn_daily(config, target_date)
 
     if raw_df.empty:
         logger.warning("FINRA short sale data returned no rows.")
