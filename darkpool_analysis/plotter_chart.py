@@ -231,7 +231,7 @@ def plot_price_chart(
         2,
         1,
         figsize=(fig_width, 8),
-        gridspec_kw={"height_ratios": [3, 1]},
+        gridspec_kw={"height_ratios": [4.5, 1]},
         sharex=True,
     )
     fig.patch.set_facecolor(COLORS["background"])
@@ -285,8 +285,6 @@ def plot_price_chart(
     plt.setp(ax_vol.xaxis.get_majorticklabels(), rotation=45, ha="right", fontsize=8)
 
     legend_handles = [
-        Patch(facecolor=COLORS["blue"], edgecolor=COLORS["blue"], label="Up bar"),
-        Patch(facecolor=COLORS["orange"], edgecolor=COLORS["orange"], label="Down bar"),
         Line2D([0], [0], marker="o", color="none", markerfacecolor=COLORS["green"],
                markeredgecolor=COLORS["white"], markersize=6, label="Accumulation (>70)"),
         Line2D([0], [0], marker="o", color="none", markerfacecolor=COLORS["red"],

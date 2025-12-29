@@ -281,3 +281,5 @@ Format:
 - [x] Added right-side padding on OHLCV charts to prevent last bar truncation.
 - [x] Inverted price-chart signal placement (red above, green below) and increased marker spacing.
 - [x] Added ticker group selection via TICKERS_TYPE and defined group lists in config.
+- [x] Removed up/down bar labels from the price chart legend.
+- [x] Increased OHLCV price panel height ratio by 1.5x.
