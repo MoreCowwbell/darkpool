@@ -210,6 +210,10 @@ def _load_finra_from_api(
     response.raise_for_status()
     content_type = response.headers.get("Content-Type", "")
     text = response.text.strip()
+    # Handle empty responses (FINRA API sometimes returns 200 with no body)
+    if not text:
+        logger.warning("FINRA OTC API returned empty response")
+        return pd.DataFrame()
     if "application/json" in content_type or text.startswith("{") or text.startswith("["):
         payload = response.json()
         if isinstance(payload, dict) and "data" in payload:
@@ -354,6 +358,11 @@ def fetch_finra_otc_weekly(
         )
         source_file = None
         logger.info("Fetched %d rows from FINRA API", len(raw_df))
+
+    # Handle empty raw data before normalization
+    if raw_df.empty:
+        logger.warning("FINRA OTC raw data is empty, returning empty DataFrames")
+        return pd.DataFrame(), pd.DataFrame(), None
 
     normalized = _normalize_finra_columns(raw_df, config, source_file)
     normalized = normalized[normalized["symbol"].isin(config.finra_tickers)].copy()
