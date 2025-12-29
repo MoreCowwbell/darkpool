@@ -52,6 +52,7 @@ python -m pip install -r requirements.txt
 ## Configuration (Environment Variables)
 Core:
 - TICKERS (comma-separated)
+- TICKERS_TYPE (DEFAULT, SECTOR_CORE, GLOBAL_MACRO, COMMODITIES)
 - FETCH_MODE ("single", "daily", "weekly")
 - TARGET_DATE (YYYY-MM-DD)
 - BACKFILL_COUNT (int)

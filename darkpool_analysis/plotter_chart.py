@@ -183,7 +183,7 @@ def _plot_signal_markers(
     if buy_mask.any():
         ax.scatter(
             dates[buy_mask],
-            df.loc[buy_mask, "high"] + offset,
+            df.loc[buy_mask, "low"] - offset,
             s=SIGNAL_MARKER_SIZE,
             c=COLORS["green"],
             edgecolors=COLORS["white"],
@@ -194,7 +194,7 @@ def _plot_signal_markers(
     if sell_mask.any():
         ax.scatter(
             dates[sell_mask],
-            df.loc[sell_mask, "low"] - offset,
+            df.loc[sell_mask, "high"] + offset,
             s=SIGNAL_MARKER_SIZE,
             c=COLORS["red"],
             edgecolors=COLORS["white"],
@@ -241,6 +241,9 @@ def plot_price_chart(
 
     dates, bar_width = _plot_ohlcv_bars(ax_price, df)
     _plot_volume_bars(ax_vol, df, dates, bar_width)
+    if len(dates) > 0:
+        pad = bar_width
+        ax_vol.set_xlim(dates.min() - pad, dates.max() + pad)
 
     y_min = df["low"].min()
     y_max = df["high"].max()
@@ -250,7 +253,7 @@ def plot_price_chart(
     y_span = y_max - y_min if pd.notna(y_max) and pd.notna(y_min) else 0
     if not y_span or y_span <= 0:
         y_span = float(df["close"].mean() or 1.0)
-    offset = y_span * 0.02
+    offset = y_span * 0.04
 
     _plot_signal_markers(ax_price, df, dates, offset)
 

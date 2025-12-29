@@ -278,3 +278,6 @@ Format:
 ## 2025-12-28 Session Summary (Codex)
 - [x] Added standalone OHLCV price chart renderer with accumulation signal markers and dark-theme styling.
 - [x] Wired price chart rendering into config/orchestrator and documented new outputs/options.
+- [x] Added right-side padding on OHLCV charts to prevent last bar truncation.
+- [x] Inverted price-chart signal placement (red above, green below) and increased marker spacing.
+- [x] Added ticker group selection via TICKERS_TYPE and defined group lists in config.

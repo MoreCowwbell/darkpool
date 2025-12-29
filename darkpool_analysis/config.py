@@ -14,45 +14,60 @@ from dotenv import load_dotenv
 # =============================================================================
 # Default Configuration (can be overridden via .env)
 # =============================================================================
+TICKERS_TYPE = "DEFAULT"  # Options: "DEFAULT", "SECTOR_CORE", "GLOBAL_MACRO", "COMMODITIES", "MAG8"
 DEFAULT_TICKERS = ["META"]
+
+SECTOR_CORE_TICKERS = [
+    "XLK",  # Technology (platforms, software, mega-cap growth)
+    "SMH",  # Semiconductors (hardware + capex cycle)
+    "XLF",  # Financials (money-center banks, insurers)
+    "KRE",  # Regional Banks (rates, liquidity stress)
+    "XLE",  # Energy (commodities, inflation hedge)
+    "XLI",  # Industrials (cyclicals, defense, capex)
+    "XLY",  # Consumer Discretionary (growth beta)
+    "XLP",  # Consumer Staples (defensive)
+    "XLV",  # Health Care (defensive + policy)
+    "XLU",  # Utilities (rates, yield proxy)
+]
+
+GLOBAL_MACRO_TICKERS = [
+    "SPY",   # US large-cap core (S&P 500)
+    "QQQ",   # US growth / tech beta
+    "TQQQ",  # ProShares UltraPro QQQ ETF
+    "IWM",   # US small caps (domestic liquidity)
+    "EFA",   # Developed markets ex-US (EU + Japan)
+    "EEM",   # Emerging markets (global risk / China beta)
+    "EWJ",   # Japan (yield-curve / FX-sensitive)
+    "FXI",   # China large-cap (policy + growth stress)
+    "VGK",   # Europe (value / banks / energy tilt)
+    "TLT",   # US long rates (risk-off / duration)
+    "VIXY",  # Volatility (risk regime)
+    "UUP",   # US dollar (global liquidity / stress)
+    "GLD",   # Gold (inflation / real rates)
+    "USO",   # Crude oil (global growth / inflation)
+]
+
+COMMODITIES_TICKERS = [
+    "GLD",  # Gold ETF (inflation hedge)
+    "SLV",  # Silver ETF (inflation hedge)
+    "GDX",  # Gold miners (inflation hedge + equity beta)
+    "USO",  # Oil ETF (commodity cycle)
+    "UNG",  # Natural Gas ETF (commodity cycle)
+    "URA",  # Global Uranium ETF (energy transition theme)
+]
+
+MAG8_TICKERS = [
+    'AAPL',
+    'MSFT',
+    'GOOGL',
+    'AMZN',
+    'NVDA',
+    'META',
+    'TSLA',
+    'AVGO',
+]
+
 EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
-
-# ### US_SECTOR_CORE
-# "XLK",  // Technology (platforms, software, mega-cap growth)
-# "SMH",  // Semiconductors (hardware + capex cycle)
-# "XLF",  // Financials (money-center banks, insurers)
-# "KRE",  // Regional Banks (rates, liquidity stress)
-# "XLE",  // Energy (commodities, inflation hedge)
-# "XLI",  // Industrials (cyclicals, defense, capex)
-# "XLY",  // Consumer Discretionary (growth beta)
-# "XLP",  // Consumer Staples (defensive)
-# "XLV",  // Health Care (defensive + policy)
-# "XLU",  // Utilities (rates, yield proxy)
-
-# ### Global macro / index rotation set (ETF proxies)
-# "SPY",   // US large-cap core (S&P 500)
-# "QQQ",   // US growth / tech beta
-# "TQQQ",  // ProShares UltraPro QQQ ETF
-# "IWM",   // US small caps (domestic liquidity)
-# "EFA",   // Developed markets ex-US (EU + Japan)
-# "EEM",   // Emerging markets (global risk / China beta)
-# "EWJ",   // Japan (yield-curve / FX-sensitive)
-# "FXI",   // China large-cap (policy + growth stress)
-# "VGK",   // Europe (value / banks / energy tilt)
-# "TLT",   // US long rates (risk-off / duration)
-# "VIXY",  // Volatility (risk regime)
-# "UUP",   // US dollar (global liquidity / stress)
-# "DBC",   // Commodities broad basket (inflation / commodity cycle)
-# "UVIX",  // ProShares Ultra VIX Short-Term Futures ETF
-# "SVIX",  // ProShares Short VIX Short-Term Futures ETF
-
-# ### Commmoties / Thematic
-# "GLD",   // Gold ETF (inflation hedge)
-# "SLV",   // Silver ETF (inflation hedge)
-# "GDX",   // Gold miners (inflation hedge + equity beta)
-# "USO",   // Oil ETF (commodity cycle)
-# "UNG",   // Natural Gas ETF (commodity cycle)
-# "URA",   // Global Uranium ETF (energy transition theme)
 # -----------------------------------------------------------------------------
 
 # Analysis defaults
@@ -348,7 +363,21 @@ def load_config() -> Config:
     else:  # "single"
         target_dates = [target_date]
 
-    tickers = _parse_csv_env("TICKERS") or DEFAULT_TICKERS
+    tickers_type = os.getenv("TICKERS_TYPE", TICKERS_TYPE).upper()
+    if tickers_type == "DEFAULT":
+        selected_tickers = DEFAULT_TICKERS
+    elif tickers_type == "SECTOR_CORE":
+        selected_tickers = SECTOR_CORE_TICKERS
+    elif tickers_type == "GLOBAL_MACRO":
+        selected_tickers = GLOBAL_MACRO_TICKERS
+    elif tickers_type == "COMMODITIES":
+        selected_tickers = COMMODITIES_TICKERS
+    elif tickers_type == "MAG8":
+        selected_tickers = MAG8_TICKERS
+    else:
+        raise ValueError(f"Unknown TICKERS_TYPE: {tickers_type}")
+
+    tickers = _parse_csv_env("TICKERS") or selected_tickers
     finra_tickers = [ticker for ticker in tickers if ticker not in EXCLUDED_FINRA_TICKERS]
 
     rth_start = _parse_time(os.getenv("RTH_START", DEFAULT_RTH_START), time(9, 30))
