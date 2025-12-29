@@ -14,8 +14,8 @@ from dotenv import load_dotenv
 # =============================================================================
 # Default Configuration (can be overridden via .env)
 # =============================================================================
-TICKERS_TYPE = "DEFAULT"  # Options: "DEFAULT", "SECTOR_CORE", "GLOBAL_MACRO", "COMMODITIES", "MAG8"
-DEFAULT_TICKERS = ["PLTR"]
+TICKERS_TYPE = "SINGLE"  # Options: "SINGLE", "SECTOR", "GLOBAL", "COMMODITIES", "MAG8"
+DEFAULT_TICKERS = ["META"]
 
 SECTOR_CORE_TICKERS = [
     "XLK",  # Technology (platforms, software, mega-cap growth)
@@ -73,7 +73,7 @@ EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 # Analysis defaults
 DEFAULT_TARGET_DATE = "2025-12-26"  # Last trading day (Monday)
 DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
-DEFAULT_BACKFILL_COUNT = 90  # Number of periods to fetch (days for daily, weeks for weekly)
+DEFAULT_BACKFILL_COUNT = 10  # Number of periods to fetch (days for daily, weeks for weekly)
 DEFAULT_MIN_LIT_VOLUME = 10000
 DEFAULT_MARKET_TZ = "US/Eastern"
 DEFAULT_RTH_START = "09:30"
@@ -364,11 +364,11 @@ def load_config() -> Config:
         target_dates = [target_date]
 
     tickers_type = os.getenv("TICKERS_TYPE", TICKERS_TYPE).upper()
-    if tickers_type == "DEFAULT":
+    if tickers_type == "SINGLE":
         selected_tickers = DEFAULT_TICKERS
-    elif tickers_type == "SECTOR_CORE":
+    elif tickers_type == "SECTOR":
         selected_tickers = SECTOR_CORE_TICKERS
-    elif tickers_type == "GLOBAL_MACRO":
+    elif tickers_type == "GLOBAL":
         selected_tickers = GLOBAL_MACRO_TICKERS
     elif tickers_type == "COMMODITIES":
         selected_tickers = COMMODITIES_TICKERS

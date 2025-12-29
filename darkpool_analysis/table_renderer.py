@@ -66,6 +66,21 @@ def _blend_hex(base: str, overlay: str, alpha: float) -> str:
     return "#{:02x}{:02x}{:02x}".format(*blended)
 
 
+def _resolve_unique_output_paths(output_dir: Path, base_name: str) -> tuple[Path, Path]:
+    html_path = output_dir / f"{base_name}.html"
+    png_path = output_dir / f"{base_name}.png"
+    if not html_path.exists() and not png_path.exists():
+        return html_path, png_path
+
+    counter = 1
+    while True:
+        html_path = output_dir / f"{base_name}_{counter}.html"
+        png_path = output_dir / f"{base_name}_{counter}.png"
+        if not html_path.exists() and not png_path.exists():
+            return html_path, png_path
+        counter += 1
+
+
 def fetch_metrics_df(
     conn: duckdb.DuckDBPyConnection,
     dates: list[date],
@@ -1193,11 +1208,14 @@ def render_daily_metrics_table(
     output_dir.mkdir(parents=True, exist_ok=True)
     sorted_dates = sorted(dates, reverse=True)
     if len(sorted_dates) == 1:
-        subtitle = f"Date: {sorted_dates[0].strftime('%Y-%m-%d')}"
-        file_suffix = sorted_dates[0].strftime("%Y-%m-%d")
+        date_label = sorted_dates[0].strftime("%Y-%m-%d")
+        subtitle = f"Date: {date_label}"
+        file_suffix = date_label
     else:
-        subtitle = f"{sorted_dates[-1].strftime('%Y-%m-%d')} to {sorted_dates[0].strftime('%Y-%m-%d')}"
-        file_suffix = "combined"
+        start_label = sorted_dates[-1].strftime("%Y-%m-%d")
+        end_label = sorted_dates[0].strftime("%Y-%m-%d")
+        subtitle = f"{start_label} to {end_label}"
+        file_suffix = f"{start_label}_to_{end_label}"
 
     conn = duckdb.connect(str(db_path), read_only=True)
     try:
@@ -1211,11 +1229,13 @@ def render_daily_metrics_table(
             display_df, title=title, subtitle=subtitle, table_style=style
         )
 
-        html_path = output_dir / f"daily_metrics_{file_suffix}.html"
+        base_name = f"daily_metrics_{file_suffix}"
+        html_path, png_path = _resolve_unique_output_paths(output_dir, base_name)
+        if html_path.stem != base_name:
+            logger.info("Adjusted output name to avoid overwrite: %s", html_path.name)
         html_path.write_text(html_content, encoding="utf-8")
         logger.info("Saved HTML: %s", html_path)
 
-        png_path = output_dir / f"daily_metrics_{file_suffix}.png"
         render_html_to_png(html_path, png_path)
         return html_path, png_path
     finally:

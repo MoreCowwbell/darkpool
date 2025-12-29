@@ -284,3 +284,7 @@ Format:
 - [x] Removed up/down bar labels from the price chart legend.
 - [x] Increased OHLCV price panel height ratio by 1.5x.
 - [x] Added accumulation score panel to price charts using the same styling as the institutional plot.
+- [x] Merged accumulation score data from daily_metrics in price charts to mirror panel 4 exactly.
+
+## 2025-12-29 Session Summary (Codex)
+- [x] Updated table renderer output naming to use date-range suffixes and avoid overwriting existing table files.

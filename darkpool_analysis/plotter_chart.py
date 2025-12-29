@@ -91,31 +91,45 @@ def fetch_price_data(
     symbol = symbol.upper()
     min_date = min(dates)
     max_date = max(dates)
-    query = """
+    price_query = """
         SELECT
-            p.trade_date AS date,
-            p.open,
-            p.high,
-            p.low,
-            p.close,
-            p.volume,
-            d.accumulation_score_display,
-            d.confidence
-        FROM polygon_daily_agg_raw p
-        LEFT JOIN daily_metrics d
-            ON d.symbol = p.symbol AND d.date = p.trade_date
-        WHERE p.symbol = ? AND p.trade_date BETWEEN ? AND ?
-        ORDER BY p.trade_date
+            trade_date AS date,
+            open,
+            high,
+            low,
+            close,
+            volume
+        FROM polygon_daily_agg_raw
+        WHERE symbol = ? AND trade_date BETWEEN ? AND ?
+        ORDER BY trade_date
     """
-    df = conn.execute(query, [symbol, min_date, max_date]).df()
-    if df.empty:
-        return df
+    score_query = """
+        SELECT
+            date,
+            accumulation_score_display,
+            confidence
+        FROM daily_metrics
+        WHERE symbol = ? AND date BETWEEN ? AND ?
+        ORDER BY date
+    """
+    price_df = conn.execute(price_query, [symbol, min_date, max_date]).df()
+    if price_df.empty:
+        return price_df
 
-    df["date"] = pd.to_datetime(df["date"])
+    score_df = conn.execute(score_query, [symbol, min_date, max_date]).df()
+    if score_df.empty:
+        price_df["accumulation_score_display"] = pd.NA
+        price_df["confidence"] = pd.NA
+    else:
+        price_df["date"] = pd.to_datetime(price_df["date"]).dt.date
+        score_df["date"] = pd.to_datetime(score_df["date"]).dt.date
+        price_df = price_df.merge(score_df, on="date", how="left")
+
+    price_df["date"] = pd.to_datetime(price_df["date"])
     for col in ["open", "high", "low", "close", "volume", "accumulation_score_display", "confidence"]:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-    return df
+        if col in price_df.columns:
+            price_df[col] = pd.to_numeric(price_df[col], errors="coerce")
+    return price_df
 
 
 def _resample_ohlcv(df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
@@ -294,6 +308,8 @@ def plot_price_chart(
 
     score_display = df["accumulation_score_display"].fillna(50)
     confidence = df["confidence"].fillna(0.5)
+    if score_display.isna().all():
+        logger.warning("Accumulation score missing for %s in price chart range.", symbol)
 
     from matplotlib.colors import LinearSegmentedColormap
 
