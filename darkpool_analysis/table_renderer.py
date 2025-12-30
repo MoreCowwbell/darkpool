@@ -66,6 +66,11 @@ def _blend_hex(base: str, overlay: str, alpha: float) -> str:
     return "#{:02x}{:02x}{:02x}".format(*blended)
 
 
+def _lerp_hex(start: str, end: str, t: float) -> str:
+    t = max(0.0, min(1.0, t))
+    return _blend_hex(start, end, t)
+
+
 def _resolve_unique_output_paths(output_dir: Path, base_name: str) -> tuple[Path, Path]:
     html_path = output_dir / f"{base_name}.html"
     png_path = output_dir / f"{base_name}.png"
@@ -217,6 +222,22 @@ def _get_pressure_color(label: str, palette: dict) -> str:
     if label == "Distribution":
         return palette.get("bright_red", palette["red"])
     return palette["text_muted"]
+
+
+def _get_accum_score_color(value: float, palette: dict, fallback: str) -> str:
+    if value is None or pd.isna(value):
+        return fallback
+    score = max(0.0, min(100.0, float(value)))
+    low = palette.get("bright_red", palette["red"])
+    mid = palette["text_muted"]
+    high = palette.get("bright_green", palette["green"])
+    if score <= 30:
+        return low
+    if score >= 70:
+        return high
+    if score < 50:
+        return _lerp_hex(low, mid, (score - 30.0) / 20.0)
+    return _lerp_hex(mid, high, (score - 50.0) / 20.0)
 
 
 def _get_status_glyph(label: str, glyph_map: dict, fallback: str = "dot") -> str:
@@ -382,7 +403,7 @@ def format_display_df(
                     "lit_total_vol": _format_volume(row.get("lit_total_volume")),
                     "otc_total_vol": _format_volume(row.get("otc_off_exchange_volume")),
                     "otc_participation": _format_ratio(row.get("otc_participation_rate")),
-                    "otc_status": otc_status,
+                    "otc_status": _format_date(row.get("otc_week_used")),
                     "_return_z_raw": row.get("return_z"),
                     "_return_pct_raw": row.get("return_1d"),
                     "_accum_score_raw": row.get("accumulation_score_display"),
@@ -459,24 +480,29 @@ def build_styled_html(
 
         row_class = " ".join(row_class_parts)
 
-        return_pct_color = _signal_color(row["_return_pct_raw"], "return_pct")
-        short_z_color = _signal_color(row["_short_z_raw"], "short_z")
-        lit_z_color = _signal_color(row["_lit_z_raw"], "lit_buy_z")
-        otc_status_color = row["_otc_status_color"]
-        pressure_color = row["_pressure_color"]
-        accum_raw = row.get("_accum_score_raw")
-        if accum_raw is not None and not pd.isna(accum_raw):
-            if accum_raw >= 70:
-                accum_color = palette.get("bright_green", palette["green"])
-            elif accum_raw <= 30:
-                accum_color = palette.get("bright_red", palette["red"])
+        short_ratio_raw = row.get("_short_ratio_raw")
+        if short_ratio_raw is not None and not pd.isna(short_ratio_raw):
+            if short_ratio_raw >= 1.25:
+                short_ratio_color = palette.get("bright_green", palette["green"])
+            elif short_ratio_raw <= 0.75:
+                short_ratio_color = palette.get("bright_red", palette["red"])
             else:
-                accum_color = neutral_text
+                short_ratio_color = neutral_text
         else:
-            accum_color = neutral_text
-        otc_status_html = _format_status_html(
-            row.get("otc_status"), otc_status_color, style.get("status_glyphs", {}).get("otc_status", {})
-        )
+            short_ratio_color = neutral_text
+        lit_ratio_raw = row.get("_lit_ratio_raw")
+        if lit_ratio_raw is not None and not pd.isna(lit_ratio_raw):
+            if lit_ratio_raw >= 0.60:
+                lit_ratio_color = palette.get("bright_green", palette["green"])
+            elif lit_ratio_raw <= 0.40:
+                lit_ratio_color = palette.get("bright_red", palette["red"])
+            else:
+                lit_ratio_color = neutral_text
+        else:
+            lit_ratio_color = neutral_text
+        pressure_color = row["_pressure_color"]
+        accum_color = _get_accum_score_color(row.get("_accum_score_raw"), palette, neutral_text)
+        otc_status_html = row.get("otc_status") or ""
         pressure_html = _format_status_html(
             row.get("pressure_label"),
             pressure_color,
@@ -492,17 +518,17 @@ def build_styled_html(
             <td class="col-date col-anchor zone-id">{row['date']}</td>
             <td class="col-symbol col-anchor zone-id">{row['symbol']}</td>
             <td class="col-quality col-status zone-status">{pressure_html}</td>
-            <td class="col-numeric zone-ratio col-signal" style="color: {accum_color};">{row['accum_score']}</td>
-            <td class="col-numeric zone-ratio col-signal" style="color: {return_pct_color};">{row['return_pct']}</td>
-            <td class="col-numeric zone-ratio">{row['short_buy_ratio']}</td>
-            <td class="col-numeric zone-ratio col-signal" style="color: {short_z_color};">{row['short_z']}</td>
+            <td class="col-numeric col-accum zone-ratio col-signal" style="color: {accum_color};">{row['accum_score']}</td>
+            <td class="col-numeric zone-ratio">{row['return_pct']}</td>
+            <td class="col-numeric zone-ratio col-signal" style="color: {short_ratio_color};">{row['short_buy_ratio']}</td>
+            <td class="col-numeric zone-ratio">{row['short_z']}</td>
             <td class="col-numeric zone-volume">{row['short_total_vol']}</td>
-            <td class="col-numeric zone-ratio">{row['lit_buy_ratio']}</td>
-            <td class="col-numeric zone-ratio col-signal" style="color: {lit_z_color};">{row['lit_buy_z']}</td>
+            <td class="col-numeric zone-ratio col-signal" style="color: {lit_ratio_color};">{row['lit_buy_ratio']}</td>
+            <td class="col-numeric zone-ratio">{row['lit_buy_z']}</td>
             <td class="col-numeric zone-volume">{row['lit_total_vol']}</td>
             <td class="col-numeric zone-volume">{row['otc_total_vol']}</td>
             <td class="col-numeric zone-ratio">{row['otc_participation']}</td>
-            <td class="col-quality col-status zone-status">{otc_status_html}</td>
+            <td class="col-quality col-status col-otc-week zone-status">{otc_status_html}</td>
         </tr>
         """
 
@@ -655,7 +681,7 @@ def build_styled_html(
         ("Lit Total Vol", "Lit buy + lit sell volume (Polygon trades)."),
         ("OTC Total Vol", "FINRA weekly off-exchange volume."),
         ("OTC Participation", "OTC weekly volume as a share of Polygon weekly total (intensity proxy)."),
-        ("OTC Status", "Anchored if week covers date; Staled if week is older; None if missing."),
+        ("OTC Week", "Week-start date used for OTC calculations."),
     ]
     definition_items = "\n".join(
         [f"<li><span class=\"def-term\">{term}</span> - {desc}</li>" for term, desc in definitions]
@@ -679,8 +705,6 @@ def build_styled_html(
             <span class="legend-item"><span class="legend-symbol" style="color: {palette['green']};">{GLYPH_MAP['up']}</span>Accumulating</span>
             <span class="legend-item"><span class="legend-symbol" style="color: {palette['red']};">{GLYPH_MAP['down']}</span>Distribution</span>
             <span class="legend-item"><span class="legend-symbol" style="color: {palette['text_muted']};">{GLYPH_MAP['dot']}</span>Neutral</span>
-            <span class="legend-item"><span class="legend-symbol" style="color: {palette['green']};">{GLYPH_MAP['dot']}</span>OTC Anchored</span>
-            <span class="legend-item"><span class="legend-symbol" style="color: {palette['yellow']};">{GLYPH_MAP['dot']}</span>OTC Staled</span>
         </div>
     """
 
@@ -901,7 +925,15 @@ def build_styled_html(
         .row-avg td {{
             font-weight: 600;
             background-color: {avg_row_bg};
-            font-size: {base_font_size + 1}px;
+            font-size: {base_font_size + 5}px;
+        }}
+
+        .col-accum {{
+            font-weight: 700;
+        }}
+
+        .col-otc-week {{
+            color: {neutral_text};
         }}
 
         .row-missing {{
@@ -1125,8 +1157,8 @@ def build_styled_html(
                     <th class="col-numeric zone-ratio">Lit Z</th>
                     <th class="col-numeric zone-volume">Total<br>Volume</th>
                     <th class="col-numeric zone-volume">OTC<br>Volume</th>
-                    <th class="col-numeric zone-ratio">OTC Participation<br>Rate</th>
-                    <th class="zone-status">OTC Status</th>
+                    <th class="col-numeric zone-ratio">OTC %<br>Rate</th>
+                    <th class="zone-status col-otc-week">OTC Week</th>
                 </tr>
             </thead>
             <tbody>

@@ -297,3 +297,10 @@ Format:
 - [x] Matched pressure label colors to Accum Score bright green/red.
 - [x] Split long column headers onto two lines for better fit.
 - [x] Cleared NA placeholders in AVG rows for cleaner display.
+- [x] Removed Return/Short Z/Lit Z coloring and added Buy/Sell Ratio threshold colors.
+- [x] Shortened OTC Participation header to "OTC % Rate".
+- [x] Replaced OTC status labels with OTC week start dates in the table and definitions.
+- [x] Updated Accum Score to use a continuous red→yellow→green gradient.
+- [x] Made OTC Week dates neutral grey, boosted AVG row size, and set Accum Score to bold with 30/50/70 color ramp.
+- [x] Added Lit Buy Ratio threshold coloring (>=0.60 green, <=0.40 red).
+- [x] Increased AVG row font size for stronger emphasis.
