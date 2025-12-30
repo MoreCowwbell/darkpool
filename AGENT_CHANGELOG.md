@@ -305,3 +305,5 @@ Format:
 - [x] Added Lit Buy Ratio threshold coloring (>=0.60 green, <=0.40 red).
 - [x] Increased AVG row font size for stronger emphasis.
 - [x] Updated OTC weekly mapping to null out tickers missing from the latest weekly report for dates on/after that week.
+- [x] Fixed latest-week symbol detection by normalizing week_start_date dtype before comparison.
+- [x] Wired combination plot generation into orchestrator for main.py runs.

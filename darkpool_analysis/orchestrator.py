@@ -23,6 +23,7 @@ try:
     from .plotter import render_metrics_plots
     from .plotter_chart import render_price_charts
     from .table_renderer import render_daily_metrics_table
+    from .combination_plotter import render_combination_plot
 except ImportError:
     from analytics import build_daily_metrics, build_index_constituent_short_agg
     from config import load_config
@@ -35,6 +36,7 @@ except ImportError:
     from plotter import render_metrics_plots
     from plotter_chart import render_price_charts
     from table_renderer import render_daily_metrics_table
+    from combination_plotter import render_combination_plot
 
 
 def _ensure_dirs(config) -> None:
@@ -236,6 +238,17 @@ def main() -> None:
         )
     except Exception as exc:
         logging.error("Failed to render metrics plots: %s", exc)
+
+    try:
+        render_combination_plot(
+            db_path=config.db_path,
+            output_dir=config.plot_dir,
+            dates=config.target_dates,
+            tickers=config.tickers,
+            combination_plot=config.combination_plot,
+        )
+    except Exception as exc:
+        logging.error("Failed to render combination plot: %s", exc)
 
     if config.render_price_charts:
         try:

@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 # Default Configuration (can be overridden via .env)
 # =============================================================================
 TICKERS_TYPE = "SINGLE"  # Options: "SINGLE", "SECTOR", "GLOBAL", "COMMODITIES", "MAG8"
-DEFAULT_TICKERS = ["RGTI"]
+DEFAULT_TICKERS = ["AAPL", "MU"]
 
 SECTOR_CORE_TICKERS = [
     "XLK",  # Technology (platforms, software, mega-cap growth)
@@ -71,9 +71,9 @@ EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 # -----------------------------------------------------------------------------
 
 # Analysis defaults
-DEFAULT_TARGET_DATE = "2025-12-26"  # Last trading day (Monday)
+DEFAULT_TARGET_DATE = "2025-12-29"  # Last trading day (Monday)
 DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
-DEFAULT_BACKFILL_COUNT = 30  # Number of periods to fetch (days for daily, weeks for weekly)
+DEFAULT_BACKFILL_COUNT = 60  # Number of periods to fetch (days for daily, weeks for weekly)
 DEFAULT_MIN_LIT_VOLUME = 10000
 DEFAULT_MARKET_TZ = "US/Eastern"
 DEFAULT_RTH_START = "09:30"
@@ -116,6 +116,7 @@ DEFAULT_INDEX_CONSTITUENTS_DIR = "data/constituents"
 DEFAULT_INDEX_PROXY_MAP = {"SPX": "SPY"}
 DEFAULT_RENDER_PRICE_CHARTS = True
 DEFAULT_PRICE_BAR_TIMEFRAME = "daily"
+DEFAULT_COMBINATION_PLOT = True
 
 DEFAULT_TABLE_STYLE = {
     "mode": "scan",
@@ -296,6 +297,7 @@ class Config:
     export_csv: bool
     render_price_charts: bool
     price_bar_timeframe: str
+    combination_plot: bool
     polygon_api_key: Optional[str]
     polygon_base_url: str
     polygon_trades_file: Optional[str]
@@ -429,6 +431,9 @@ def load_config() -> Config:
         price_bar_timeframe=os.getenv(
             "PRICE_BAR_TIMEFRAME", DEFAULT_PRICE_BAR_TIMEFRAME
         ).lower(),
+        combination_plot=os.getenv(
+            "COMBINATION_PLOT", str(DEFAULT_COMBINATION_PLOT)
+        ).lower() in ("true", "1", "yes"),
         polygon_api_key=os.getenv("POLYGON_API_KEY"),
         polygon_base_url=os.getenv("POLYGON_BASE_URL", DEFAULT_POLYGON_BASE_URL),
         polygon_trades_file=polygon_trades_file,

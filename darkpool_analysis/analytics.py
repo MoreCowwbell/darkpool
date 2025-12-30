@@ -345,7 +345,9 @@ def build_daily_metrics(
     if "otc_week_used" in merged.columns:
         merged["otc_week_used"] = pd.to_datetime(merged["otc_week_used"])
     if not otc_weekly.empty:
-        latest_week = pd.to_datetime(otc_weekly["week_start_date"].max())
+        otc_weekly = otc_weekly.copy()
+        otc_weekly["week_start_date"] = pd.to_datetime(otc_weekly["week_start_date"])
+        latest_week = otc_weekly["week_start_date"].max()
         latest_symbols = set(
             otc_weekly.loc[otc_weekly["week_start_date"] == latest_week, "symbol"]
         )
