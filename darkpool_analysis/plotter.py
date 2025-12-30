@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import argparse
 import logging
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import duckdb
@@ -815,8 +815,8 @@ def plot_symbol_metrics(
     for text in legend4.get_texts():
         text.set_color(COLORS["text"])
 
-    x_min = dates.min()
-    x_max = dates.max()
+    x_min = dates.min() - timedelta(hours=12)
+    x_max = dates.max() + timedelta(hours=12)
     x_locator = mdates.DayLocator(interval=1)
     x_formatter = mdates.DateFormatter("%y-%m-%d")
 
@@ -1033,6 +1033,12 @@ def plot_short_only_metrics(
         ax.xaxis.set_major_locator(mdates.DayLocator(interval=1))  # Show every day
         ax.tick_params(axis="x", labelbottom=True)  # Enable x labels on all panels
         plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha="right", fontsize=8)
+
+    # Add padding to x-axis so data doesn't sit at edges
+    x_min = dates.min() - timedelta(hours=12)
+    x_max = dates.max() + timedelta(hours=12)
+    for ax in axes:
+        ax.set_xlim(x_min, x_max)
 
     fig.suptitle(
         f"Short Sale Pressure (Daily){title_suffix}",
