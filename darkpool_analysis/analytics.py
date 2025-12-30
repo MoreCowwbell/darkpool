@@ -344,6 +344,15 @@ def build_daily_metrics(
     merged["date"] = pd.to_datetime(merged["date"])
     if "otc_week_used" in merged.columns:
         merged["otc_week_used"] = pd.to_datetime(merged["otc_week_used"])
+    if not otc_weekly.empty:
+        latest_week = pd.to_datetime(otc_weekly["week_start_date"].max())
+        latest_symbols = set(
+            otc_weekly.loc[otc_weekly["week_start_date"] == latest_week, "symbol"]
+        )
+        missing_latest = (merged["date"] >= latest_week) & (
+            ~merged["symbol"].isin(latest_symbols)
+        )
+        merged.loc[missing_latest, ["otc_off_exchange_volume", "otc_week_used"]] = pd.NA
 
     # Weekly lit buy ratio proxy for OTC weekly buy ratio
     weekly_lit = _compute_weekly_lit_ratio(lit_df)

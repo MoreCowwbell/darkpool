@@ -304,3 +304,4 @@ Format:
 - [x] Made OTC Week dates neutral grey, boosted AVG row size, and set Accum Score to bold with 30/50/70 color ramp.
 - [x] Added Lit Buy Ratio threshold coloring (>=0.60 green, <=0.40 red).
 - [x] Increased AVG row font size for stronger emphasis.
+- [x] Updated OTC weekly mapping to null out tickers missing from the latest weekly report for dates on/after that week.

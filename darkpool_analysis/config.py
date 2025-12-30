@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 # Default Configuration (can be overridden via .env)
 # =============================================================================
 TICKERS_TYPE = "SINGLE"  # Options: "SINGLE", "SECTOR", "GLOBAL", "COMMODITIES", "MAG8"
-DEFAULT_TICKERS = ["META", "TSLA",]
+DEFAULT_TICKERS = ["RGTI"]
 
 SECTOR_CORE_TICKERS = [
     "XLK",  # Technology (platforms, software, mega-cap growth)
