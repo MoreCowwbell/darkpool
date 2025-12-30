@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 # Default Configuration (can be overridden via .env)
 # =============================================================================
 TICKERS_TYPE = "SINGLE"  # Options: "SINGLE", "SECTOR", "GLOBAL", "COMMODITIES", "MAG8"
-DEFAULT_TICKERS = ["META"]
+DEFAULT_TICKERS = ["META", "TSLA",]
 
 SECTOR_CORE_TICKERS = [
     "XLK",  # Technology (platforms, software, mega-cap growth)
@@ -121,9 +121,9 @@ DEFAULT_TABLE_STYLE = {
     "mode": "scan",
     "font_family": '"Segoe UI", Arial, sans-serif',
     "font_family_numeric": '"Consolas", "Courier New", monospace',
-    "base_font_size": 13,
-    "header_font_size": 11,
-    "numeric_font_scale": 0.95,
+    "base_font_size": 15,
+    "header_font_size": 13,
+    "numeric_font_scale": 1.0,
     "row_padding_y": 10,
     "row_padding_x": 12,
     "neutral_text_opacity": 0.78,
@@ -137,7 +137,7 @@ DEFAULT_TABLE_STYLE = {
     "zone_tint_alpha": 0.035,
     "gridline_every": 5,
     "strong_signal_columns": ["short_z"],
-    "muted_signal_columns": ["return_z", "lit_buy_z", "otc_buy_z"],
+    "muted_signal_columns": ["return_pct", "lit_buy_z"],
     "status_glyphs": {
         "pressure": {"Accumulating": "up", "Distribution": "down", "Neutral": "dot", "NA": "dot"},
         "otc_status": {"Anchored": "dot", "Staled": "dot", "None": "dot", "NA": "dot"},
@@ -164,8 +164,8 @@ DEFAULT_TABLE_STYLE = {
         "status": "#121213",
     },
     "modes": {
-        "scan": {"base_font_size": 12, "row_padding_y": 9, "neutral_text_opacity": 0.72},
-        "analysis": {"base_font_size": 13, "row_padding_y": 12, "neutral_text_opacity": 0.85},
+        "scan": {"base_font_size": 14, "row_padding_y": 9, "neutral_text_opacity": 0.72},
+        "analysis": {"base_font_size": 15, "row_padding_y": 12, "neutral_text_opacity": 0.85},
     },
 }
 

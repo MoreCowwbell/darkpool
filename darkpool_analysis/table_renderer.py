@@ -96,6 +96,7 @@ def fetch_metrics_df(
             date,
             symbol,
             return_z,
+            return_1d,
             short_ratio,
             short_ratio_z,
             short_buy_sell_ratio,
@@ -111,13 +112,15 @@ def fetch_metrics_df(
             log_buy_sell,
             lit_buy_ratio_z,
             otc_off_exchange_volume,
+            otc_participation_rate,
             otc_buy_volume,
             otc_sell_volume,
             otc_weekly_buy_ratio,
             otc_buy_ratio_z,
             otc_status,
             otc_week_used,
-            pressure_context_label
+            pressure_context_label,
+            accumulation_score_display
         FROM daily_metrics
         WHERE date IN ({date_placeholders}) AND symbol IN ({ticker_placeholders})
         ORDER BY symbol, date DESC
@@ -156,6 +159,34 @@ def _format_z(value: float) -> str:
     if pd.isna(value) or value is None:
         return "NA"
     return f"{value:.2f}"
+
+
+def _format_pct(value: float) -> str:
+    if pd.isna(value) or value is None:
+        return "NA"
+    return f"{value * 100:.2f}%"
+
+
+def _format_score(value: float) -> str:
+    if pd.isna(value) or value is None:
+        return "NA"
+    return f"{value:.0f}"
+
+
+def _format_short_source(source: Optional[str]) -> str:
+    if not source or pd.isna(source):
+        return ""
+    return {"FINRA_TOTAL": "FINRA", "POLYGON_TOTAL": "POLY"}.get(source, source)
+
+
+def _format_volume_with_source(value: float, source: Optional[str]) -> str:
+    if pd.isna(value) or value is None:
+        return "NA"
+    base = _format_volume(value)
+    source_label = _format_short_source(source)
+    if source_label:
+        return f"{base} ({source_label})"
+    return base
 
 
 def _get_sign_color(value: float, palette: dict, opacity: float) -> str:
@@ -218,6 +249,7 @@ def format_display_df(
         "date",
         "symbol",
         "return_z",
+        "return_1d",
         "short_ratio",
         "short_ratio_z",
         "short_buy_sell_ratio",
@@ -233,6 +265,7 @@ def format_display_df(
         "log_buy_sell",
         "lit_buy_ratio_z",
         "otc_off_exchange_volume",
+        "otc_participation_rate",
         "otc_buy_volume",
         "otc_sell_volume",
         "otc_weekly_buy_ratio",
@@ -240,6 +273,7 @@ def format_display_df(
         "otc_status",
         "otc_week_used",
         "pressure_context_label",
+        "accumulation_score_display",
     ]
     for col in required_cols:
         if col not in df.columns:
@@ -260,25 +294,16 @@ def format_display_df(
 
     sorted_dates = sorted(dates, reverse=True)
     numeric_cols = [
-        "return_z",
-        "short_ratio",
-        "short_ratio_z",
+        "return_1d",
+        "accumulation_score_display",
         "short_buy_sell_ratio",
         "short_buy_sell_ratio_z",
         "short_ratio_denominator_value",
-        "short_buy_volume",
-        "short_sell_volume",
         "lit_total_volume",
-        "lit_buy_volume",
-        "lit_sell_volume",
         "lit_buy_ratio",
-        "log_buy_sell",
         "lit_buy_ratio_z",
         "otc_off_exchange_volume",
-        "otc_buy_volume",
-        "otc_sell_volume",
-        "otc_weekly_buy_ratio",
-        "otc_buy_ratio_z",
+        "otc_participation_rate",
     ]
 
     for ticker in tickers:
@@ -289,28 +314,20 @@ def format_display_df(
             {
                 "date": "AVG",
                 "symbol": ticker,
-                "return_z": _format_z(avg_values.get("return_z")),
-                "short_total_vol": _format_volume(avg_values.get("short_ratio_denominator_value")),
-                "short_buy_vol": _format_volume(avg_values.get("short_buy_volume")),
-                "short_sell_vol": _format_volume(avg_values.get("short_sell_volume")),
-                "short_buy_ratio": _format_ratio(avg_values.get("short_buy_sell_ratio")),
-                "short_z": _format_z(avg_values.get("short_buy_sell_ratio_z")),
-                "lit_total_vol": _format_volume(avg_values.get("lit_total_volume")),
-                "lit_buy_vol": _format_volume(avg_values.get("lit_buy_volume")),
-                "lit_sell_vol": _format_volume(avg_values.get("lit_sell_volume")),
-                "lit_buy_ratio": _format_ratio(avg_values.get("lit_buy_ratio")),
-                "log_buy_ratio": _format_log(avg_values.get("log_buy_sell")),
-                "lit_buy_z": _format_z(avg_values.get("lit_buy_ratio_z")),
-                "otc_total_vol": _format_volume(avg_values.get("otc_off_exchange_volume")),
-                "otc_buy_vol": _format_volume(avg_values.get("otc_buy_volume")),
-                "otc_sell_vol": _format_volume(avg_values.get("otc_sell_volume")),
-                "otc_weekly_buy_ratio": _format_ratio(avg_values.get("otc_weekly_buy_ratio")),
-                "otc_buy_z": _format_z(avg_values.get("otc_buy_ratio_z")),
-                "short_vol_source": "NA",
-                "otc_status": "NA",
-                "otc_week_used": "NA",
                 "pressure_label": "NA",
+                "accum_score": _format_score(avg_values.get("accumulation_score_display")),
+                "return_pct": _format_pct(avg_values.get("return_1d")),
+                "short_z": _format_z(avg_values.get("short_buy_sell_ratio_z")),
+                "short_total_vol": _format_volume(avg_values.get("short_ratio_denominator_value")),
+                "short_buy_ratio": _format_ratio(avg_values.get("short_buy_sell_ratio")),
+                "lit_buy_ratio": _format_ratio(avg_values.get("lit_buy_ratio")),
+                "lit_buy_z": _format_z(avg_values.get("lit_buy_ratio_z")),
+                "lit_total_vol": _format_volume(avg_values.get("lit_total_volume")),
+                "otc_total_vol": _format_volume(avg_values.get("otc_off_exchange_volume")),
+                "otc_participation": _format_ratio(avg_values.get("otc_participation_rate")),
+                "otc_status": "NA",
                 "_return_z_raw": avg_values.get("return_z"),
+                "_return_pct_raw": avg_values.get("return_1d"),
                 "_short_z_raw": avg_values.get("short_buy_sell_ratio_z"),
                 "_lit_z_raw": avg_values.get("lit_buy_ratio_z"),
                 "_otc_z_raw": avg_values.get("otc_buy_ratio_z"),
@@ -341,28 +358,20 @@ def format_display_df(
                     {
                         "date": target_date.strftime("%Y-%m-%d"),
                         "symbol": ticker,
-                        "return_z": "NA",
-                        "short_total_vol": "NA",
-                        "short_buy_vol": "NA",
-                        "short_sell_vol": "NA",
+                        "pressure_label": "NA",
+                        "accum_score": "NA",
+                        "return_pct": "NA",
                         "short_buy_ratio": "NA",
                         "short_z": "NA",
-                        "lit_total_vol": "NA",
-                        "lit_buy_vol": "NA",
-                        "lit_sell_vol": "NA",
+                        "short_total_vol": "NA",
                         "lit_buy_ratio": "NA",
-                        "log_buy_ratio": "NA",
                         "lit_buy_z": "NA",
+                        "lit_total_vol": "NA",
                         "otc_total_vol": "NA",
-                        "otc_buy_vol": "NA",
-                        "otc_sell_vol": "NA",
-                        "otc_weekly_buy_ratio": "NA",
-                        "otc_buy_z": "NA",
-                        "short_vol_source": "NA",
+                        "otc_participation": "NA",
                         "otc_status": "NA",
-                        "otc_week_used": "None",
-                        "pressure_label": "NA",
                         "_return_z_raw": None,
+                        "_return_pct_raw": None,
                         "_short_z_raw": None,
                         "_lit_z_raw": None,
                         "_otc_z_raw": None,
@@ -394,28 +403,23 @@ def format_display_df(
                 {
                     "date": target_date.strftime("%Y-%m-%d"),
                     "symbol": ticker,
-                    "return_z": _format_z(row.get("return_z")),
-                    "short_total_vol": _format_volume(row.get("short_ratio_denominator_value")),
-                    "short_buy_vol": _format_volume(row.get("short_buy_volume")),
-                    "short_sell_vol": _format_volume(row.get("short_sell_volume")),
+                    "pressure_label": pressure_label,
+                    "accum_score": _format_score(row.get("accumulation_score_display")),
+                    "return_pct": _format_pct(row.get("return_1d")),
                     "short_buy_ratio": _format_ratio(row.get("short_buy_sell_ratio")),
                     "short_z": _format_z(row.get("short_buy_sell_ratio_z")),
-                    "lit_total_vol": _format_volume(row.get("lit_total_volume")),
-                    "lit_buy_vol": _format_volume(row.get("lit_buy_volume")),
-                    "lit_sell_vol": _format_volume(row.get("lit_sell_volume")),
+                    "short_total_vol": _format_volume_with_source(
+                        row.get("short_ratio_denominator_value"),
+                        row.get("short_ratio_denominator_type"),
+                    ),
                     "lit_buy_ratio": _format_ratio(row.get("lit_buy_ratio")),
-                    "log_buy_ratio": _format_log(row.get("log_buy_sell")),
                     "lit_buy_z": _format_z(row.get("lit_buy_ratio_z")),
+                    "lit_total_vol": _format_volume(row.get("lit_total_volume")),
                     "otc_total_vol": _format_volume(row.get("otc_off_exchange_volume")),
-                    "otc_buy_vol": _format_volume(row.get("otc_buy_volume")),
-                    "otc_sell_vol": _format_volume(row.get("otc_sell_volume")),
-                    "otc_weekly_buy_ratio": _format_ratio(row.get("otc_weekly_buy_ratio")),
-                    "otc_buy_z": _format_z(row.get("otc_buy_ratio_z")),
-                    "short_vol_source": row.get("short_ratio_denominator_type") or "NA",
+                    "otc_participation": _format_ratio(row.get("otc_participation_rate")),
                     "otc_status": otc_status,
-                    "otc_week_used": _format_date(row.get("otc_week_used")),
-                    "pressure_label": pressure_label,
                     "_return_z_raw": row.get("return_z"),
+                    "_return_pct_raw": row.get("return_1d"),
                     "_short_z_raw": row.get("short_buy_sell_ratio_z"),
                     "_lit_z_raw": row.get("lit_buy_ratio_z"),
                     "_otc_z_raw": row.get("otc_buy_ratio_z"),
@@ -489,10 +493,9 @@ def build_styled_html(
 
         row_class = " ".join(row_class_parts)
 
-        return_z_color = _signal_color(row["_return_z_raw"], "return_z")
+        return_pct_color = _signal_color(row["_return_pct_raw"], "return_pct")
         short_z_color = _signal_color(row["_short_z_raw"], "short_z")
         lit_z_color = _signal_color(row["_lit_z_raw"], "lit_buy_z")
-        otc_z_color = _signal_color(row["_otc_z_raw"], "otc_buy_z")
         otc_status_color = row["_otc_status_color"]
         pressure_color = row["_pressure_color"]
         otc_status_html = _format_status_html(
@@ -509,27 +512,18 @@ def build_styled_html(
         <tr class="{row_class}">
             <td class="col-date col-anchor zone-id">{row['date']}</td>
             <td class="col-symbol col-anchor zone-id">{row['symbol']}</td>
-            <td class="col-numeric zone-ratio col-signal" style="color: {return_z_color};">{row['return_z']}</td>
-            <td class="col-numeric zone-volume">{row['short_total_vol']}</td>
-            <td class="col-numeric zone-volume">{row['short_buy_vol']}</td>
-            <td class="col-numeric zone-volume">{row['short_sell_vol']}</td>
+            <td class="col-quality col-status zone-status">{pressure_html}</td>
+            <td class="col-numeric zone-ratio">{row['accum_score']}</td>
+            <td class="col-numeric zone-ratio col-signal" style="color: {return_pct_color};">{row['return_pct']}</td>
             <td class="col-numeric zone-ratio">{row['short_buy_ratio']}</td>
             <td class="col-numeric zone-ratio col-signal" style="color: {short_z_color};">{row['short_z']}</td>
-            <td class="col-numeric zone-volume">{row['lit_total_vol']}</td>
-            <td class="col-numeric zone-volume">{row['lit_buy_vol']}</td>
-            <td class="col-numeric zone-volume">{row['lit_sell_vol']}</td>
+            <td class="col-numeric zone-volume">{row['short_total_vol']}</td>
             <td class="col-numeric zone-ratio">{row['lit_buy_ratio']}</td>
-            <td class="col-numeric zone-ratio">{row['log_buy_ratio']}</td>
             <td class="col-numeric zone-ratio col-signal" style="color: {lit_z_color};">{row['lit_buy_z']}</td>
+            <td class="col-numeric zone-volume">{row['lit_total_vol']}</td>
             <td class="col-numeric zone-volume">{row['otc_total_vol']}</td>
-            <td class="col-numeric zone-volume">{row['otc_buy_vol']}</td>
-            <td class="col-numeric zone-volume">{row['otc_sell_vol']}</td>
-            <td class="col-numeric zone-ratio">{row['otc_weekly_buy_ratio']}</td>
-            <td class="col-numeric zone-ratio col-signal" style="color: {otc_z_color};">{row['otc_buy_z']}</td>
-            <td class="col-quality zone-status">{row['short_vol_source']}</td>
+            <td class="col-numeric zone-ratio">{row['otc_participation']}</td>
             <td class="col-quality col-status zone-status">{otc_status_html}</td>
-            <td class="col-date zone-status">{row['otc_week_used']}</td>
-            <td class="col-quality col-status zone-status">{pressure_html}</td>
         </tr>
         """
 
@@ -738,11 +732,11 @@ def build_styled_html(
 
     group_header_html = """
                 <tr class="group-row">
-                    <th class="group-spacer zone-id" colspan="3"></th>
-                    <th class="group-header zone-volume" colspan="5">Daily Short Sale Volume</th>
-                    <th class="group-header zone-volume" colspan="6">Lit Market</th>
-                    <th class="group-header zone-volume" colspan="5">Darkpool Weekly Volume</th>
-                    <th class="group-spacer zone-status" colspan="4"></th>
+                    <th class="group-spacer zone-id" colspan="2"></th>
+                    <th class="group-header zone-ratio" colspan="3">Context</th>
+                    <th class="group-header zone-volume" colspan="3">Short Sale</th>
+                    <th class="group-header zone-volume" colspan="3">Lit Market</th>
+                    <th class="group-header zone-volume" colspan="3">OTC Weekly</th>
                 </tr>
     """
 
@@ -1116,27 +1110,18 @@ def build_styled_html(
                 <tr>
                     <th class="zone-id col-anchor">Date</th>
                     <th class="zone-id col-anchor">Symbol</th>
-                    <th class="col-numeric zone-ratio">Return Z</th>
-                    <th class="col-numeric zone-volume">Short Total Vol</th>
-                    <th class="col-numeric zone-volume">Short Buy Vol</th>
-                    <th class="col-numeric zone-volume">Short Sell Vol</th>
-                    <th class="col-numeric zone-ratio">Short Sale Buy/Sell Ratio</th>
-                    <th class="col-numeric zone-ratio">Short Z</th>
-                    <th class="col-numeric zone-volume">Lit Total Vol</th>
-                    <th class="col-numeric zone-volume">Lit Buy Vol</th>
-                    <th class="col-numeric zone-volume">Lit Sell Vol</th>
-                    <th class="col-numeric zone-ratio">Lit Buy Ratio</th>
-                    <th class="col-numeric zone-ratio">Log Buy Ratio</th>
-                    <th class="col-numeric zone-ratio">Lit Buy Z</th>
-                    <th class="col-numeric zone-volume">OTC Total Vol</th>
-                    <th class="col-numeric zone-volume">OTC Buy Vol</th>
-                    <th class="col-numeric zone-volume">OTC Sell Vol</th>
-                    <th class="col-numeric zone-ratio">OTC Weekly Buy Ratio</th>
-                    <th class="col-numeric zone-ratio">OTC Buy Z</th>
-                    <th class="zone-status">Short Vol Source</th>
-                    <th class="zone-status">OTC Status</th>
-                    <th class="zone-status">OTC Week Used</th>
                     <th class="zone-status">Pressure</th>
+                    <th class="col-numeric zone-ratio">Accum Score</th>
+                    <th class="col-numeric zone-ratio">Return %</th>
+                    <th class="col-numeric zone-ratio">Short B/S Ratio</th>
+                    <th class="col-numeric zone-ratio">Short Z</th>
+                    <th class="col-numeric zone-volume">Short Total Vol</th>
+                    <th class="col-numeric zone-ratio">Lit Buy Ratio</th>
+                    <th class="col-numeric zone-ratio">Lit Z</th>
+                    <th class="col-numeric zone-volume">Lit Total Vol</th>
+                    <th class="col-numeric zone-volume">OTC Total Vol</th>
+                    <th class="col-numeric zone-ratio">OTC Participation</th>
+                    <th class="zone-status">OTC Status</th>
                 </tr>
             </thead>
             <tbody>

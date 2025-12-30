@@ -288,3 +288,5 @@ Format:
 
 ## 2025-12-29 Session Summary (Codex)
 - [x] Updated table renderer output naming to use date-range suffixes and avoid overwriting existing table files.
+- [x] Simplified daily metrics top table columns to focus on pressure, accumulation score, return %, and key short/lit/OTC totals.
+- [x] Updated table styling signals to color Return % instead of Return Z.
