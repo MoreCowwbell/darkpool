@@ -155,6 +155,8 @@ DEFAULT_TABLE_STYLE = {
         "red": "#d06c6c",
         "yellow": "#d6b35b",
         "orange": "#972727",
+        "bright_green": "#42f5a7",
+        "bright_red": "#ff5c5c",
         "cyan": "#7ab6ff",
         "white": "#ffffff",
     },

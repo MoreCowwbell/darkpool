@@ -189,6 +189,10 @@ def _format_volume_with_source(value: float, source: Optional[str]) -> str:
     return base
 
 
+def _blank_na(value: str) -> str:
+    return "" if value == "NA" else value
+
+
 def _get_sign_color(value: float, palette: dict, opacity: float) -> str:
     if pd.isna(value) or value is None:
         return _rgba(palette["text_muted"], opacity)
@@ -209,9 +213,9 @@ def _get_otc_status_color(value: str, palette: dict) -> str:
 
 def _get_pressure_color(label: str, palette: dict) -> str:
     if label == "Accumulating":
-        return palette["green"]
+        return palette.get("bright_green", palette["green"])
     if label == "Distribution":
-        return palette["red"]
+        return palette.get("bright_red", palette["red"])
     return palette["text_muted"]
 
 
@@ -314,20 +318,21 @@ def format_display_df(
             {
                 "date": "",
                 "symbol": ticker,
-                "pressure_label": "NA",
-                "accum_score": _format_score(avg_values.get("accumulation_score_display")),
-                "return_pct": _format_pct(avg_values.get("return_1d")),
-                "short_z": _format_z(avg_values.get("short_buy_sell_ratio_z")),
-                "short_total_vol": _format_volume(avg_values.get("short_ratio_denominator_value")),
-                "short_buy_ratio": _format_ratio(avg_values.get("short_buy_sell_ratio")),
-                "lit_buy_ratio": _format_ratio(avg_values.get("lit_buy_ratio")),
-                "lit_buy_z": _format_z(avg_values.get("lit_buy_ratio_z")),
-                "lit_total_vol": _format_volume(avg_values.get("lit_total_volume")),
-                "otc_total_vol": _format_volume(avg_values.get("otc_off_exchange_volume")),
-                "otc_participation": _format_ratio(avg_values.get("otc_participation_rate")),
-                "otc_status": "NA",
+                "pressure_label": "",
+                "accum_score": _blank_na(_format_score(avg_values.get("accumulation_score_display"))),
+                "return_pct": _blank_na(_format_pct(avg_values.get("return_1d"))),
+                "short_z": _blank_na(_format_z(avg_values.get("short_buy_sell_ratio_z"))),
+                "short_total_vol": _blank_na(_format_volume(avg_values.get("short_ratio_denominator_value"))),
+                "short_buy_ratio": _blank_na(_format_ratio(avg_values.get("short_buy_sell_ratio"))),
+                "lit_buy_ratio": _blank_na(_format_ratio(avg_values.get("lit_buy_ratio"))),
+                "lit_buy_z": _blank_na(_format_z(avg_values.get("lit_buy_ratio_z"))),
+                "lit_total_vol": _blank_na(_format_volume(avg_values.get("lit_total_volume"))),
+                "otc_total_vol": _blank_na(_format_volume(avg_values.get("otc_off_exchange_volume"))),
+                "otc_participation": _blank_na(_format_ratio(avg_values.get("otc_participation_rate"))),
+                "otc_status": "",
                 "_return_z_raw": avg_values.get("return_z"),
                 "_return_pct_raw": avg_values.get("return_1d"),
+                "_accum_score_raw": avg_values.get("accumulation_score_display"),
                 "_short_z_raw": avg_values.get("short_buy_sell_ratio_z"),
                 "_lit_z_raw": avg_values.get("lit_buy_ratio_z"),
                 "_otc_z_raw": avg_values.get("otc_buy_ratio_z"),
@@ -380,6 +385,7 @@ def format_display_df(
                     "otc_status": otc_status,
                     "_return_z_raw": row.get("return_z"),
                     "_return_pct_raw": row.get("return_1d"),
+                    "_accum_score_raw": row.get("accumulation_score_display"),
                     "_short_z_raw": row.get("short_buy_sell_ratio_z"),
                     "_lit_z_raw": row.get("lit_buy_ratio_z"),
                     "_otc_z_raw": row.get("otc_buy_ratio_z"),
@@ -458,6 +464,16 @@ def build_styled_html(
         lit_z_color = _signal_color(row["_lit_z_raw"], "lit_buy_z")
         otc_status_color = row["_otc_status_color"]
         pressure_color = row["_pressure_color"]
+        accum_raw = row.get("_accum_score_raw")
+        if accum_raw is not None and not pd.isna(accum_raw):
+            if accum_raw >= 70:
+                accum_color = palette.get("bright_green", palette["green"])
+            elif accum_raw <= 30:
+                accum_color = palette.get("bright_red", palette["red"])
+            else:
+                accum_color = neutral_text
+        else:
+            accum_color = neutral_text
         otc_status_html = _format_status_html(
             row.get("otc_status"), otc_status_color, style.get("status_glyphs", {}).get("otc_status", {})
         )
@@ -467,13 +483,16 @@ def build_styled_html(
             style.get("status_glyphs", {}).get("pressure", {}),
             text_color=pressure_color,
         )
+        if row_type == "avg":
+            otc_status_html = ""
+            pressure_html = ""
 
         rows_html += f"""
         <tr class="{row_class}">
             <td class="col-date col-anchor zone-id">{row['date']}</td>
             <td class="col-symbol col-anchor zone-id">{row['symbol']}</td>
             <td class="col-quality col-status zone-status">{pressure_html}</td>
-            <td class="col-numeric zone-ratio">{row['accum_score']}</td>
+            <td class="col-numeric zone-ratio col-signal" style="color: {accum_color};">{row['accum_score']}</td>
             <td class="col-numeric zone-ratio col-signal" style="color: {return_pct_color};">{row['return_pct']}</td>
             <td class="col-numeric zone-ratio">{row['short_buy_ratio']}</td>
             <td class="col-numeric zone-ratio col-signal" style="color: {short_z_color};">{row['short_z']}</td>
@@ -759,10 +778,10 @@ def build_styled_html(
             padding: {row_pad_y}px {row_pad_x}px;
             text-align: left;
             font-weight: 600;
-            font-size: {header_font_size}px;
+            font-size: {base_font_size}px;
             text-transform: none;
             letter-spacing: 0.2px;
-            color: {header_text};
+            color: {group_label_color};
             border-bottom: 1px solid {border_color};
             white-space: normal;
             line-height: 1.2;
@@ -775,7 +794,7 @@ def build_styled_html(
         .group-row th {{
             background-color: transparent;
             text-align: center;
-            font-size: 20px;
+            font-size: {base_font_size}px;
             letter-spacing: 0.4px;
             color: {group_label_color};
             padding: 6px 8px 4px;
@@ -783,7 +802,7 @@ def build_styled_html(
 
         .group-header {{
             position: relative;
-            padding-bottom: 16px;
+            padding-bottom: 10px;
         }}
 
         .group-spacer {{
@@ -795,7 +814,7 @@ def build_styled_html(
             position: absolute;
             left: 14px;
             right: 14px;
-            bottom: 4px;
+            bottom: 0px;
             height: 3px;
             background-color: var(--group-color, {border_color});
             border-radius: 999px;
@@ -1097,16 +1116,16 @@ def build_styled_html(
                     <th class="zone-id col-anchor">Date</th>
                     <th class="zone-id col-anchor">Symbol</th>
                     <th class="zone-status">Pressure</th>
-                    <th class="col-numeric zone-ratio">Accum Score</th>
+                    <th class="col-numeric zone-ratio">Accum<br>Score</th>
                     <th class="col-numeric zone-ratio">Return</th>
-                    <th class="col-numeric zone-ratio">Buy/Sell Ratio</th>
+                    <th class="col-numeric zone-ratio">Buy/Sell<br>Ratio</th>
                     <th class="col-numeric zone-ratio">Short Z</th>
-                    <th class="col-numeric zone-volume">Total Volume</th>
-                    <th class="col-numeric zone-ratio">Lit Buy Ratio</th>
+                    <th class="col-numeric zone-volume">Total<br>Volume</th>
+                    <th class="col-numeric zone-ratio">Lit Buy<br>Ratio</th>
                     <th class="col-numeric zone-ratio">Lit Z</th>
-                    <th class="col-numeric zone-volume">Total Volume</th>
-                    <th class="col-numeric zone-volume">OTC Volume</th>
-                    <th class="col-numeric zone-ratio">OTC Participation Rate</th>
+                    <th class="col-numeric zone-volume">Total<br>Volume</th>
+                    <th class="col-numeric zone-volume">OTC<br>Volume</th>
+                    <th class="col-numeric zone-ratio">OTC Participation<br>Rate</th>
                     <th class="zone-status">OTC Status</th>
                 </tr>
             </thead>

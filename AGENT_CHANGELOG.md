@@ -293,3 +293,7 @@ Format:
 - [x] Added colored group header labels with separated underline bars for Short Sale, Lit Market, and OTC Weekly.
 - [x] Split summary panel into side-by-side volume and ratio subpanels.
 - [x] Removed missing weekend rows from the table, widened summary gap, and updated column definitions to match the new layout.
+- [x] Added Accum Score threshold coloring and palette entries for bright green/red.
+- [x] Matched pressure label colors to Accum Score bright green/red.
+- [x] Split long column headers onto two lines for better fit.
+- [x] Cleared NA placeholders in AVG rows for cleaner display.
