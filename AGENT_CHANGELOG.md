@@ -290,3 +290,6 @@ Format:
 - [x] Updated table renderer output naming to use date-range suffixes and avoid overwriting existing table files.
 - [x] Simplified daily metrics top table columns to focus on pressure, accumulation score, return %, and key short/lit/OTC totals.
 - [x] Updated table styling signals to color Return % instead of Return Z.
+- [x] Added colored group header labels with separated underline bars for Short Sale, Lit Market, and OTC Weekly.
+- [x] Split summary panel into side-by-side volume and ratio subpanels.
+- [x] Removed missing weekend rows from the table, widened summary gap, and updated column definitions to match the new layout.

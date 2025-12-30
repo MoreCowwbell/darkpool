@@ -121,11 +121,11 @@ DEFAULT_TABLE_STYLE = {
     "mode": "scan",
     "font_family": '"Segoe UI", Arial, sans-serif',
     "font_family_numeric": '"Consolas", "Courier New", monospace',
-    "base_font_size": 15,
-    "header_font_size": 13,
+    "base_font_size": 20,
+    "header_font_size": 18,
     "numeric_font_scale": 1.0,
     "row_padding_y": 10,
-    "row_padding_x": 12,
+    "row_padding_x": 8,
     "neutral_text_opacity": 0.78,
     "header_opacity": 0.72,
     "signal_opacity_strong": 0.95,
@@ -154,6 +154,7 @@ DEFAULT_TABLE_STYLE = {
         "green": "#3cbf8a",
         "red": "#d06c6c",
         "yellow": "#d6b35b",
+        "orange": "#972727",
         "cyan": "#7ab6ff",
         "white": "#ffffff",
     },
@@ -164,8 +165,8 @@ DEFAULT_TABLE_STYLE = {
         "status": "#121213",
     },
     "modes": {
-        "scan": {"base_font_size": 14, "row_padding_y": 9, "neutral_text_opacity": 0.72},
-        "analysis": {"base_font_size": 15, "row_padding_y": 12, "neutral_text_opacity": 0.85},
+        "scan": {"base_font_size": 21, "row_padding_y": 9, "neutral_text_opacity": 0.72},
+        "analysis": {"base_font_size": 23, "row_padding_y": 12, "neutral_text_opacity": 0.85},
     },
 }
 

@@ -176,7 +176,7 @@ def _format_score(value: float) -> str:
 def _format_short_source(source: Optional[str]) -> str:
     if not source or pd.isna(source):
         return ""
-    return {"FINRA_TOTAL": "FINRA", "POLYGON_TOTAL": "POLY"}.get(source, source)
+    return {"FINRA_TOTAL": "", "POLYGON_TOTAL": "POLY"}.get(source, source)
 
 
 def _format_volume_with_source(value: float, source: Optional[str]) -> str:
@@ -312,7 +312,7 @@ def format_display_df(
 
         display_rows.append(
             {
-                "date": "AVG",
+                "date": "",
                 "symbol": ticker,
                 "pressure_label": "NA",
                 "accum_score": _format_score(avg_values.get("accumulation_score_display")),
@@ -354,46 +354,6 @@ def format_display_df(
         for target_date in sorted_dates:
             row_df = ticker_df[ticker_df["date"] == target_date]
             if row_df.empty:
-                display_rows.append(
-                    {
-                        "date": target_date.strftime("%Y-%m-%d"),
-                        "symbol": ticker,
-                        "pressure_label": "NA",
-                        "accum_score": "NA",
-                        "return_pct": "NA",
-                        "short_buy_ratio": "NA",
-                        "short_z": "NA",
-                        "short_total_vol": "NA",
-                        "lit_buy_ratio": "NA",
-                        "lit_buy_z": "NA",
-                        "lit_total_vol": "NA",
-                        "otc_total_vol": "NA",
-                        "otc_participation": "NA",
-                        "otc_status": "NA",
-                        "_return_z_raw": None,
-                        "_return_pct_raw": None,
-                        "_short_z_raw": None,
-                        "_lit_z_raw": None,
-                        "_otc_z_raw": None,
-                        "_otc_status_color": palette["text_muted"],
-                        "_pressure_color": palette["text_muted"],
-                        "_row_type": "missing",
-                        "_short_total_raw": None,
-                        "_short_buy_raw": None,
-                        "_short_sell_raw": None,
-                        "_short_ratio_raw": None,
-                        "_lit_total_raw": None,
-                        "_lit_buy_raw": None,
-                        "_lit_sell_raw": None,
-                        "_lit_ratio_raw": None,
-                        "_log_ratio_raw": None,
-                        "_otc_total_raw": None,
-                        "_otc_buy_raw": None,
-                        "_otc_sell_raw": None,
-                        "_otc_ratio_raw": None,
-                        "_status": "missing",
-                    }
-                )
                 continue
 
             row = row_df.iloc[0]
@@ -573,85 +533,87 @@ def build_styled_html(
     summary_html = f"""
         <div class="summary-panel">
             <div class="summary-title">Summary (All Tickers / Dates)</div>
-            <div class="summary-section">
-                <div class="summary-subtitle">Volumes (Totals / Averages)</div>
-                <div class="summary-table">
-                    <div class="summary-row summary-header">
-                        <div class="summary-cell summary-label"></div>
-                        <div class="summary-cell summary-group">Daily Short Sale</div>
-                        <div class="summary-cell summary-group">Lit Market</div>
-                        <div class="summary-cell summary-group">Darkpool Weekly</div>
-                    </div>
-                    <div class="summary-row">
-                        <div class="summary-cell summary-label">Total Vol (Sum)</div>
-                        <div class="summary-cell summary-value">{_format_volume(total_short_total)}</div>
-                        <div class="summary-cell summary-value">{_format_volume(total_lit_total)}</div>
-                        <div class="summary-cell summary-value">{_format_volume(total_otc_total)}</div>
-                    </div>
-                    <div class="summary-row">
-                        <div class="summary-cell summary-label">Buy Vol (Sum)</div>
-                        <div class="summary-cell summary-value">{_format_volume(total_short_buy)}</div>
-                        <div class="summary-cell summary-value">{_format_volume(total_lit_buy)}</div>
-                        <div class="summary-cell summary-value">{_format_volume(total_otc_buy)}</div>
-                    </div>
-                    <div class="summary-row">
-                        <div class="summary-cell summary-label">Sell Vol (Sum)</div>
-                        <div class="summary-cell summary-value">{_format_volume(total_short_sell)}</div>
-                        <div class="summary-cell summary-value">{_format_volume(total_lit_sell)}</div>
-                        <div class="summary-cell summary-value">{_format_volume(total_otc_sell)}</div>
-                    </div>
-                    <div class="summary-row summary-divider">
-                        <div class="summary-cell"></div>
-                        <div class="summary-cell"></div>
-                        <div class="summary-cell"></div>
-                        <div class="summary-cell"></div>
-                    </div>
-                    <div class="summary-row">
-                        <div class="summary-cell summary-label">Total Vol (Avg)</div>
-                        <div class="summary-cell summary-value">{_format_volume(avg_short_total)}</div>
-                        <div class="summary-cell summary-value">{_format_volume(avg_lit_total)}</div>
-                        <div class="summary-cell summary-value">{_format_volume(avg_otc_total)}</div>
-                    </div>
-                    <div class="summary-row">
-                        <div class="summary-cell summary-label">Buy Vol (Avg)</div>
-                        <div class="summary-cell summary-value">{_format_volume(avg_short_buy)}</div>
-                        <div class="summary-cell summary-value">{_format_volume(avg_lit_buy)}</div>
-                        <div class="summary-cell summary-value">{_format_volume(avg_otc_buy)}</div>
-                    </div>
-                    <div class="summary-row">
-                        <div class="summary-cell summary-label">Sell Vol (Avg)</div>
-                        <div class="summary-cell summary-value">{_format_volume(avg_short_sell)}</div>
-                        <div class="summary-cell summary-value">{_format_volume(avg_lit_sell)}</div>
-                        <div class="summary-cell summary-value">{_format_volume(avg_otc_sell)}</div>
+            <div class="summary-grid">
+                <div class="summary-block">
+                    <div class="summary-subtitle">Volumes (Totals / Averages)</div>
+                    <div class="summary-table">
+                        <div class="summary-row summary-header">
+                            <div class="summary-cell summary-label"></div>
+                            <div class="summary-cell summary-group">Daily Short Sale</div>
+                            <div class="summary-cell summary-group">Lit Market</div>
+                            <div class="summary-cell summary-group">Darkpool Weekly</div>
+                        </div>
+                        <div class="summary-row">
+                            <div class="summary-cell summary-label">Total Vol (Sum)</div>
+                            <div class="summary-cell summary-value">{_format_volume(total_short_total)}</div>
+                            <div class="summary-cell summary-value">{_format_volume(total_lit_total)}</div>
+                            <div class="summary-cell summary-value">{_format_volume(total_otc_total)}</div>
+                        </div>
+                        <div class="summary-row">
+                            <div class="summary-cell summary-label">Buy Vol (Sum)</div>
+                            <div class="summary-cell summary-value">{_format_volume(total_short_buy)}</div>
+                            <div class="summary-cell summary-value">{_format_volume(total_lit_buy)}</div>
+                            <div class="summary-cell summary-value">{_format_volume(total_otc_buy)}</div>
+                        </div>
+                        <div class="summary-row">
+                            <div class="summary-cell summary-label">Sell Vol (Sum)</div>
+                            <div class="summary-cell summary-value">{_format_volume(total_short_sell)}</div>
+                            <div class="summary-cell summary-value">{_format_volume(total_lit_sell)}</div>
+                            <div class="summary-cell summary-value">{_format_volume(total_otc_sell)}</div>
+                        </div>
+                        <div class="summary-row summary-divider">
+                            <div class="summary-cell"></div>
+                            <div class="summary-cell"></div>
+                            <div class="summary-cell"></div>
+                            <div class="summary-cell"></div>
+                        </div>
+                        <div class="summary-row">
+                            <div class="summary-cell summary-label">Total Vol (Avg)</div>
+                            <div class="summary-cell summary-value">{_format_volume(avg_short_total)}</div>
+                            <div class="summary-cell summary-value">{_format_volume(avg_lit_total)}</div>
+                            <div class="summary-cell summary-value">{_format_volume(avg_otc_total)}</div>
+                        </div>
+                        <div class="summary-row">
+                            <div class="summary-cell summary-label">Buy Vol (Avg)</div>
+                            <div class="summary-cell summary-value">{_format_volume(avg_short_buy)}</div>
+                            <div class="summary-cell summary-value">{_format_volume(avg_lit_buy)}</div>
+                            <div class="summary-cell summary-value">{_format_volume(avg_otc_buy)}</div>
+                        </div>
+                        <div class="summary-row">
+                            <div class="summary-cell summary-label">Sell Vol (Avg)</div>
+                            <div class="summary-cell summary-value">{_format_volume(avg_short_sell)}</div>
+                            <div class="summary-cell summary-value">{_format_volume(avg_lit_sell)}</div>
+                            <div class="summary-cell summary-value">{_format_volume(avg_otc_sell)}</div>
+                        </div>
                     </div>
                 </div>
-            </div>
-            <div class="summary-section">
-                <div class="summary-subtitle">Ratios / Z (Averages)</div>
-                <div class="summary-table">
-                    <div class="summary-row summary-header">
-                        <div class="summary-cell summary-label"></div>
-                        <div class="summary-cell summary-group">Daily Short Sale</div>
-                        <div class="summary-cell summary-group">Lit Market</div>
-                        <div class="summary-cell summary-group">Darkpool Weekly</div>
-                    </div>
-                    <div class="summary-row">
-                        <div class="summary-cell summary-label">Buy/Sell Ratio (Avg)</div>
-                        <div class="summary-cell summary-value">{_format_ratio(avg_short_ratio)}</div>
-                        <div class="summary-cell summary-value">{_format_ratio(avg_lit_ratio)}</div>
-                        <div class="summary-cell summary-value">{_format_ratio(avg_otc_ratio)}</div>
-                    </div>
-                    <div class="summary-row">
-                        <div class="summary-cell summary-label">Z-Score (Avg)</div>
-                        <div class="summary-cell summary-value">{_format_z(avg_short_z)}</div>
-                        <div class="summary-cell summary-value">{_format_z(avg_lit_z)}</div>
-                        <div class="summary-cell summary-value">{_format_z(avg_otc_z)}</div>
-                    </div>
-                    <div class="summary-row">
-                        <div class="summary-cell summary-label">Log Buy Ratio (Avg)</div>
-                        <div class="summary-cell summary-value">NA</div>
-                        <div class="summary-cell summary-value">{_format_log(avg_log_ratio)}</div>
-                        <div class="summary-cell summary-value">NA</div>
+                <div class="summary-block">
+                    <div class="summary-subtitle">Ratios / Z (Averages)</div>
+                    <div class="summary-table">
+                        <div class="summary-row summary-header">
+                            <div class="summary-cell summary-label"></div>
+                            <div class="summary-cell summary-group">Daily Short Sale</div>
+                            <div class="summary-cell summary-group">Lit Market</div>
+                            <div class="summary-cell summary-group">Darkpool Weekly</div>
+                        </div>
+                        <div class="summary-row">
+                            <div class="summary-cell summary-label">Buy/Sell Ratio (Avg)</div>
+                            <div class="summary-cell summary-value">{_format_ratio(avg_short_ratio)}</div>
+                            <div class="summary-cell summary-value">{_format_ratio(avg_lit_ratio)}</div>
+                            <div class="summary-cell summary-value">{_format_ratio(avg_otc_ratio)}</div>
+                        </div>
+                        <div class="summary-row">
+                            <div class="summary-cell summary-label">Z-Score (Avg)</div>
+                            <div class="summary-cell summary-value">{_format_z(avg_short_z)}</div>
+                            <div class="summary-cell summary-value">{_format_z(avg_lit_z)}</div>
+                            <div class="summary-cell summary-value">{_format_z(avg_otc_z)}</div>
+                        </div>
+                        <div class="summary-row">
+                            <div class="summary-cell summary-label">Log Buy Ratio (Avg)</div>
+                            <div class="summary-cell summary-value">NA</div>
+                            <div class="summary-cell summary-value">{_format_log(avg_log_ratio)}</div>
+                            <div class="summary-cell summary-value">NA</div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -663,27 +625,18 @@ def build_styled_html(
     """
 
     definitions = [
-        ("Return Z", "Rolling z-score of daily return (unusual strength/weakness)."),
-        ("Short Total Vol", "Consolidated daily volume used for short ratio denominator."),
-        ("Short Buy Vol", "FINRA short sale volume (buy-side proxy; short-exempt excluded)."),
-        ("Short Sell Vol", "Short Total Vol - Short Buy Vol."),
-        ("Short Sale Buy/Sell Ratio", "Short Buy Vol / Short Sell Vol (short-exempt excluded)."),
-        ("Short Z", "Rolling z-score of Short Sale Buy/Sell Ratio."),
-        ("Lit Total Vol", "Lit buy + lit sell volume (Polygon trades)."),
-        ("Lit Buy Vol", "Lit buy volume from Option B inference."),
-        ("Lit Sell Vol", "Lit sell volume from Option B inference."),
-        ("Lit Buy Ratio", "Lit Buy Vol / (Lit Buy Vol + Lit Sell Vol)."),
-        ("Log Buy Ratio", "ln(Lit Buy Vol / Lit Sell Vol)."),
-        ("Lit Buy Z", "Rolling z-score of Lit Buy Ratio."),
-        ("OTC Total Vol", "FINRA weekly off-exchange volume."),
-        ("OTC Buy Vol", "OTC Total Vol * OTC Weekly Buy Ratio (proxy)."),
-        ("OTC Sell Vol", "OTC Total Vol - OTC Buy Vol."),
-        ("OTC Weekly Buy Ratio", "Weekly lit buy ratio mapped to the OTC week used."),
-        ("OTC Buy Z", "Rolling z-score of OTC Weekly Buy Ratio."),
-        ("Short Vol Source", "FINRA total when present, else Polygon total volume."),
-        ("OTC Status", "Anchored if week covers date; Staled if week is older; None if missing."),
-        ("OTC Week Used", "Week-start date used for OTC calculations."),
         ("Pressure", "Neutral/Accumulating/Distribution using Short Z + Return Z."),
+        ("Accum Score", "Composite signal (0-100) combining short, lit, and price momentum."),
+        ("Return %", "Daily return (close vs prior close)."),
+        ("Short B/S Ratio", "Short Buy Vol / Short Sell Vol (short-exempt excluded)."),
+        ("Short Z", "Rolling z-score of Short B/S Ratio."),
+        ("Short Total Vol", "Consolidated daily volume used for short ratio denominator (POLY when FINRA total missing)."),
+        ("Lit Buy Ratio", "Lit Buy Vol / (Lit Buy Vol + Lit Sell Vol)."),
+        ("Lit Z", "Rolling z-score of Lit Buy Ratio."),
+        ("Lit Total Vol", "Lit buy + lit sell volume (Polygon trades)."),
+        ("OTC Total Vol", "FINRA weekly off-exchange volume."),
+        ("OTC Participation", "OTC weekly volume as a share of Polygon weekly total (intensity proxy)."),
+        ("OTC Status", "Anchored if week covers date; Staled if week is older; None if missing."),
     ]
     definition_items = "\n".join(
         [f"<li><span class=\"def-term\">{term}</span> - {desc}</li>" for term, desc in definitions]
@@ -733,10 +686,10 @@ def build_styled_html(
     group_header_html = """
                 <tr class="group-row">
                     <th class="group-spacer zone-id" colspan="2"></th>
-                    <th class="group-header zone-ratio" colspan="3">Context</th>
-                    <th class="group-header zone-volume" colspan="3">Short Sale</th>
-                    <th class="group-header zone-volume" colspan="3">Lit Market</th>
-                    <th class="group-header zone-volume" colspan="3">OTC Weekly</th>
+                    <th class="group-spacer zone-ratio" colspan="3"></th>
+                    <th class="group-header group-short zone-volume" colspan="3">Short Sale</th>
+                    <th class="group-header group-lit zone-volume" colspan="3">Lit Market</th>
+                    <th class="group-header group-otc zone-volume" colspan="3">OTC Weekly</th>
                 </tr>
     """
 
@@ -767,7 +720,7 @@ def build_styled_html(
             background-color: {palette['background']};
             border-radius: 12px;
             padding: 24px;
-            max-width: 2400px;
+            max-width: 2000px;
             margin: 0 auto;
         }}
 
@@ -781,13 +734,13 @@ def build_styled_html(
         }}
 
         .title {{
-            font-size: 22px;
+            font-size: 32px;
             font-weight: 600;
             color: {palette['white']};
         }}
 
         .subtitle {{
-            font-size: 12px;
+            font-size: 18px;
             color: {palette['text_muted']};
         }}
 
@@ -822,18 +775,45 @@ def build_styled_html(
         .group-row th {{
             background-color: transparent;
             text-align: center;
-            font-size: 11px;
+            font-size: 20px;
             letter-spacing: 0.4px;
             color: {group_label_color};
             padding: 6px 8px 4px;
         }}
 
         .group-header {{
-            border-bottom: 2px solid {border_color};
+            position: relative;
+            padding-bottom: 16px;
         }}
 
         .group-spacer {{
             border-bottom: none;
+        }}
+
+        .group-header::after {{
+            content: "";
+            position: absolute;
+            left: 14px;
+            right: 14px;
+            bottom: 4px;
+            height: 3px;
+            background-color: var(--group-color, {border_color});
+            border-radius: 999px;
+        }}
+
+        .group-short {{
+            color: {palette['cyan']};
+            --group-color: {palette['cyan']};
+        }}
+
+        .group-lit {{
+            color: {palette['yellow']};
+            --group-color: {palette['yellow']};
+        }}
+
+        .group-otc {{
+            color: {palette['orange']};
+            --group-color: {palette['orange']};
         }}
 
         td {{
@@ -937,20 +917,26 @@ def build_styled_html(
             background-color: {palette['panel_bg']};
         }}
 
+        .summary-grid {{
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 28px;
+        }}
+
+        .summary-block {{
+            min-width: 0;
+        }}
+
         .summary-title {{
-            font-size: 12px;
+            font-size: 24px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
             color: {palette['text_muted']};
             margin-bottom: 12px;
         }}
 
-        .summary-section {{
-            margin-bottom: 14px;
-        }}
-
         .summary-subtitle {{
-            font-size: 11px;
+            font-size: 22px;
             text-transform: uppercase;
             letter-spacing: 0.4px;
             color: {palette['text_muted']};
@@ -972,11 +958,11 @@ def build_styled_html(
         .summary-cell {{
             padding: 8px 10px;
             border-bottom: 1px solid {gridline_color};
-            font-size: 13px;
+            font-size: 22px;
         }}
 
         .summary-header .summary-cell {{
-            font-size: 12px;
+            font-size: 22px;
             text-transform: uppercase;
             letter-spacing: 0.4px;
             color: {palette['text_muted']};
@@ -1014,14 +1000,14 @@ def build_styled_html(
             display: flex;
             justify-content: flex-end;
             gap: 8px;
-            font-size: 13px;
+            font-size: 22px;
         }}
 
         .summary-context-label {{
             color: {palette['text_muted']};
             text-transform: uppercase;
             letter-spacing: 0.3px;
-            font-size: 11px;
+            font-size: 22px;
         }}
 
         .summary-context-value {{
@@ -1038,7 +1024,7 @@ def build_styled_html(
         }}
 
         .definitions-title {{
-            font-size: 12px;
+            font-size: 18px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
             color: {palette['text_muted']};
@@ -1050,7 +1036,7 @@ def build_styled_html(
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 6px 16px;
-            font-size: 11px;
+            font-size: 16px;
         }}
 
         .definitions-list li {{
@@ -1064,7 +1050,7 @@ def build_styled_html(
 
         .definitions-note {{
             margin-top: 10px;
-            font-size: 11px;
+            font-size: 14px;
             color: {palette['text_muted']};
         }}
 
@@ -1112,15 +1098,15 @@ def build_styled_html(
                     <th class="zone-id col-anchor">Symbol</th>
                     <th class="zone-status">Pressure</th>
                     <th class="col-numeric zone-ratio">Accum Score</th>
-                    <th class="col-numeric zone-ratio">Return %</th>
-                    <th class="col-numeric zone-ratio">Short B/S Ratio</th>
+                    <th class="col-numeric zone-ratio">Return</th>
+                    <th class="col-numeric zone-ratio">Buy/Sell Ratio</th>
                     <th class="col-numeric zone-ratio">Short Z</th>
-                    <th class="col-numeric zone-volume">Short Total Vol</th>
+                    <th class="col-numeric zone-volume">Total Volume</th>
                     <th class="col-numeric zone-ratio">Lit Buy Ratio</th>
                     <th class="col-numeric zone-ratio">Lit Z</th>
-                    <th class="col-numeric zone-volume">Lit Total Vol</th>
-                    <th class="col-numeric zone-volume">OTC Total Vol</th>
-                    <th class="col-numeric zone-ratio">OTC Participation</th>
+                    <th class="col-numeric zone-volume">Total Volume</th>
+                    <th class="col-numeric zone-volume">OTC Volume</th>
+                    <th class="col-numeric zone-ratio">OTC Participation Rate</th>
                     <th class="zone-status">OTC Status</th>
                 </tr>
             </thead>
