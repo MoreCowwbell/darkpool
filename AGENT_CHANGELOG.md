@@ -331,3 +331,12 @@ Format:
 - [x] Added asymmetrical histogram panels to `plotter_chart_ATMprem.py` (calls above zero, puts below zero).
 - [x] Integrated options fetcher into orchestrator with caching support (skip already-fetched dates).
 - [x] Updated orchestrator to use `plotter_chart_ATMprem` for price charts with options panels.
+
+## 2025-12-31 Session Summary (Claude Code) - Metrics Recomputation Bug Fix
+- [x] Diagnosed bug: running with fewer backfill days (e.g., 5) caused recomputation of metrics without historical context, resulting in missing OTC data and neutral (50) accumulation scores.
+- [x] Root cause: `build_daily_metrics()` was always called with only `target_dates`, losing rolling z-score context (needs 20-60 days).
+- [x] Added `_get_existing_metrics()` helper to query existing daily_metrics from database.
+- [x] Added `_metrics_are_complete()` helper to check if metrics have non-null key columns.
+- [x] Modified orchestrator to skip recomputation when complete metrics already exist in DB.
+- [x] Now logs "Using existing metrics from database (skipping recomputation)" when using cached data.
+- [x] Added lit data diagnostic cells to `database_check.ipynb` for troubleshooting.

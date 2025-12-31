@@ -69,6 +69,40 @@ def _concat_frames(frames: list[pd.DataFrame]) -> pd.DataFrame:
     return pd.concat(non_empty, ignore_index=True)
 
 
+def _get_existing_metrics(conn, symbols: list[str], dates: list) -> pd.DataFrame:
+    """Check if daily_metrics has complete data for symbols and dates."""
+    if not symbols or not dates:
+        return pd.DataFrame()
+
+    symbol_placeholders = ", ".join(["?" for _ in symbols])
+    date_placeholders = ", ".join(["?" for _ in dates])
+
+    query = f"""
+        SELECT * FROM daily_metrics
+        WHERE symbol IN ({symbol_placeholders})
+          AND date IN ({date_placeholders})
+    """
+    params = list(symbols) + list(dates)
+    return conn.execute(query, params).fetchdf()
+
+
+def _metrics_are_complete(existing_metrics: pd.DataFrame, expected_rows: int) -> bool:
+    """Check if existing metrics have complete data (non-null key columns)."""
+    if len(existing_metrics) != expected_rows:
+        return False
+
+    # Key columns that must have at least some non-null values for data to be "complete"
+    key_columns = ['accumulation_score', 'short_ratio', 'lit_flow_imbalance']
+
+    for col in key_columns:
+        if col in existing_metrics.columns:
+            # Check if column has at least some non-null values
+            if existing_metrics[col].notna().sum() == 0:
+                return False
+
+    return True
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     config = load_config()
@@ -215,15 +249,25 @@ def main() -> None:
             [min(config.target_dates), max(config.target_dates)],
         ).fetchdf()
 
-        daily_metrics_df = build_daily_metrics(
-            finra_all_df,
-            short_all,
-            agg_all,
-            lit_all,
-            config.target_dates,
-            config,
-        )
-        upsert_dataframe(conn, "daily_metrics", daily_metrics_df, ["symbol", "date"])
+        # Check if metrics already exist in DB with complete data
+        # This avoids recomputing and losing z-scores/OTC data when running with fewer dates
+        existing_metrics = _get_existing_metrics(conn, config.tickers, config.target_dates)
+        expected_rows = len(config.tickers) * len(config.target_dates)
+
+        if _metrics_are_complete(existing_metrics, expected_rows):
+            logging.info("Using existing metrics from database (skipping recomputation)")
+            daily_metrics_df = existing_metrics
+        else:
+            logging.info("Computing fresh metrics (existing data incomplete or missing)")
+            daily_metrics_df = build_daily_metrics(
+                finra_all_df,
+                short_all,
+                agg_all,
+                lit_all,
+                config.target_dates,
+                config,
+            )
+            upsert_dataframe(conn, "daily_metrics", daily_metrics_df, ["symbol", "date"])
 
         index_agg_df = build_index_constituent_short_agg(
             daily_metrics_df,

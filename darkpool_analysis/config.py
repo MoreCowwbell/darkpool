@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 # =============================================================================
 # Default Configuration (can be overridden via .env)
 # =============================================================================
-TICKERS_TYPE = "SINGLE"  # Options: "SINGLE", "SECTOR", "GLOBAL", "COMMODITIES", "MAG8", "SINGLE" ["SECTOR", "GLOBAL", "COMMODITIES", "MAG8"]
+TICKERS_TYPE = ["SINGLE"]   # ["SECTOR", "GLOBAL", "COMMODITIES", "MAG8"]  # ["SINGLE"]
 DEFAULT_TICKERS = ["META"]
 
 SECTOR_CORE_TICKERS = [
@@ -28,6 +28,21 @@ SECTOR_CORE_TICKERS = [
     "XLV",  # Health Care – defensive with policy overlay
     "XLP",  # Consumer Staples – classic defense
     "XLU",  # Utilities – pure rate-sensitive yield proxy
+]
+
+SECTOR_SUMMARY_TICKERS = [
+    "XLE",   # Energy
+    "XLF",   # Financials
+    "XLK",   # Technology
+    "XLY",   # Consumer Discretionary
+    "XLP",   # Consumer Staples
+    "XLV",   # Health Care
+    "XLU",   # Utilities
+    "XLI",   # Industrials
+    "XLC",   # Communications
+    "XLB",   # Basic Materials
+    "XLRE",  # Real Estate
+    "SPY",   # Select SPDR S&P 500
 ]
 
 GLOBAL_MACRO_TICKERS = [
@@ -77,13 +92,13 @@ EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 DAILY_EXPIRATION_TICKERS = {"SPY", "SPX", "SPXW", "QQQ", "IWM", "XSP"}
 DEFAULT_OPTIONS_STRIKE_COUNT = 30  # ±30 contracts from ATM
 DEFAULT_OPTIONS_MIN_PREMIUM_HIGHLIGHT = 4.0  # $M threshold for highlighting
-DEFAULT_FETCH_OPTIONS_PREMIUM = False  # Enable/disable options premium fetching
+DEFAULT_FETCH_OPTIONS_PREMIUM = True  # Enable/disable options premium fetching
 # -----------------------------------------------------------------------------
 
 # Analysis defaults
 DEFAULT_TARGET_DATE = "2025-12-30"  # Last trading day (Monday)
 DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
-DEFAULT_BACKFILL_COUNT = 30  # Number of periods to fetch (days for daily, weeks for weekly)
+DEFAULT_BACKFILL_COUNT = 5  # Number of periods to fetch (days for daily, weeks for weekly)
 DEFAULT_MIN_LIT_VOLUME = 10000
 DEFAULT_MARKET_TZ = "US/Eastern"
 DEFAULT_RTH_START = "09:30"
@@ -386,6 +401,7 @@ def load_config() -> Config:
     ticker_type_map = {
         "SINGLE": DEFAULT_TICKERS,
         "SECTOR": SECTOR_CORE_TICKERS,
+        "SUMMARY": SECTOR_SUMMARY_TICKERS,
         "GLOBAL": GLOBAL_MACRO_TICKERS,
         "COMMODITIES": COMMODITIES_TICKERS,
         "MAG8": MAG8_TICKERS,
