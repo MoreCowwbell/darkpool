@@ -18,54 +18,57 @@ TICKERS_TYPE = "SECTOR"  # Options: "SINGLE", "SECTOR", "GLOBAL", "COMMODITIES",
 DEFAULT_TICKERS = ["APP"]
 
 SECTOR_CORE_TICKERS = [
-    "XLK",  # Technology (platforms, software, mega-cap growth)
-    "SMH",  # Semiconductors (hardware + capex cycle)
-    "XLF",  # Financials (money-center banks, insurers)
-    "KRE",  # Regional Banks (rates, liquidity stress)
-    "XLE",  # Energy (commodities, inflation hedge)
-    "XLI",  # Industrials (cyclicals, defense, capex)
-    "XLY",  # Consumer Discretionary (growth beta)
-    "XLP",  # Consumer Staples (defensive)
-    "XLV",  # Health Care (defensive + policy)
-    "XLU",  # Utilities (rates, yield proxy)
+    "XLF",  # Financials – rates, credit, liquidity (macro transmission)
+    "KRE",  # Regional Banks – stress canary for funding/liquidity
+    "XLK",  # Technology – duration / growth beta
+    "SMH",  # Semiconductors – high-beta tech + capex cycle
+    "XLI",  # Industrials – real economy / capex / defense
+    "XLY",  # Consumer Discretionary – growth sensitivity
+    "XLE",  # Energy – inflation / commodity regime
+    "XLV",  # Health Care – defensive with policy overlay
+    "XLP",  # Consumer Staples – classic defense
+    "XLU",  # Utilities – pure rate-sensitive yield proxy
 ]
 
 GLOBAL_MACRO_TICKERS = [
-    "SPY",   # US large-cap core (S&P 500)
-    "QQQ",   # US growth / tech beta
-    "TQQQ",  # ProShares UltraPro QQQ ETF
-    "IWM",   # US small caps (domestic liquidity)
-    "EFA",   # Developed markets ex-US (EU + Japan)
-    "EEM",   # Emerging markets (global risk / China beta)
-    "EWJ",   # Japan (yield-curve / FX-sensitive)
-    "FXI",   # China large-cap (policy + growth stress)
-    "VGK",   # Europe (value / banks / energy tilt)
-    "TLT",   # US long rates (risk-off / duration)
-    "VIXY",  # Volatility (risk regime)
-    "UUP",   # US dollar (global liquidity / stress)
-    "GLD",   # Gold (inflation / real rates)
-    "USO",   # Crude oil (global growth / inflation)
+    "SPY",   # US core market anchor
+    "QQQ",   # US growth / duration beta
+    "TQQQ",  # Levered growth (risk amplifier)
+    "IWM",   # Small caps – domestic liquidity / credit sensitivity
+    "VGK",   # Europe – value, banks, energy
+    "EWJ",   # Japan – FX / yield-curve control
+    "EFA",   # Developed ex-US (broad DM check)
+    "EEM",   # Emerging markets – global risk appetite
+    "FXI",   # China – policy & growth stress canary
+    "UUP",   # USD – global liquidity / stress
+    "TLT",   # Long rates – duration & risk-off
+    "GLD",   # Gold – real rates / tail hedge
+    "USO",   # Oil – inflation & global demand
+    "VIXY",  # Volatility – regime confirmation
 ]
+
 
 COMMODITIES_TICKERS = [
-    "GLD",  # Gold ETF (inflation hedge)
-    "SLV",  # Silver ETF (inflation hedge)
-    "GDX",  # Gold miners (inflation hedge + equity beta)
-    "USO",  # Oil ETF (commodity cycle)
-    "UNG",  # Natural Gas ETF (commodity cycle)
-    "URA",  # Global Uranium ETF (energy transition theme)
+    "GLD",  # Gold – monetary metal / real rates anchor
+    "SLV",  # Silver – monetary + growth beta
+    "GDX",  # Gold miners – leveraged gold / equity beta
+    "USO",  # Crude oil – global growth & inflation
+    "UNG",  # Natural gas – high-volatility energy beta
+    "URA",  # Uranium – structural / policy-driven energy theme
 ]
 
+
 MAG8_TICKERS = [
-    'AAPL',
-    'MSFT',
-    'GOOGL',
-    'AMZN',
-    'NVDA',
-    'META',
-    'TSLA',
-    'AVGO',
+    "MSFT",  # Core platform + enterprise + AI distribution
+    "AAPL",  # Consumer platform / hardware-services hybrid
+    "GOOGL", # Ads + cloud + AI optionality
+    "AMZN",  # AWS + commerce + logistics macro signal
+    "NVDA",  # AI compute backbone / capex cycle
+    "AVGO",  # AI infrastructure + semis + enterprise software
+    "META",  # Ads + engagement + AI leverage
+    "TSLA",  # Highest beta: auto + AI + macro sensitivity
 ]
+
 
 EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 # -----------------------------------------------------------------------------

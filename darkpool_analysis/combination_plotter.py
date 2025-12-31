@@ -263,7 +263,7 @@ def _plot_accumulation_bars(
     ax.axhline(y=0.30, color=COLORS["red"], linestyle="--", linewidth=0.8, alpha=0.6, zorder=1)
     ax.axhline(y=0.70, color=COLORS["green"], linestyle="--", linewidth=0.8, alpha=0.6, zorder=1)
 
-    label_size = 13 if emphasize else 11
+    label_size = 11 if emphasize else 11
     ax.text(
         -0.06,
         0.5,
@@ -357,7 +357,7 @@ def render_combination_plot(
     fig_width = _compute_fig_width(day_count)
     panel1_height = 4.5 * 3 * 0.5
     base_accum_height = 1.9 * 0.5
-    weighted_height = base_accum_height * 2
+    weighted_height = base_accum_height * 2.5
     ticker_height = base_accum_height * 2
     fig_height = panel1_height + weighted_height + ticker_height * len(tickers)
 
@@ -442,7 +442,7 @@ def render_combination_plot(
         len(tickers) + 1,
         1,
         hspace=0.28,
-        height_ratios=[weighted_height] * (len(tickers) + 1),
+        height_ratios=[weighted_height] + [base_accum_height] * len(tickers),
     )
     ax_weighted = fig.add_subplot(subgrid[0, 0])
     _plot_accumulation_bars(
