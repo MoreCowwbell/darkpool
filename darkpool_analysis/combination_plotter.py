@@ -73,9 +73,9 @@ REQUIRED_COLUMNS = {
 SCORE_CMAP = LinearSegmentedColormap.from_list(
     "score_cmap",
     [
-        (0.0, COLORS["red"]),
-        (0.5, "#888888"),
-        (1.0, COLORS["green"]),
+        (0.0, "#b026ff"),
+        (0.5, "#555555"),
+        (1.0, "#00ff88"),
     ],
 )
 
