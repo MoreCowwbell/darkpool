@@ -298,6 +298,41 @@ def init_db(conn: duckdb.DuckDBPyConnection) -> None:
     conn.execute(
         "ALTER TABLE polygon_daily_agg_raw ADD COLUMN IF NOT EXISTS fetch_timestamp TIMESTAMP"
     )
+    # Options premium tables for ATM premium panel
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS options_premium_daily (
+            symbol TEXT,
+            trade_date DATE,
+            expiration_date DATE,
+            expiration_type TEXT,
+            strike DOUBLE,
+            option_type TEXT,
+            premium DOUBLE,
+            volume DOUBLE,
+            close_price DOUBLE,
+            fetch_timestamp TIMESTAMP,
+            PRIMARY KEY (symbol, trade_date, expiration_date, strike, option_type)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS options_premium_summary (
+            symbol TEXT,
+            trade_date DATE,
+            expiration_type TEXT,
+            total_call_premium DOUBLE,
+            total_put_premium DOUBLE,
+            net_premium DOUBLE,
+            log_ratio DOUBLE,
+            strikes_count INTEGER,
+            atm_strike DOUBLE,
+            fetch_timestamp TIMESTAMP,
+            PRIMARY KEY (symbol, trade_date, expiration_type)
+        )
+        """
+    )
 
 
 def upsert_dataframe(

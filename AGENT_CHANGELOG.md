@@ -320,4 +320,14 @@ Format:
 - [x] Updated accumulation score bar gradient to neon purple -> dark grey -> neon green.
 - [x] Applied the same purple/grey/green gradient and 0.85 nonlinear saturation curve to plotter and plotter_chart accumulation bars.
 - [x] Added combination plot title mapping for sector/global/commodities/mag8 groups with a multi-ticker fallback.
-- [x] Added an extra “Last 3 Days” metrics table render in orchestrator.
+- [x] Added an extra "Last 3 Days" metrics table render in orchestrator.
+
+## 2025-12-30 Session Summary (Options Premium)
+- [x] Added `options_premium_daily` and `options_premium_summary` tables to db.py for storing options premium data.
+- [x] Added options config options: `OPTIONS_STRIKE_COUNT`, `OPTIONS_MIN_PREMIUM_HIGHLIGHT`, `FETCH_OPTIONS_PREMIUM`, `DAILY_EXPIRATION_TICKERS`.
+- [x] Created `fetch_polygon_options.py` module for fetching options contracts and daily aggregates from Polygon.
+- [x] Implemented options premium calculation: `premium = close × volume × 100 / 1M` (in $M).
+- [x] Added support for 0DTE (same-day) and Weekly (upcoming Friday) expirations.
+- [x] Added asymmetrical histogram panels to `plotter_chart_ATMprem.py` (calls above zero, puts below zero).
+- [x] Integrated options fetcher into orchestrator with caching support (skip already-fetched dates).
+- [x] Updated orchestrator to use `plotter_chart_ATMprem` for price charts with options panels.

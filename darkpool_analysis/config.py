@@ -14,8 +14,8 @@ from dotenv import load_dotenv
 # =============================================================================
 # Default Configuration (can be overridden via .env)
 # =============================================================================
-TICKERS_TYPE = "SECTOR"  # Options: "SINGLE", "SECTOR", "GLOBAL", "COMMODITIES", "MAG8"
-DEFAULT_TICKERS = ["I:SPX"]
+TICKERS_TYPE = "SINGLE"  # Options: "SINGLE", "SECTOR", "GLOBAL", "COMMODITIES", "MAG8", ["SECTOR", "GLOBAL", "COMMODITIES", "MAG8"] 
+DEFAULT_TICKERS = ["META"]
 
 SECTOR_CORE_TICKERS = [
     "XLF",  # Financials – rates, credit, liquidity (macro transmission)
@@ -71,6 +71,13 @@ MAG8_TICKERS = [
 
 
 EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
+
+# Options Premium Panel Configuration
+# Tickers with daily (0DTE) options expiration
+DAILY_EXPIRATION_TICKERS = {"SPY", "SPX", "SPXW", "QQQ", "IWM", "XSP"}
+DEFAULT_OPTIONS_STRIKE_COUNT = 30  # ±30 contracts from ATM
+DEFAULT_OPTIONS_MIN_PREMIUM_HIGHLIGHT = 2.0  # $M threshold for highlighting
+DEFAULT_FETCH_OPTIONS_PREMIUM = True  # Enable/disable options premium fetching
 # -----------------------------------------------------------------------------
 
 # Analysis defaults
@@ -348,6 +355,10 @@ class Config:
     composite_w_price: float
     intensity_scale_min: float
     intensity_scale_max: float
+    # Options premium panel
+    options_strike_count: int
+    options_min_premium_highlight: float
+    fetch_options_premium: bool
 
 
 def load_config() -> Config:
@@ -492,4 +503,8 @@ def load_config() -> Config:
         composite_w_price=float(os.getenv("COMPOSITE_W_PRICE", str(DEFAULT_COMPOSITE_W_PRICE))),
         intensity_scale_min=float(os.getenv("INTENSITY_SCALE_MIN", str(DEFAULT_INTENSITY_SCALE_MIN))),
         intensity_scale_max=float(os.getenv("INTENSITY_SCALE_MAX", str(DEFAULT_INTENSITY_SCALE_MAX))),
+        # Options premium panel
+        options_strike_count=int(os.getenv("OPTIONS_STRIKE_COUNT", str(DEFAULT_OPTIONS_STRIKE_COUNT))),
+        options_min_premium_highlight=float(os.getenv("OPTIONS_MIN_PREMIUM_HIGHLIGHT", str(DEFAULT_OPTIONS_MIN_PREMIUM_HIGHLIGHT))),
+        fetch_options_premium=os.getenv("FETCH_OPTIONS_PREMIUM", str(DEFAULT_FETCH_OPTIONS_PREMIUM)).lower() in ("true", "1", "yes"),
     )

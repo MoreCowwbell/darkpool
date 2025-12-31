@@ -19,9 +19,10 @@ try:
     from .fetch_finra_short import fetch_finra_short_daily
     from .fetch_polygon_agg import fetch_polygon_daily_agg
     from .fetch_polygon_equity import fetch_polygon_trades
+    from .fetch_polygon_options import fetch_options_premium_batch
     from .infer_buy_sell import compute_lit_directional_flow
     from .plotter import render_metrics_plots
-    from .plotter_chart import render_price_charts
+    from .plotter_chart_ATMprem import render_price_charts
     from .table_renderer import render_daily_metrics_table
     from .combination_plotter import render_combination_plot
 except ImportError:
@@ -32,9 +33,10 @@ except ImportError:
     from fetch_finra_short import fetch_finra_short_daily
     from fetch_polygon_agg import fetch_polygon_daily_agg
     from fetch_polygon_equity import fetch_polygon_trades
+    from fetch_polygon_options import fetch_options_premium_batch
     from infer_buy_sell import compute_lit_directional_flow
     from plotter import render_metrics_plots
-    from plotter_chart import render_price_charts
+    from plotter_chart_ATMprem import render_price_charts
     from table_renderer import render_daily_metrics_table
     from combination_plotter import render_combination_plot
 
@@ -83,6 +85,7 @@ def main() -> None:
         config.render_price_charts,
         config.price_bar_timeframe,
     )
+    logging.info("Options premium fetch: %s", config.fetch_options_premium)
 
     max_date = max(config.target_dates)
     min_date = min(config.target_dates)
@@ -161,6 +164,29 @@ def main() -> None:
             if not agg_df.empty:
                 upsert_dataframe(conn, "polygon_daily_agg_raw", agg_df, ["symbol", "trade_date"])
             agg_frames.append(agg_df)
+
+            # Fetch options premium if enabled
+            if config.fetch_options_premium and not agg_df.empty:
+                try:
+                    # Build ATM prices dict from daily agg close prices
+                    atm_prices = dict(zip(agg_df["symbol"], agg_df["close"]))
+                    options_stats = fetch_options_premium_batch(
+                        symbols=symbols_to_fetch,
+                        trade_date=run_date,
+                        atm_prices=atm_prices,
+                        config=config,
+                        conn=conn,
+                    )
+                    if options_stats["fetched"] > 0 or options_stats["cached"] > 0:
+                        logging.info(
+                            "Options premium: %d fetched, %d cached, %d skipped, %d errors",
+                            options_stats["fetched"],
+                            options_stats["cached"],
+                            options_stats.get("skipped", 0),
+                            options_stats["errors"],
+                        )
+                except Exception as exc:
+                    logging.warning("Options premium fetch failed for %s: %s", run_date.isoformat(), exc)
 
         short_all = _concat_frames(short_frames)
         agg_all = _concat_frames(agg_frames)
@@ -271,6 +297,7 @@ def main() -> None:
                 dates=config.target_dates,
                 tickers=config.tickers,
                 timeframe=config.price_bar_timeframe,
+                min_premium_highlight=config.options_min_premium_highlight,
             )
         except Exception as exc:
             logging.error("Failed to render price charts: %s", exc)
