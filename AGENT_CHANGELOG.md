@@ -313,3 +313,7 @@ Format:
 - [x] Reduced panel 0 and panel 1 heights by 25% to rebalance the combination plot layout.
 - [x] Made the SPX panel non-fatal when no OHLC data exists (shows a placeholder instead of crashing).
 - [x] Added SPX symbol resolution fallback (uses I:SPX when SPX is not present) to restore OHLC bars.
+- [x] Added a breadth/diffusion panel above the centered accumulation panel in the combination plot.
+- [x] Boosted weighted/centered accumulation color saturation using a 1.4x divergence scaling from 50.
+- [x] Added a gradient color ramp to the breadth/diffusion panel with the same 1.4x saturation boost.
+- [x] Switched bar color saturation to a nonlinear curve (exp=0.7) with linear boost reset to 1.0.

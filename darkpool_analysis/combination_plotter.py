@@ -313,6 +313,74 @@ def _weighted_average_row(row: pd.Series, weights: dict[str, float]) -> float:
     return float(np.dot(values.values, weight_values))
 
 
+def _compute_breadth_diffusion(scores: pd.DataFrame) -> pd.Series:
+    if scores.empty:
+        return pd.Series(dtype=float)
+    valid = scores.notna()
+    total = valid.sum(axis=1).replace(0, np.nan)
+    above = (scores >= 70).sum(axis=1)
+    below = (scores <= 30).sum(axis=1)
+    return (above - below) / total
+
+
+def _plot_breadth_diffusion(
+    ax,
+    dates: pd.Series,
+    diffusion: pd.Series,
+    label: str,
+    label_color: str,
+    display_name: str,
+    color_boost: float = 1.0,
+    curve_exp: float = 1.0,
+) -> None:
+    ax.set_facecolor(COLORS["panel_bg"])
+    ax.tick_params(colors=COLORS["text"], labelsize=8)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    ax.grid(False)
+
+    for d, value in zip(dates, diffusion):
+        if pd.isna(value):
+            continue
+        adjusted_value = value * color_boost
+        if curve_exp != 1.0:
+            adjusted_value = np.sign(adjusted_value) * (abs(adjusted_value) ** curve_exp)
+        adjusted_value = np.clip(adjusted_value, -1.0, 1.0)
+        norm_value = (adjusted_value + 1.0) / 2.0
+        bar_color = SCORE_CMAP(np.clip(norm_value, 0, 1))
+        ax.bar(d, value, bottom=0, color=bar_color, alpha=0.7, width=0.8, zorder=2)
+
+    ax.axhline(y=0.0, color=COLORS["neutral"], linestyle="--", linewidth=0.8, alpha=0.6, zorder=1)
+    ax.set_ylim(-1.0, 1.0)
+    ax.set_yticks([-1.0, -0.5, 0.0, 0.5, 1.0])
+    ax.set_yticklabels(["-100", "-50", "0", "50", "100"])
+    # ax.set_ylabel("Diffusion", color=YLABEL_COLOR, fontsize=YLABEL_SIZE)
+
+    ax.text(
+        -0.06,
+        0.5,
+        label,
+        transform=ax.transAxes,
+        rotation=90,
+        ha="center",
+        va="center",
+        fontsize=11,
+        fontweight="bold",
+        color=label_color,
+    )
+    ax.text(
+        0.01,
+        0.92,
+        display_name,
+        transform=ax.transAxes,
+        ha="left",
+        va="top",
+        fontsize=8,
+        fontweight="bold",
+        color=COLORS["text_muted"],
+    )
+
+
 def _plot_accumulation_bars(
     ax,
     dates: pd.Series,
@@ -322,6 +390,8 @@ def _plot_accumulation_bars(
     label_color: str,
     display_name: str,
     emphasize: bool = False,
+    color_boost: float = 1.0,
+    curve_exp: float = 1.0,
 ) -> None:
     ax.set_facecolor(COLORS["panel_bg"])
     ax.tick_params(colors=COLORS["text"], labelsize=8)
@@ -333,7 +403,13 @@ def _plot_accumulation_bars(
     conf_display = confidence.fillna(0.5)
 
     for d, score, conf in zip(dates, score_display, conf_display):
-        norm_score = np.clip(score / 100.0, 0, 1)
+        adjusted_score = 50 + (score - 50) * color_boost
+        adjusted_score = np.clip(adjusted_score, 0, 100)
+        norm_score = np.clip(adjusted_score / 100.0, 0, 1)
+        if curve_exp != 1.0:
+            dev = norm_score - 0.5
+            norm_score = 0.5 + np.sign(dev) * (abs(dev) ** curve_exp)
+            norm_score = np.clip(norm_score, 0, 1)
         bar_color = SCORE_CMAP(norm_score)
         alpha = 0.85 if conf >= 0.6 else 0.45
         bar_height = score / 100.0
@@ -367,7 +443,7 @@ def _plot_accumulation_bars(
     ax.set_yticklabels(["0", "30", "50", "70", "100"])
     ax.axhline(y=0.30, color=COLORS["red"], linestyle="--", linewidth=0.8, alpha=0.6, zorder=1)
     ax.axhline(y=0.70, color=COLORS["green"], linestyle="--", linewidth=0.8, alpha=0.6, zorder=1)
-    ax.set_ylabel("Score", color=YLABEL_COLOR, fontsize=YLABEL_SIZE)
+    # ax.set_ylabel("Score", color=YLABEL_COLOR, fontsize=YLABEL_SIZE)
 
     label_size = 11 if emphasize else 11
     ax.text(
@@ -405,6 +481,8 @@ def _plot_accumulation_bars_centered(
     label_color: str,
     display_name: str,
     emphasize: bool = False,
+    color_boost: float = 1.0,
+    curve_exp: float = 1.0,
 ) -> None:
     ax.set_facecolor(COLORS["panel_bg"])
     ax.tick_params(colors=COLORS["text"], labelsize=8)
@@ -416,7 +494,13 @@ def _plot_accumulation_bars_centered(
     conf_display = confidence.fillna(0.5)
 
     for d, score, conf in zip(dates, score_display, conf_display):
-        norm_score = np.clip(score / 100.0, 0, 1)
+        adjusted_score = 50 + (score - 50) * color_boost
+        adjusted_score = np.clip(adjusted_score, 0, 100)
+        norm_score = np.clip(adjusted_score / 100.0, 0, 1)
+        if curve_exp != 1.0:
+            dev = norm_score - 0.5
+            norm_score = 0.5 + np.sign(dev) * (abs(dev) ** curve_exp)
+            norm_score = np.clip(norm_score, 0, 1)
         bar_color = SCORE_CMAP(norm_score)
         alpha = 0.85 if conf >= 0.6 else 0.45
         bar_height = score - 50.0
@@ -454,7 +538,7 @@ def _plot_accumulation_bars_centered(
     ax.axhline(y=0.0, color=COLORS["neutral"], linestyle="--", linewidth=0.8, alpha=0.5, zorder=1)
     ax.axhline(y=-20.0, color=COLORS["red"], linestyle="--", linewidth=0.8, alpha=0.6, zorder=1)
     ax.axhline(y=20.0, color=COLORS["green"], linestyle="--", linewidth=0.8, alpha=0.6, zorder=1)
-    ax.set_ylabel("Score", color=YLABEL_COLOR, fontsize=YLABEL_SIZE)
+    # ax.set_ylabel("Score", color=YLABEL_COLOR, fontsize=YLABEL_SIZE)
 
     label_size = 11 if emphasize else 11
     ax.text(
@@ -554,6 +638,7 @@ def render_combination_plot(
     weighted_conf = conf_pivot[tickers].apply(
         lambda row: _weighted_average_row(row, weights), axis=1
     )
+    diffusion = _compute_breadth_diffusion(accum_pivot[tickers])
 
     ticker_colors = _build_ticker_colors(tickers)
     day_count = len(dates_index)
@@ -568,7 +653,7 @@ def render_combination_plot(
         spx_height
         + panel0_height
         + panel1_height
-        + weighted_height * 2
+        + weighted_height * 3
         + ticker_height * len(tickers)
     )
 
@@ -583,7 +668,7 @@ def render_combination_plot(
             spx_height,
             panel0_height,
             panel1_height,
-            weighted_height * 2 + ticker_height * len(tickers),
+            weighted_height * 3 + ticker_height * len(tickers),
         ],
     )
     ticker_line_width = max(PANEL1_LINE_WIDTH * 0.6, 0.9)
@@ -675,7 +760,7 @@ def render_combination_plot(
         max_abs = 0.02
     if pd.isna(max_abs) or max_abs == 0:
         max_abs = 0.02
-    bound = float(np.ceil(max_abs * 100) / 100)
+    bound = float(np.ceil(max_abs * 1.10 * 100) / 100)
     ax0.set_ylim(-bound, bound)
     ax0.axhline(0, color=COLORS["neutral"], linestyle="--", linewidth=0.8, alpha=0.6, zorder=1)
     ax0.set_ylabel("Price (Normalized)", color=YLABEL_COLOR, fontsize=YLABEL_SIZE)
@@ -798,12 +883,24 @@ def render_combination_plot(
 
     # Panel 2: Accumulation Score stack
     subgrid = grid[3, 0].subgridspec(
-        len(tickers) + 2,
+        len(tickers) + 3,
         1,
         hspace=0.28,
-        height_ratios=[weighted_height, weighted_height] + [base_accum_height] * len(tickers),
+        height_ratios=[weighted_height, weighted_height, weighted_height]
+        + [base_accum_height] * len(tickers),
     )
-    ax_centered = fig.add_subplot(subgrid[0, 0])
+    ax_breadth = fig.add_subplot(subgrid[0, 0])
+    _plot_breadth_diffusion(
+        ax_breadth,
+        dates_index,
+        diffusion,
+        label="BREADTH",
+        label_color=COLORS["white"],
+        display_name="Breadth / Diffusion",
+        color_boost=1.0,
+        curve_exp=0.75,
+    )
+    ax_centered = fig.add_subplot(subgrid[1, 0], sharex=ax_breadth)
     _plot_accumulation_bars_centered(
         ax_centered,
         dates_index,
@@ -813,8 +910,10 @@ def render_combination_plot(
         label_color=COLORS["white"],
         display_name="Weighted (Centered)",
         emphasize=True,
+        color_boost=1.0,
+        curve_exp=0.75,
     )
-    ax_weighted = fig.add_subplot(subgrid[1, 0], sharex=ax_centered)
+    ax_weighted = fig.add_subplot(subgrid[2, 0], sharex=ax_breadth)
     _plot_accumulation_bars(
         ax_weighted,
         dates_index,
@@ -824,10 +923,12 @@ def render_combination_plot(
         label_color=COLORS["white"],
         display_name="Weighted Average",
         emphasize=True,
+        color_boost=1.0,
+        curve_exp=0.75,
     )
 
-    axes_accum = [ax_centered, ax_weighted]
-    for idx, ticker in enumerate(tickers, start=2):
+    axes_accum = [ax_breadth, ax_centered, ax_weighted]
+    for idx, ticker in enumerate(tickers, start=3):
         ax = fig.add_subplot(subgrid[idx, 0], sharex=ax_centered)
         display_name = issue_names.get(ticker, ticker)
         _plot_accumulation_bars(
@@ -839,6 +940,8 @@ def render_combination_plot(
             label_color=ticker_colors[ticker],
             display_name=display_name,
             emphasize=False,
+            color_boost=1.0,
+            curve_exp=0.85,
         )
         axes_accum.append(ax)
 
@@ -852,7 +955,7 @@ def render_combination_plot(
         ax.xaxis.set_major_formatter(x_formatter)
         ax.xaxis.set_major_locator(x_locator)
 
-    axes_with_labels = {axes_accum[1], axes_accum[-1]}
+    axes_with_labels = {axes_accum[2], axes_accum[-1]}
     for ax in [ax_spx, ax0, ax1] + axes_accum:
         if ax in axes_with_labels or ax in (ax0, ax1):
             ax.tick_params(axis="x", labelbottom=True)
