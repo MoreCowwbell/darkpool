@@ -722,9 +722,9 @@ def plot_symbol_metrics(
     from matplotlib.colors import LinearSegmentedColormap
 
     cmap_colors = [
-        (0.0, COLORS["red"]),      # 0 = Distribution
-        (0.5, "#888888"),          # 50 = Neutral (gray)
-        (1.0, COLORS["green"]),    # 100 = Accumulating
+        (0.0, "#b026ff"),      # 0 = Distribution
+        (0.5, "#555555"),      # 50 = Neutral (gray)
+        (1.0, "#00ff88"),      # 100 = Accumulating
     ]
     score_cmap = LinearSegmentedColormap.from_list(
         "score_cmap",
@@ -740,6 +740,9 @@ def plot_symbol_metrics(
 
         # Normalize score to [0, 1] for colormap
         norm_score = np.clip(score / 100.0, 0, 1)
+        dev = norm_score - 0.5
+        norm_score = 0.5 + np.sign(dev) * (abs(dev) ** 0.85)
+        norm_score = np.clip(norm_score, 0, 1)
         bar_color = score_cmap(norm_score)
 
         # Reduce opacity if low confidence
@@ -791,9 +794,9 @@ def plot_symbol_metrics(
         spine.set_visible(False)
 
     legend_handles_4 = [
-        Patch(facecolor=COLORS["green"], edgecolor="none", alpha=0.8, label=">70 Accum"),
-        Patch(facecolor="#888888", edgecolor="none", alpha=0.8, label="30-70 Neutral"),
-        Patch(facecolor=COLORS["red"], edgecolor="none", alpha=0.8, label="<30 Distrib"),
+        Patch(facecolor="#00ff88", edgecolor="none", alpha=0.8, label=">70 Accum"),
+        Patch(facecolor="#555555", edgecolor="none", alpha=0.8, label="30-70 Neutral"),
+        Patch(facecolor="#b026ff", edgecolor="none", alpha=0.8, label="<30 Distrib"),
         Line2D([0], [0], color=COLORS["green"], linewidth=4, alpha=0.6, label="High Conf"),
         Line2D([0], [0], color=COLORS["yellow"], linewidth=4, alpha=0.6, label="Med Conf"),
         Line2D([0], [0], color=COLORS["red"], linewidth=4, alpha=0.6, label="Low Conf"),

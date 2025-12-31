@@ -318,3 +318,6 @@ Format:
 - [x] Added a gradient color ramp to the breadth/diffusion panel with the same 1.4x saturation boost.
 - [x] Switched bar color saturation to a nonlinear curve (exp=0.7) with linear boost reset to 1.0.
 - [x] Updated accumulation score bar gradient to neon purple -> dark grey -> neon green.
+- [x] Applied the same purple/grey/green gradient and 0.85 nonlinear saturation curve to plotter and plotter_chart accumulation bars.
+- [x] Added combination plot title mapping for sector/global/commodities/mag8 groups with a multi-ticker fallback.
+- [x] Added an extra “Last 3 Days” metrics table render in orchestrator.

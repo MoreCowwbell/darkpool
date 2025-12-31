@@ -229,6 +229,19 @@ def main() -> None:
         logging.error("Failed to render daily metrics table: %s", exc)
 
     try:
+        recent_dates = sorted(config.target_dates)[-3:]
+        render_daily_metrics_table(
+            db_path=config.db_path,
+            output_dir=config.table_dir,
+            dates=recent_dates,
+            tickers=config.tickers,
+            title="Institutional Pressure Metrics (Last 3 Days)",
+            table_style=config.table_style,
+        )
+    except Exception as exc:
+        logging.error("Failed to render last-3-days metrics table: %s", exc)
+
+    try:
         render_metrics_plots(
             db_path=config.db_path,
             output_dir=config.plot_dir,

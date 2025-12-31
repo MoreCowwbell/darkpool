@@ -29,7 +29,13 @@ SPX_OHLC_LINE_WIDTH = 1.2
 logger = logging.getLogger(__name__)
 
 try:
-    from .config import load_config
+    from .config import (
+        COMMODITIES_TICKERS,
+        GLOBAL_MACRO_TICKERS,
+        MAG8_TICKERS,
+        SECTOR_CORE_TICKERS,
+        load_config,
+    )
     from .plotter import (
         COLORS,
         MAIN_LINE_WIDTH,
@@ -45,7 +51,13 @@ try:
         _set_log_ratio_axis,
     )
 except ImportError:
-    from config import load_config
+    from config import (
+        COMMODITIES_TICKERS,
+        GLOBAL_MACRO_TICKERS,
+        MAG8_TICKERS,
+        SECTOR_CORE_TICKERS,
+        load_config,
+    )
     from plotter import (
         COLORS,
         MAIN_LINE_WIDTH,
@@ -311,6 +323,19 @@ def _weighted_average_row(row: pd.Series, weights: dict[str, float]) -> float:
         weight_values = np.ones_like(weight_values)
     weight_values = weight_values / weight_values.sum()
     return float(np.dot(values.values, weight_values))
+
+
+def _resolve_combination_title(tickers: list[str]) -> str:
+    tickers_set = set(tickers)
+    if tickers_set == set(SECTOR_CORE_TICKERS):
+        return "Sector Core Overlay"
+    if tickers_set == set(GLOBAL_MACRO_TICKERS):
+        return "Global Macro Overlay"
+    if tickers_set == set(COMMODITIES_TICKERS):
+        return "Commodities Overlay"
+    if tickers_set == set(MAG8_TICKERS):
+        return "Mag 8 Overlay"
+    return "Multi-Ticker Overlay"
 
 
 def _compute_breadth_diffusion(scores: pd.DataFrame) -> pd.Series:
@@ -964,7 +989,7 @@ def render_combination_plot(
             ax.tick_params(axis="x", labelbottom=False)
 
     fig.suptitle(
-        "Combination Plot - Multi-Ticker Overlay",
+        _resolve_combination_title(tickers),
         color=COLORS["white"],
         fontsize=14,
         fontweight="bold",

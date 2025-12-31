@@ -316,9 +316,9 @@ def plot_price_chart(
     score_cmap = LinearSegmentedColormap.from_list(
         "score_cmap",
         [
-            (0.0, COLORS["red"]),
-            (0.5, "#888888"),
-            (1.0, COLORS["green"]),
+            (0.0, "#b026ff"),
+            (0.5, "#555555"),
+            (1.0, "#00ff88"),
         ],
     )
 
@@ -329,6 +329,9 @@ def plot_price_chart(
             conf = 0.5
 
         norm_score = np.clip(score / 100.0, 0, 1)
+        dev = norm_score - 0.5
+        norm_score = 0.5 + np.sign(dev) * (abs(dev) ** 0.85)
+        norm_score = np.clip(norm_score, 0, 1)
         bar_color = score_cmap(norm_score)
         alpha = 0.8 if conf >= 0.6 else 0.4
         bar_height = score / 100.0
@@ -376,9 +379,9 @@ def plot_price_chart(
         spine.set_visible(False)
 
     legend_handles_score = [
-        Patch(facecolor=COLORS["green"], edgecolor="none", alpha=0.8, label=">70 Accum"),
-        Patch(facecolor="#888888", edgecolor="none", alpha=0.8, label="30-70 Neutral"),
-        Patch(facecolor=COLORS["red"], edgecolor="none", alpha=0.8, label="<30 Distrib"),
+        Patch(facecolor="#00ff88", edgecolor="none", alpha=0.8, label=">70 Accum"),
+        Patch(facecolor="#555555", edgecolor="none", alpha=0.8, label="30-70 Neutral"),
+        Patch(facecolor="#b026ff", edgecolor="none", alpha=0.8, label="<30 Distrib"),
         Line2D([0], [0], color=COLORS["green"], linewidth=4, alpha=0.6, label="High Conf"),
         Line2D([0], [0], color=COLORS["yellow"], linewidth=4, alpha=0.6, label="Med Conf"),
         Line2D([0], [0], color=COLORS["red"], linewidth=4, alpha=0.6, label="Low Conf"),
