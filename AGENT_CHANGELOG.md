@@ -308,3 +308,8 @@ Format:
 - [x] Fixed latest-week symbol detection by normalizing week_start_date dtype before comparison.
 - [x] Wired combination plot generation into orchestrator for main.py runs.
 - [x] Added a normalized price-action overlay panel to the combination plot.
+## 2025-12-30 Session Summary (Codex)
+- [x] Added an SPX OHLC panel to the top of the combination plot and aligned it with the shared date axis.
+- [x] Reduced panel 0 and panel 1 heights by 25% to rebalance the combination plot layout.
+- [x] Made the SPX panel non-fatal when no OHLC data exists (shows a placeholder instead of crashing).
+- [x] Added SPX symbol resolution fallback (uses I:SPX when SPX is not present) to restore OHLC bars.

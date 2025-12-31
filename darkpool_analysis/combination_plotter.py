@@ -22,6 +22,10 @@ from matplotlib.lines import Line2D
 from matplotlib import cm, colors as mcolors
 from matplotlib.transforms import blended_transform_factory
 
+SPX_UP_COLOR = "#4aa3ff"
+SPX_DOWN_COLOR = "#ff9f43"
+SPX_OHLC_LINE_WIDTH = 1.2
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -126,6 +130,16 @@ def _ensure_required_columns(conn: duckdb.DuckDBPyConnection) -> None:
     missing = sorted(REQUIRED_COLUMNS.difference(columns))
     if missing:
         raise RuntimeError(f"Missing required columns in daily_metrics: {', '.join(missing)}")
+    spx_columns = _get_table_columns(conn, "polygon_daily_agg_raw")
+    if not spx_columns:
+        raise RuntimeError("Missing required table: polygon_daily_agg_raw")
+    required_spx = {"symbol", "trade_date", "open", "high", "low", "close"}
+    missing_spx = sorted(required_spx.difference(spx_columns))
+    if missing_spx:
+        raise RuntimeError(
+            "Missing required columns in polygon_daily_agg_raw: "
+            + ", ".join(missing_spx)
+        )
 
 
 def _parse_dates(value: Optional[str]) -> Optional[list[date]]:
@@ -186,6 +200,71 @@ def _fetch_combination_df(
         ORDER BY date, symbol
     """
     return conn.execute(query, params).df()
+
+
+def _resolve_spx_symbol(
+    conn: duckdb.DuckDBPyConnection,
+    min_date: date,
+    max_date: date,
+) -> Optional[str]:
+    candidates = ["SPX", "I:SPX", "^SPX"]
+    placeholders = ", ".join(["?" for _ in candidates])
+    query = f"""
+        SELECT symbol, COUNT(*) AS cnt
+        FROM polygon_daily_agg_raw
+        WHERE symbol IN ({placeholders}) AND trade_date BETWEEN ? AND ?
+        GROUP BY symbol
+        ORDER BY cnt DESC
+    """
+    rows = conn.execute(query, candidates + [min_date, max_date]).fetchall()
+    if not rows:
+        return None
+    return rows[0][0]
+
+
+def _fetch_spx_ohlc(
+    conn: duckdb.DuckDBPyConnection,
+    dates: list[date],
+) -> pd.DataFrame:
+    if not dates:
+        return pd.DataFrame()
+    min_date = min(dates)
+    max_date = max(dates)
+    symbol = _resolve_spx_symbol(conn, min_date, max_date)
+    if not symbol:
+        return pd.DataFrame()
+    query = """
+        SELECT trade_date AS date, open, high, low, close
+        FROM polygon_daily_agg_raw
+        WHERE symbol = ? AND trade_date BETWEEN ? AND ?
+        ORDER BY trade_date
+    """
+    df = conn.execute(query, [symbol, min_date, max_date]).df()
+    if df.empty:
+        return df
+    df["date"] = pd.to_datetime(df["date"])
+    for col in ["open", "high", "low", "close"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+    return df
+
+
+def _plot_spx_ohlc_bars(ax, df: pd.DataFrame) -> None:
+    dates_num = mdates.date2num(df["date"])
+    if len(dates_num) > 1:
+        bar_width = np.median(np.diff(dates_num)) * 0.6
+    else:
+        bar_width = 0.6
+    half_width = bar_width / 2
+
+    for x, open_, high, low, close in zip(
+        dates_num, df["open"], df["high"], df["low"], df["close"]
+    ):
+        if pd.isna(open_) or pd.isna(close) or pd.isna(high) or pd.isna(low):
+            continue
+        color = SPX_UP_COLOR if close >= open_ else SPX_DOWN_COLOR
+        ax.vlines(x, low, high, color=color, linewidth=SPX_OHLC_LINE_WIDTH, zorder=3)
+        ax.hlines(open_, x - half_width, x, color=color, linewidth=SPX_OHLC_LINE_WIDTH, zorder=3)
+        ax.hlines(close, x, x + half_width, color=color, linewidth=SPX_OHLC_LINE_WIDTH, zorder=3)
 
 
 def _build_ticker_colors(tickers: list[str]) -> dict[str, str]:
@@ -270,7 +349,7 @@ def _plot_accumulation_bars(
         ax.bar(d, conf_height, bottom=-0.12, color=conf_color, alpha=0.6, width=0.6, zorder=3)
 
         if not pd.isna(score):
-            label_y = max(bar_height / 2, 0.15)
+            label_y = min(bar_height + 0.03, 1.02)
             ax.text(
                 d,
                 label_y,
@@ -286,9 +365,96 @@ def _plot_accumulation_bars(
     ax.set_ylim(-0.15, 1.05)
     ax.set_yticks([0, 0.3, 0.5, 0.7, 1.0])
     ax.set_yticklabels(["0", "30", "50", "70", "100"])
-    ax.set_ylabel("Score", color=YLABEL_COLOR, fontsize=YLABEL_SIZE)
     ax.axhline(y=0.30, color=COLORS["red"], linestyle="--", linewidth=0.8, alpha=0.6, zorder=1)
     ax.axhline(y=0.70, color=COLORS["green"], linestyle="--", linewidth=0.8, alpha=0.6, zorder=1)
+    ax.set_ylabel("Score", color=YLABEL_COLOR, fontsize=YLABEL_SIZE)
+
+    label_size = 11 if emphasize else 11
+    ax.text(
+        -0.06,
+        0.5,
+        label,
+        transform=ax.transAxes,
+        rotation=90,
+        ha="center",
+        va="center",
+        fontsize=label_size,
+        fontweight="bold",
+        color=label_color,
+    )
+    display_size = 9 if emphasize else 8
+    ax.text(
+        0.01,
+        0.92,
+        display_name,
+        transform=ax.transAxes,
+        ha="left",
+        va="top",
+        fontsize=display_size,
+        fontweight="bold",
+        color=COLORS["text_muted"],
+    )
+
+
+def _plot_accumulation_bars_centered(
+    ax,
+    dates: pd.Series,
+    scores: pd.Series,
+    confidence: pd.Series,
+    label: str,
+    label_color: str,
+    display_name: str,
+    emphasize: bool = False,
+) -> None:
+    ax.set_facecolor(COLORS["panel_bg"])
+    ax.tick_params(colors=COLORS["text"], labelsize=8)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    ax.grid(False)
+
+    score_display = scores.fillna(50)
+    conf_display = confidence.fillna(0.5)
+
+    for d, score, conf in zip(dates, score_display, conf_display):
+        norm_score = np.clip(score / 100.0, 0, 1)
+        bar_color = SCORE_CMAP(norm_score)
+        alpha = 0.85 if conf >= 0.6 else 0.45
+        bar_height = score - 50.0
+        ax.bar(d, bar_height, bottom=0, color=bar_color, alpha=alpha, width=0.8, zorder=2)
+
+        conf_height = 8.0 * conf
+        if conf >= 0.7:
+            conf_color = COLORS["neutral"]
+        elif conf >= 0.4:
+            conf_color = COLORS["yellow"]
+        else:
+            conf_color = COLORS["red"]
+        ax.bar(d, conf_height, bottom=-48.0, color=conf_color, alpha=0.6, width=0.6, zorder=3)
+
+        if not pd.isna(score) and round(float(score)) != 50:
+            if bar_height >= 0:
+                label_y = min(bar_height + 4.0, 48.0)
+            else:
+                label_y = max(bar_height - 4.0, -48.0)
+            ax.text(
+                d,
+                label_y,
+                f"{score:.0f}",
+                ha="center",
+                va="center",
+                fontsize=7,
+                color=COLORS["white"],
+                fontweight="bold",
+                zorder=4,
+            )
+
+    ax.set_ylim(-50, 50)
+    ax.set_yticks([-50, -25, 0, 25, 50])
+    ax.set_yticklabels(["0", "25", "50", "75", "100"])
+    ax.axhline(y=0.0, color=COLORS["neutral"], linestyle="--", linewidth=0.8, alpha=0.5, zorder=1)
+    ax.axhline(y=-20.0, color=COLORS["red"], linestyle="--", linewidth=0.8, alpha=0.6, zorder=1)
+    ax.axhline(y=20.0, color=COLORS["green"], linestyle="--", linewidth=0.8, alpha=0.6, zorder=1)
+    ax.set_ylabel("Score", color=YLABEL_COLOR, fontsize=YLABEL_SIZE)
 
     label_size = 11 if emphasize else 11
     ax.text(
@@ -336,6 +502,13 @@ def render_combination_plot(
         _ensure_required_columns(conn)
         df = _fetch_combination_df(conn, tickers, dates)
         issue_names = _fetch_issue_names(conn, tickers)
+        spx_df = pd.DataFrame()
+        if not df.empty:
+            if dates:
+                spx_dates = dates
+            else:
+                spx_dates = sorted(pd.to_datetime(df["date"]).dt.date.unique())
+            spx_df = _fetch_spx_ohlc(conn, spx_dates)
     finally:
         conn.close()
 
@@ -385,28 +558,80 @@ def render_combination_plot(
     ticker_colors = _build_ticker_colors(tickers)
     day_count = len(dates_index)
     fig_width = _compute_fig_width(day_count)
-    panel1_height = 4.5 * 3 * 0.5
+    panel1_height = 4.5 * 3 * 0.5 * 0.75
     base_accum_height = 1.9 * 0.5
     weighted_height = base_accum_height * 2.5
     ticker_height = base_accum_height * 2
     panel0_height = panel1_height
-    fig_height = panel0_height + panel1_height + weighted_height + ticker_height * len(tickers)
+    spx_height = panel1_height
+    fig_height = (
+        spx_height
+        + panel0_height
+        + panel1_height
+        + weighted_height * 2
+        + ticker_height * len(tickers)
+    )
 
     plt.style.use("dark_background")
     fig = plt.figure(figsize=(fig_width, fig_height))
     fig.patch.set_facecolor(COLORS["background"])
 
     grid = fig.add_gridspec(
-        3,
+        4,
         1,
         height_ratios=[
+            spx_height,
             panel0_height,
             panel1_height,
-            weighted_height + ticker_height * len(tickers),
+            weighted_height * 2 + ticker_height * len(tickers),
         ],
     )
     ticker_line_width = max(PANEL1_LINE_WIDTH * 0.6, 0.9)
-    ax0 = fig.add_subplot(grid[0, 0])
+    ax_spx = fig.add_subplot(grid[0, 0])
+    _apply_primary_axis_style(ax_spx)
+    if spx_df.empty:
+        logger.warning("No SPX OHLC data found for the selected date range.")
+        ax_spx.set_ylim(0, 1)
+        ax_spx.set_ylabel("SPX Price", color=YLABEL_COLOR, fontsize=YLABEL_SIZE)
+        ax_spx.set_title(
+            "SPX Price Action (OHLC)",
+            color=COLORS["white"],
+            fontsize=11,
+            fontweight="bold",
+            loc="left",
+        )
+        ax_spx.text(
+            0.5,
+            0.5,
+            "SPX data unavailable",
+            transform=ax_spx.transAxes,
+            ha="center",
+            va="center",
+            fontsize=10,
+            color=COLORS["text_muted"],
+        )
+    else:
+        _plot_spx_ohlc_bars(ax_spx, spx_df)
+        spx_low = spx_df["low"].min()
+        spx_high = spx_df["high"].max()
+        if pd.isna(spx_low) or pd.isna(spx_high):
+            spx_low = spx_df["close"].min()
+            spx_high = spx_df["close"].max()
+        spx_span = spx_high - spx_low if pd.notna(spx_high) and pd.notna(spx_low) else 0
+        if not spx_span or spx_span <= 0:
+            spx_span = float(spx_df["close"].mean() or 1.0)
+        spx_pad = spx_span * 0.04
+        ax_spx.set_ylim(spx_low - spx_pad * 3, spx_high + spx_pad * 3)
+        ax_spx.set_ylabel("SPX Price", color=YLABEL_COLOR, fontsize=YLABEL_SIZE)
+        ax_spx.set_title(
+            "SPX Price Action (OHLC)",
+            color=COLORS["white"],
+            fontsize=11,
+            fontweight="bold",
+            loc="left",
+        )
+
+    ax0 = fig.add_subplot(grid[1, 0], sharex=ax_spx)
     _apply_primary_axis_style(ax0)
 
     # Panel 0: Normalized price action overlay (start at 0)
@@ -495,7 +720,7 @@ def render_combination_plot(
     for text in legend0.get_texts():
         text.set_color(COLORS["text"])
 
-    ax1 = fig.add_subplot(grid[1, 0], sharex=ax0)
+    ax1 = fig.add_subplot(grid[2, 0], sharex=ax_spx)
     _apply_primary_axis_style(ax1)
 
     # Panel 1: Daily Short Sale overlay
@@ -572,13 +797,24 @@ def render_combination_plot(
         text.set_color(COLORS["text"])
 
     # Panel 2: Accumulation Score stack
-    subgrid = grid[2, 0].subgridspec(
-        len(tickers) + 1,
+    subgrid = grid[3, 0].subgridspec(
+        len(tickers) + 2,
         1,
         hspace=0.28,
-        height_ratios=[weighted_height] + [base_accum_height] * len(tickers),
+        height_ratios=[weighted_height, weighted_height] + [base_accum_height] * len(tickers),
     )
-    ax_weighted = fig.add_subplot(subgrid[0, 0])
+    ax_centered = fig.add_subplot(subgrid[0, 0])
+    _plot_accumulation_bars_centered(
+        ax_centered,
+        dates_index,
+        weighted_accum,
+        weighted_conf,
+        label="CENTERED",
+        label_color=COLORS["white"],
+        display_name="Weighted (Centered)",
+        emphasize=True,
+    )
+    ax_weighted = fig.add_subplot(subgrid[1, 0], sharex=ax_centered)
     _plot_accumulation_bars(
         ax_weighted,
         dates_index,
@@ -590,9 +826,9 @@ def render_combination_plot(
         emphasize=True,
     )
 
-    axes_accum = [ax_weighted]
-    for idx, ticker in enumerate(tickers, start=1):
-        ax = fig.add_subplot(subgrid[idx, 0], sharex=ax_weighted)
+    axes_accum = [ax_centered, ax_weighted]
+    for idx, ticker in enumerate(tickers, start=2):
+        ax = fig.add_subplot(subgrid[idx, 0], sharex=ax_centered)
         display_name = issue_names.get(ticker, ticker)
         _plot_accumulation_bars(
             ax,
@@ -611,13 +847,13 @@ def render_combination_plot(
     x_locator = mdates.DayLocator(interval=1)
     x_formatter = mdates.DateFormatter("%y-%m-%d")
 
-    for ax in [ax0, ax1] + axes_accum:
+    for ax in [ax_spx, ax0, ax1] + axes_accum:
         ax.set_xlim(x_min, x_max)
         ax.xaxis.set_major_formatter(x_formatter)
         ax.xaxis.set_major_locator(x_locator)
 
-    axes_with_labels = {axes_accum[0], axes_accum[-1]}
-    for ax in [ax0, ax1] + axes_accum:
+    axes_with_labels = {axes_accum[1], axes_accum[-1]}
+    for ax in [ax_spx, ax0, ax1] + axes_accum:
         if ax in axes_with_labels or ax in (ax0, ax1):
             ax.tick_params(axis="x", labelbottom=True)
             plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha="right", fontsize=8)
