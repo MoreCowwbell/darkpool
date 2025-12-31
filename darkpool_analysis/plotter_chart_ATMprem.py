@@ -40,9 +40,9 @@ COLORS = {
     "blue": "#4aa3ff",
     "orange": "#ff9f43",
     "neutral": "#6b6b6b",
-    # Options premium colors
-    "call_premium": "#00d4ff",  # Cyan for calls
-    "put_premium": "#ff4d94",   # Magenta for puts
+    # Options premium colors (TOS style)
+    "call_premium": "#6478c8",  # Steel blue (like TOS alternate)
+    "put_premium": "#cc0000",   # Deep red
 }
 
 GRID_ALPHA = 0.18
@@ -257,51 +257,30 @@ def _plot_options_premium_panel(
     call_prem = prem_df["total_call_premium"].fillna(0).values
     put_prem = prem_df["total_put_premium"].fillna(0).values
 
-    # Plot calls above zero (positive)
+    # Bar width for premium histogram
+    bar_width_premium = bar_width * 0.6
+
+    # Plot calls above zero (bright blue like TOS)
     ax.bar(
         dates, call_prem,
-        width=bar_width * 0.8,
+        width=bar_width_premium,
         color=COLORS["call_premium"],
-        alpha=0.75,
+        alpha=0.85,
+        edgecolor="none",
         zorder=2,
         label="Call Premium",
     )
 
-    # Plot puts below zero (negative)
+    # Plot puts below zero (deep red like TOS)
     ax.bar(
         dates, -put_prem,
-        width=bar_width * 0.8,
+        width=bar_width_premium,
         color=COLORS["put_premium"],
-        alpha=0.75,
+        alpha=0.85,
+        edgecolor="none",
         zorder=2,
         label="Put Premium",
     )
-
-    # Highlight significant premiums with markers
-    significant_calls = call_prem >= min_premium_highlight
-    significant_puts = put_prem >= min_premium_highlight
-
-    if significant_calls.any():
-        ax.scatter(
-            dates[significant_calls],
-            call_prem[significant_calls],
-            s=30, marker="s",
-            c=COLORS["green"],
-            edgecolors=COLORS["white"],
-            linewidths=0.5,
-            zorder=4,
-        )
-
-    if significant_puts.any():
-        ax.scatter(
-            dates[significant_puts],
-            -put_prem[significant_puts],
-            s=30, marker="s",
-            c=COLORS["red"],
-            edgecolors=COLORS["white"],
-            linewidths=0.5,
-            zorder=4,
-        )
 
     # Zero line
     ax.axhline(y=0, color=COLORS["neutral"], linestyle="--", linewidth=0.8, alpha=0.6, zorder=1)
@@ -327,8 +306,8 @@ def _plot_options_premium_panel(
 
     # Legend
     legend_handles = [
-        Patch(facecolor=COLORS["call_premium"], edgecolor="none", alpha=0.75, label="Calls"),
-        Patch(facecolor=COLORS["put_premium"], edgecolor="none", alpha=0.75, label="Puts"),
+        Patch(facecolor=COLORS["call_premium"], edgecolor="none", alpha=0.85, label="Calls"),
+        Patch(facecolor=COLORS["put_premium"], edgecolor="none", alpha=0.85, label="Puts"),
     ]
     legend = ax.legend(
         handles=legend_handles,
