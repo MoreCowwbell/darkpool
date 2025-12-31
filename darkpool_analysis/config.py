@@ -14,8 +14,8 @@ from dotenv import load_dotenv
 # =============================================================================
 # Default Configuration (can be overridden via .env)
 # =============================================================================
-TICKERS_TYPE = "SINGLE"  # Options: "SINGLE", "SECTOR", "GLOBAL", "COMMODITIES", "MAG8"
-DEFAULT_TICKERS = ["AAPL", "MU"]
+TICKERS_TYPE = "SECTOR"  # Options: "SINGLE", "SECTOR", "GLOBAL", "COMMODITIES", "MAG8"
+DEFAULT_TICKERS = ["APP"]
 
 SECTOR_CORE_TICKERS = [
     "XLK",  # Technology (platforms, software, mega-cap growth)
@@ -73,7 +73,7 @@ EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 # Analysis defaults
 DEFAULT_TARGET_DATE = "2025-12-29"  # Last trading day (Monday)
 DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
-DEFAULT_BACKFILL_COUNT = 60  # Number of periods to fetch (days for daily, weeks for weekly)
+DEFAULT_BACKFILL_COUNT = 30  # Number of periods to fetch (days for daily, weeks for weekly)
 DEFAULT_MIN_LIT_VOLUME = 10000
 DEFAULT_MARKET_TZ = "US/Eastern"
 DEFAULT_RTH_START = "09:30"

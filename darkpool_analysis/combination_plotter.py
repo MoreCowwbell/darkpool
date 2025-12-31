@@ -108,6 +108,30 @@ def _parse_dates(value: Optional[str]) -> Optional[list[date]]:
     return [date.fromisoformat(d.strip()) for d in value.split(",") if d.strip()]
 
 
+def _fetch_issue_names(
+    conn: duckdb.DuckDBPyConnection,
+    tickers: list[str],
+) -> dict[str, str]:
+    if not tickers:
+        return {}
+    columns = _get_table_columns(conn, "finra_otc_weekly_raw")
+    if not columns or "issue_name" not in columns:
+        return {}
+    placeholders = ", ".join(["?" for _ in tickers])
+    query = f"""
+        SELECT symbol, issue_name
+        FROM (
+            SELECT symbol, issue_name, week_start_date,
+                   ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY week_start_date DESC) AS rn
+            FROM finra_otc_weekly_raw
+            WHERE symbol IN ({placeholders}) AND issue_name IS NOT NULL
+        )
+        WHERE rn = 1
+    """
+    rows = conn.execute(query, tickers).fetchall()
+    return {row[0]: row[1] for row in rows if row[1]}
+
+
 def _fetch_combination_df(
     conn: duckdb.DuckDBPyConnection,
     tickers: list[str],
@@ -190,6 +214,7 @@ def _plot_accumulation_bars(
     confidence: pd.Series,
     label: str,
     label_color: str,
+    display_name: str,
     emphasize: bool = False,
 ) -> None:
     ax.set_facecolor(COLORS["panel_bg"])
@@ -210,7 +235,7 @@ def _plot_accumulation_bars(
 
         conf_height = 0.08 * conf
         if conf >= 0.7:
-            conf_color = COLORS["green"]
+            conf_color = COLORS["neutral"]
         elif conf >= 0.4:
             conf_color = COLORS["yellow"]
         else:
@@ -235,6 +260,8 @@ def _plot_accumulation_bars(
     ax.set_yticks([0, 0.3, 0.5, 0.7, 1.0])
     ax.set_yticklabels(["0", "30", "50", "70", "100"])
     ax.set_ylabel("Score", color=YLABEL_COLOR, fontsize=YLABEL_SIZE)
+    ax.axhline(y=0.30, color=COLORS["red"], linestyle="--", linewidth=0.8, alpha=0.6, zorder=1)
+    ax.axhline(y=0.70, color=COLORS["green"], linestyle="--", linewidth=0.8, alpha=0.6, zorder=1)
 
     label_size = 13 if emphasize else 11
     ax.text(
@@ -248,6 +275,18 @@ def _plot_accumulation_bars(
         fontsize=label_size,
         fontweight="bold",
         color=label_color,
+    )
+    display_size = 12 if emphasize else 11
+    ax.text(
+        0.01,
+        0.92,
+        display_name,
+        transform=ax.transAxes,
+        ha="left",
+        va="top",
+        fontsize=display_size,
+        fontweight="bold",
+        color=COLORS["text_muted"],
     )
 
 
@@ -269,6 +308,7 @@ def render_combination_plot(
     try:
         _ensure_required_columns(conn)
         df = _fetch_combination_df(conn, tickers, dates)
+        issue_names = _fetch_issue_names(conn, tickers)
     finally:
         conn.close()
 
@@ -315,34 +355,40 @@ def render_combination_plot(
     ticker_colors = _build_ticker_colors(tickers)
     day_count = len(dates_index)
     fig_width = _compute_fig_width(day_count)
-    panel1_height = 4.5
-    accum_height = 1.9
-    fig_height = panel1_height + accum_height * (len(tickers) + 1)
+    panel1_height = 4.5 * 3 * 0.5
+    base_accum_height = 1.9 * 0.5
+    weighted_height = base_accum_height * 2
+    ticker_height = base_accum_height * 0.75
+    fig_height = panel1_height + weighted_height + ticker_height * len(tickers)
 
     plt.style.use("dark_background")
     fig = plt.figure(figsize=(fig_width, fig_height))
     fig.patch.set_facecolor(COLORS["background"])
 
-    grid = fig.add_gridspec(2, 1, height_ratios=[panel1_height, accum_height * (len(tickers) + 1)])
+    grid = fig.add_gridspec(
+        2,
+        1,
+        height_ratios=[panel1_height, weighted_height + ticker_height * len(tickers)],
+    )
     ax1 = fig.add_subplot(grid[0, 0])
     _apply_primary_axis_style(ax1)
 
     # Panel 1: Daily Short Sale overlay
+    ticker_line_width = max(PANEL1_LINE_WIDTH * 0.6, 0.9)
     for ticker in tickers:
         series = short_pivot[ticker]
         valid_mask = ~series.isna()
         if not valid_mask.any():
             continue
         color = ticker_colors[ticker]
-        _plot_smooth_line(ax1, dates_index, series, color, valid_mask, linewidth=PANEL1_LINE_WIDTH, zorder=3)
-        ax1.scatter(
-            dates_index[valid_mask],
-            series[valid_mask],
-            c=color,
-            s=MARKER_SIZE,
-            zorder=4,
-            edgecolors=COLORS["white"],
-            linewidths=0.4,
+        _plot_smooth_line(
+            ax1,
+            dates_index,
+            series,
+            color,
+            valid_mask,
+            linewidth=ticker_line_width,
+            zorder=3,
         )
 
     weighted_valid = ~weighted_short.isna()
@@ -353,17 +399,8 @@ def render_combination_plot(
             weighted_short,
             COLORS["white"],
             weighted_valid,
-            linewidth=MAIN_LINE_WIDTH + 0.9,
+            linewidth=MAIN_LINE_WIDTH + 1.4,
             zorder=6,
-        )
-        ax1.scatter(
-            dates_index[weighted_valid],
-            weighted_short[weighted_valid],
-            c=COLORS["white"],
-            s=MARKER_SIZE,
-            zorder=7,
-            edgecolors=COLORS["white"],
-            linewidths=0.4,
         )
 
     _set_abs_ratio_axis(ax1, short_pivot[tickers].stack(dropna=False))
@@ -387,18 +424,26 @@ def render_combination_plot(
     legend = ax1.legend(
         legend_handles,
         [h.get_label() for h in legend_handles],
-        loc="upper left",
+        loc="upper right",
+        ncol=len(legend_handles),
         fontsize=8,
         frameon=True,
         facecolor=COLORS["background"],
         framealpha=0.7,
         edgecolor=COLORS["grid"],
+        columnspacing=1.0,
+        handletextpad=0.4,
     )
     for text in legend.get_texts():
         text.set_color(COLORS["text"])
 
     # Panel 2: Accumulation Score stack
-    subgrid = grid[1, 0].subgridspec(len(tickers) + 1, 1, hspace=0.15)
+    subgrid = grid[1, 0].subgridspec(
+        len(tickers) + 1,
+        1,
+        hspace=0.15,
+        height_ratios=[weighted_height] + [ticker_height] * len(tickers),
+    )
     ax_weighted = fig.add_subplot(subgrid[0, 0])
     _plot_accumulation_bars(
         ax_weighted,
@@ -407,12 +452,14 @@ def render_combination_plot(
         weighted_conf,
         label="WEIGHTED",
         label_color=COLORS["white"],
+        display_name="Weighted Average",
         emphasize=True,
     )
 
     axes_accum = [ax_weighted]
     for idx, ticker in enumerate(tickers, start=1):
         ax = fig.add_subplot(subgrid[idx, 0], sharex=ax_weighted)
+        display_name = issue_names.get(ticker, ticker)
         _plot_accumulation_bars(
             ax,
             dates_index,
@@ -420,6 +467,7 @@ def render_combination_plot(
             conf_pivot.get(ticker, pd.Series(index=dates_index, data=np.nan)),
             label=ticker,
             label_color=ticker_colors[ticker],
+            display_name=display_name,
             emphasize=False,
         )
         axes_accum.append(ax)
@@ -433,11 +481,8 @@ def render_combination_plot(
         ax.set_xlim(x_min, x_max)
         ax.xaxis.set_major_formatter(x_formatter)
         ax.xaxis.set_major_locator(x_locator)
-
-    for ax in [ax1] + axes_accum[:-1]:
-        ax.tick_params(axis="x", labelbottom=False)
-    axes_accum[-1].tick_params(axis="x", labelbottom=True)
-    plt.setp(axes_accum[-1].xaxis.get_majorticklabels(), rotation=45, ha="right", fontsize=8)
+        ax.tick_params(axis="x", labelbottom=True)
+        plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha="right", fontsize=8)
 
     fig.suptitle(
         "Combination Plot - Multi-Ticker Overlay",
