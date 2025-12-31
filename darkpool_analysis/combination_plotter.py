@@ -20,6 +20,7 @@ import pandas as pd
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.lines import Line2D
 from matplotlib import cm, colors as mcolors
+from matplotlib.transforms import blended_transform_factory
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,7 @@ REQUIRED_COLUMNS = {
     "symbol",
     "short_buy_sell_ratio",
     "accumulation_score_display",
+    "close",
 }
 
 SCORE_CMAP = LinearSegmentedColormap.from_list(
@@ -177,7 +179,8 @@ def _fetch_combination_df(
             symbol,
             short_buy_sell_ratio,
             accumulation_score_display,
-            confidence
+            confidence,
+            close
         FROM daily_metrics
         WHERE symbol IN ({ticker_placeholders}){date_clause}
         ORDER BY date, symbol
@@ -358,6 +361,7 @@ def render_combination_plot(
     )
     short_log_pivot = short_pivot.where(short_pivot > 0)
     short_log_pivot = np.log(short_log_pivot)
+    price_pivot = df.pivot(index="date", columns="symbol", values="close").reindex(dates_index)
     accum_pivot = (
         df.pivot(index="date", columns="symbol", values="accumulation_score_display")
         .reindex(dates_index)
@@ -385,22 +389,116 @@ def render_combination_plot(
     base_accum_height = 1.9 * 0.5
     weighted_height = base_accum_height * 2.5
     ticker_height = base_accum_height * 2
-    fig_height = panel1_height + weighted_height + ticker_height * len(tickers)
+    panel0_height = panel1_height
+    fig_height = panel0_height + panel1_height + weighted_height + ticker_height * len(tickers)
 
     plt.style.use("dark_background")
     fig = plt.figure(figsize=(fig_width, fig_height))
     fig.patch.set_facecolor(COLORS["background"])
 
     grid = fig.add_gridspec(
-        2,
+        3,
         1,
-        height_ratios=[panel1_height, weighted_height + ticker_height * len(tickers)],
+        height_ratios=[
+            panel0_height,
+            panel1_height,
+            weighted_height + ticker_height * len(tickers),
+        ],
     )
-    ax1 = fig.add_subplot(grid[0, 0])
+    ticker_line_width = max(PANEL1_LINE_WIDTH * 0.6, 0.9)
+    ax0 = fig.add_subplot(grid[0, 0])
+    _apply_primary_axis_style(ax0)
+
+    # Panel 0: Normalized price action overlay (start at 0)
+    price_labels: dict[str, float] = {}
+    for ticker in tickers:
+        series = price_pivot[ticker]
+        if series.dropna().empty:
+            continue
+        baseline = series.dropna().iloc[0]
+        if pd.isna(baseline) or baseline == 0:
+            continue
+        normalized = series / baseline - 1.0
+        valid_mask = ~normalized.isna()
+        if not valid_mask.any():
+            continue
+        color = ticker_colors[ticker]
+        price_labels[ticker] = float(normalized[valid_mask].iloc[-1])
+        ax0.plot(
+            dates_index[valid_mask],
+            normalized[valid_mask],
+            color=color,
+            linewidth=ticker_line_width,
+            zorder=3,
+        )
+
+    if not price_pivot.empty:
+        normalized_all = []
+        for ticker in tickers:
+            series = price_pivot[ticker]
+            if series.dropna().empty:
+                continue
+            baseline = series.dropna().iloc[0]
+            if pd.isna(baseline) or baseline == 0:
+                continue
+            normalized_all.append((series / baseline - 1.0).dropna())
+        if normalized_all:
+            max_abs = pd.concat(normalized_all, axis=0).abs().max()
+        else:
+            max_abs = 0.02
+    else:
+        max_abs = 0.02
+    if pd.isna(max_abs) or max_abs == 0:
+        max_abs = 0.02
+    bound = float(np.ceil(max_abs * 100) / 100)
+    ax0.set_ylim(-bound, bound)
+    ax0.axhline(0, color=COLORS["neutral"], linestyle="--", linewidth=0.8, alpha=0.6, zorder=1)
+    ax0.set_ylabel("Price (Normalized)", color=YLABEL_COLOR, fontsize=YLABEL_SIZE)
+    ax0.set_title(
+        "Price Action (Normalized)",
+        color=COLORS["white"],
+        fontsize=11,
+        fontweight="bold",
+        loc="left",
+    )
+    if price_labels:
+        for ticker, value in price_labels.items():
+            ax0.annotate(
+                f"{value * 100:+.1f}%",
+                xy=(dates_index.max(), value),
+                xytext=(6, 4),
+                textcoords="offset points",
+                ha="left",
+                va="bottom",
+                fontsize=5,
+                fontweight="bold",
+                color=ticker_colors[ticker],
+                clip_on=True,
+            )
+    legend0_handles = [
+        Line2D([0], [0], color=ticker_colors[t], linewidth=MAIN_LINE_WIDTH, label=t)
+        for t in tickers
+    ]
+    legend0 = ax0.legend(
+        legend0_handles,
+        [h.get_label() for h in legend0_handles],
+        loc="upper right",
+        ncol=len(legend0_handles),
+        fontsize=8,
+        frameon=True,
+        facecolor=COLORS["background"],
+        framealpha=0.7,
+        edgecolor=COLORS["grid"],
+        columnspacing=1.0,
+        handletextpad=0.4,
+    )
+    for text in legend0.get_texts():
+        text.set_color(COLORS["text"])
+
+    ax1 = fig.add_subplot(grid[1, 0], sharex=ax0)
     _apply_primary_axis_style(ax1)
 
     # Panel 1: Daily Short Sale overlay
-    ticker_line_width = max(PANEL1_LINE_WIDTH * 0.6, 0.9)
     for ticker in tickers:
         series = short_log_pivot[ticker]
         valid_mask = ~series.isna()
@@ -429,7 +527,17 @@ def render_combination_plot(
             zorder=6,
         )
 
-    _set_log_ratio_axis(ax1, short_log_pivot[tickers].stack(dropna=False))
+    stacked_log = short_log_pivot[tickers].stack(dropna=False)
+    min_val = stacked_log.min(skipna=True)
+    max_val = stacked_log.max(skipna=True)
+    if pd.isna(min_val) or pd.isna(max_val):
+        bound = 1.5
+    else:
+        bound = max(abs(float(min_val)), abs(float(max_val)), 1.5)
+        bound = float(np.ceil((bound + 0.1) * 10) / 10)
+    ax1.set_ylim(-bound, bound)
+    ax1.set_yticks(np.arange(-bound, bound + 0.001, 0.5))
+    ax1.axhline(0, color=COLORS["neutral"], linestyle="--", linewidth=0.9, alpha=0.6, zorder=1)
     _add_log_ratio_thresholds(ax1)
     ax1.set_ylabel("Short Sale Log(Buy/Sell)", color=YLABEL_COLOR, fontsize=YLABEL_SIZE)
     ax1.set_title(
@@ -464,7 +572,7 @@ def render_combination_plot(
         text.set_color(COLORS["text"])
 
     # Panel 2: Accumulation Score stack
-    subgrid = grid[1, 0].subgridspec(
+    subgrid = grid[2, 0].subgridspec(
         len(tickers) + 1,
         1,
         hspace=0.28,
@@ -499,16 +607,22 @@ def render_combination_plot(
         axes_accum.append(ax)
 
     x_min = dates_index.min() - timedelta(hours=12)
-    x_max = dates_index.max() + timedelta(hours=12)
+    x_max = dates_index.max() + timedelta(hours=36)
     x_locator = mdates.DayLocator(interval=1)
     x_formatter = mdates.DateFormatter("%y-%m-%d")
 
-    for ax in [ax1] + axes_accum:
+    for ax in [ax0, ax1] + axes_accum:
         ax.set_xlim(x_min, x_max)
         ax.xaxis.set_major_formatter(x_formatter)
         ax.xaxis.set_major_locator(x_locator)
-        ax.tick_params(axis="x", labelbottom=True)
-        plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha="right", fontsize=8)
+
+    axes_with_labels = {axes_accum[0], axes_accum[-1]}
+    for ax in [ax0, ax1] + axes_accum:
+        if ax in axes_with_labels or ax in (ax0, ax1):
+            ax.tick_params(axis="x", labelbottom=True)
+            plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha="right", fontsize=8)
+        else:
+            ax.tick_params(axis="x", labelbottom=False)
 
     fig.suptitle(
         "Combination Plot - Multi-Ticker Overlay",

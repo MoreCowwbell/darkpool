@@ -307,3 +307,4 @@ Format:
 - [x] Updated OTC weekly mapping to null out tickers missing from the latest weekly report for dates on/after that week.
 - [x] Fixed latest-week symbol detection by normalizing week_start_date dtype before comparison.
 - [x] Wired combination plot generation into orchestrator for main.py runs.
+- [x] Added a normalized price-action overlay panel to the combination plot.
