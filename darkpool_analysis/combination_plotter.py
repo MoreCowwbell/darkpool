@@ -37,6 +37,7 @@ try:
         _compute_fig_width,
         _plot_smooth_line,
         _set_abs_ratio_axis,
+        _set_log_ratio_axis,
     )
 except ImportError:
     from config import load_config
@@ -52,6 +53,7 @@ except ImportError:
         _compute_fig_width,
         _plot_smooth_line,
         _set_abs_ratio_axis,
+        _set_log_ratio_axis,
     )
 
 
@@ -70,6 +72,28 @@ SCORE_CMAP = LinearSegmentedColormap.from_list(
         (1.0, COLORS["green"]),
     ],
 )
+
+LOG_BOT_THRESHOLD = np.log(1.25)
+LOG_SELL_THRESHOLD = np.log(0.75)
+
+
+def _add_log_ratio_thresholds(ax) -> None:
+    ax.axhline(
+        y=LOG_BOT_THRESHOLD,
+        color=COLORS["green"],
+        linestyle="--",
+        linewidth=0.9,
+        alpha=0.8,
+        zorder=1,
+    )
+    ax.axhline(
+        y=LOG_SELL_THRESHOLD,
+        color=COLORS["red"],
+        linestyle="--",
+        linewidth=0.9,
+        alpha=0.8,
+        zorder=1,
+    )
 
 
 def _resolve_unique_output_path(output_dir: Path, base_name: str) -> Path:
@@ -332,6 +356,8 @@ def render_combination_plot(
         df.pivot(index="date", columns="symbol", values="short_buy_sell_ratio")
         .reindex(dates_index)
     )
+    short_log_pivot = short_pivot.where(short_pivot > 0)
+    short_log_pivot = np.log(short_log_pivot)
     accum_pivot = (
         df.pivot(index="date", columns="symbol", values="accumulation_score_display")
         .reindex(dates_index)
@@ -342,7 +368,7 @@ def render_combination_plot(
         conf_pivot = pd.DataFrame(index=dates_index, columns=tickers, data=np.nan)
 
     weights = _resolve_weights(load_config(), tickers)
-    weighted_short = short_pivot[tickers].apply(
+    weighted_short = short_log_pivot[tickers].apply(
         lambda row: _weighted_average_row(row, weights), axis=1
     )
     weighted_accum = accum_pivot[tickers].apply(
@@ -376,7 +402,7 @@ def render_combination_plot(
     # Panel 1: Daily Short Sale overlay
     ticker_line_width = max(PANEL1_LINE_WIDTH * 0.6, 0.9)
     for ticker in tickers:
-        series = short_pivot[ticker]
+        series = short_log_pivot[ticker]
         valid_mask = ~series.isna()
         if not valid_mask.any():
             continue
@@ -403,11 +429,11 @@ def render_combination_plot(
             zorder=6,
         )
 
-    _set_abs_ratio_axis(ax1, short_pivot[tickers].stack(dropna=False))
-    _add_ratio_thresholds(ax1)
-    ax1.set_ylabel("Short Sale Buy/Sell Ratio", color=YLABEL_COLOR, fontsize=YLABEL_SIZE)
+    _set_log_ratio_axis(ax1, short_log_pivot[tickers].stack(dropna=False))
+    _add_log_ratio_thresholds(ax1)
+    ax1.set_ylabel("Short Sale Log(Buy/Sell)", color=YLABEL_COLOR, fontsize=YLABEL_SIZE)
     ax1.set_title(
-        "Daily Short Sale Buy/Sell Ratio (Overlay)",
+        "Daily Short Sale Log(Buy/Sell) (Overlay)",
         color=COLORS["white"],
         fontsize=11,
         fontweight="bold",
