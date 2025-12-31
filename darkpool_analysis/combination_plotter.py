@@ -276,7 +276,7 @@ def _plot_accumulation_bars(
         fontweight="bold",
         color=label_color,
     )
-    display_size = 12 if emphasize else 11
+    display_size = 9 if emphasize else 8
     ax.text(
         0.01,
         0.92,
@@ -358,7 +358,7 @@ def render_combination_plot(
     panel1_height = 4.5 * 3 * 0.5
     base_accum_height = 1.9 * 0.5
     weighted_height = base_accum_height * 2
-    ticker_height = base_accum_height * 0.75
+    ticker_height = base_accum_height * 2
     fig_height = panel1_height + weighted_height + ticker_height * len(tickers)
 
     plt.style.use("dark_background")
@@ -441,8 +441,8 @@ def render_combination_plot(
     subgrid = grid[1, 0].subgridspec(
         len(tickers) + 1,
         1,
-        hspace=0.15,
-        height_ratios=[weighted_height] + [ticker_height] * len(tickers),
+        hspace=0.28,
+        height_ratios=[weighted_height] * (len(tickers) + 1),
     )
     ax_weighted = fig.add_subplot(subgrid[0, 0])
     _plot_accumulation_bars(
