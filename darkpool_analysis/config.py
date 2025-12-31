@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 # =============================================================================
 # Default Configuration (can be overridden via .env)
 # =============================================================================
-TICKERS_TYPE = "SINGLE"  # Options: "SINGLE", "SECTOR", "GLOBAL", "COMMODITIES", "MAG8", ["SECTOR", "GLOBAL", "COMMODITIES", "MAG8"] 
+TICKERS_TYPE = ["SECTOR", "GLOBAL", "COMMODITIES", "MAG8"]  # Options: "SINGLE", "SECTOR", "GLOBAL", "COMMODITIES", "MAG8",  
 DEFAULT_TICKERS = ["META"]
 
 SECTOR_CORE_TICKERS = [
@@ -76,8 +76,8 @@ EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 # Tickers with daily (0DTE) options expiration
 DAILY_EXPIRATION_TICKERS = {"SPY", "SPX", "SPXW", "QQQ", "IWM", "XSP"}
 DEFAULT_OPTIONS_STRIKE_COUNT = 30  # ±30 contracts from ATM
-DEFAULT_OPTIONS_MIN_PREMIUM_HIGHLIGHT = 2.0  # $M threshold for highlighting
-DEFAULT_FETCH_OPTIONS_PREMIUM = True  # Enable/disable options premium fetching
+DEFAULT_OPTIONS_MIN_PREMIUM_HIGHLIGHT = 4.0  # $M threshold for highlighting
+DEFAULT_FETCH_OPTIONS_PREMIUM = False  # Enable/disable options premium fetching
 # -----------------------------------------------------------------------------
 
 # Analysis defaults
@@ -382,19 +382,36 @@ def load_config() -> Config:
     else:  # "single"
         target_dates = [target_date]
 
-    tickers_type = os.getenv("TICKERS_TYPE", TICKERS_TYPE).upper()
-    if tickers_type == "SINGLE":
-        selected_tickers = DEFAULT_TICKERS
-    elif tickers_type == "SECTOR":
-        selected_tickers = SECTOR_CORE_TICKERS
-    elif tickers_type == "GLOBAL":
-        selected_tickers = GLOBAL_MACRO_TICKERS
-    elif tickers_type == "COMMODITIES":
-        selected_tickers = COMMODITIES_TICKERS
-    elif tickers_type == "MAG8":
-        selected_tickers = MAG8_TICKERS
+    # Map ticker type names to their lists
+    ticker_type_map = {
+        "SINGLE": DEFAULT_TICKERS,
+        "SECTOR": SECTOR_CORE_TICKERS,
+        "GLOBAL": GLOBAL_MACRO_TICKERS,
+        "COMMODITIES": COMMODITIES_TICKERS,
+        "MAG8": MAG8_TICKERS,
+    }
+
+    # Support both string and list for TICKERS_TYPE
+    tickers_type_raw = os.getenv("TICKERS_TYPE") or TICKERS_TYPE
+
+    if isinstance(tickers_type_raw, list):
+        # Multiple types: combine all tickers, preserving order and removing duplicates
+        selected_tickers = []
+        seen = set()
+        for t in tickers_type_raw:
+            t_upper = t.upper()
+            if t_upper not in ticker_type_map:
+                raise ValueError(f"Unknown TICKERS_TYPE: {t_upper}")
+            for ticker in ticker_type_map[t_upper]:
+                if ticker not in seen:
+                    selected_tickers.append(ticker)
+                    seen.add(ticker)
     else:
-        raise ValueError(f"Unknown TICKERS_TYPE: {tickers_type}")
+        # Single type (string)
+        t_upper = tickers_type_raw.upper()
+        if t_upper not in ticker_type_map:
+            raise ValueError(f"Unknown TICKERS_TYPE: {t_upper}")
+        selected_tickers = ticker_type_map[t_upper]
 
     tickers = _parse_csv_env("TICKERS") or selected_tickers
     finra_tickers = [ticker for ticker in tickers if ticker not in EXCLUDED_FINRA_TICKERS]
