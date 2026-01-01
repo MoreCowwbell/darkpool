@@ -42,14 +42,66 @@ SECTOR_NAMES = {
     "SPY": "Select SPDR S&P 500",
 }
 
-# Neon colors for accumulation score
-NEON_GREEN = "#39FF14"
-NEON_PURPLE = "#BF00FF"
+# Gradient colors for accumulation score (matching plotter.py)
+ACCUM_GREEN = "#39FF14"   # Bright neon green - Accumulating (score >= 70)
+ACCUM_NEUTRAL = "#666666"  # Neutral (30-70)
+ACCUM_PURPLE = "#BF00FF"   # Bright purple - Distribution (score <= 30)
+
+# Bright colors for Buy/Trim signals
+BRIGHT_GREEN = "#39FF14"   # Neon green
+BRIGHT_RED = "#FF4444"     # Bright red
+
+# UI colors
+HEADER_BG = "transparent"  # No background for headers
+BORDER_COLOR = "#3a3a3e"   # Lighter gray for borders
+ACCENT_ORANGE = "#FF8C00"  # Orange for headers, labels, ticker
 
 # Thresholds
-BUY_TRIM_THRESHOLD = 1.25  # ratio >= 1.25 = Buy, else Trim
+BUY_THRESHOLD = 1.5       # ratio >= 1.5 = Buy
+TRIM_THRESHOLD = 0.70     # ratio <= 0.70 = Trim
 ACCUM_HIGH_THRESHOLD = 70
 ACCUM_LOW_THRESHOLD = 30
+
+# Order flow color thresholds
+ORDER_FLOW_HIGH = 1.5   # Strong buy signal
+ORDER_FLOW_LOW = 0.75   # Trim signal
+
+# US stock market holidays (NYSE/NASDAQ closed)
+US_MARKET_HOLIDAYS = {
+    # 2024
+    date(2024, 1, 1),    # New Year's Day
+    date(2024, 1, 15),   # MLK Day
+    date(2024, 2, 19),   # Presidents' Day
+    date(2024, 3, 29),   # Good Friday
+    date(2024, 5, 27),   # Memorial Day
+    date(2024, 6, 19),   # Juneteenth
+    date(2024, 7, 4),    # Independence Day
+    date(2024, 9, 2),    # Labor Day
+    date(2024, 11, 28),  # Thanksgiving
+    date(2024, 12, 25),  # Christmas
+    # 2025
+    date(2025, 1, 1),    # New Year's Day
+    date(2025, 1, 20),   # MLK Day
+    date(2025, 2, 17),   # Presidents' Day
+    date(2025, 4, 18),   # Good Friday
+    date(2025, 5, 26),   # Memorial Day
+    date(2025, 6, 19),   # Juneteenth
+    date(2025, 7, 4),    # Independence Day
+    date(2025, 9, 1),    # Labor Day
+    date(2025, 11, 27),  # Thanksgiving
+    date(2025, 12, 25),  # Christmas
+    # 2026
+    date(2026, 1, 1),    # New Year's Day
+    date(2026, 1, 19),   # MLK Day
+    date(2026, 2, 16),   # Presidents' Day
+    date(2026, 4, 3),    # Good Friday
+    date(2026, 5, 25),   # Memorial Day
+    date(2026, 6, 19),   # Juneteenth
+    date(2026, 7, 3),    # Independence Day (observed)
+    date(2026, 9, 7),    # Labor Day
+    date(2026, 11, 26),  # Thanksgiving
+    date(2026, 12, 25),  # Christmas
+}
 
 # =============================================================================
 # Data Functions
@@ -135,29 +187,35 @@ def _get_buy_trim(ratio: float) -> tuple[str, str]:
     """Return (indicator_text, css_class) based on ratio threshold."""
     if pd.isna(ratio) or ratio is None:
         return ("", "indicator-neutral")
-    if ratio >= BUY_TRIM_THRESHOLD:
+    if ratio >= BUY_THRESHOLD:
         return ("Buy", "indicator-buy")
-    return ("Trim", "indicator-trim")
+    if ratio <= TRIM_THRESHOLD:
+        return ("Trim", "indicator-trim")
+    return ("", "indicator-neutral")
 
 
-def _get_accum_color(score: float) -> str:
-    """Return color for accumulation score."""
-    if pd.isna(score) or score is None:
-        return ""
+def _get_accum_color(score) -> tuple[str, str, str]:
+    """Return (background_color, text_color, border_color) for accumulation score cell."""
+    if score is None or pd.isna(score):
+        return ("transparent", "", "transparent")
     if score >= ACCUM_HIGH_THRESHOLD:
-        return NEON_GREEN
+        return (f"rgba(57, 255, 20, 0.2)", ACCUM_GREEN, "#000000")  # Green bg + green text + black border
     if score <= ACCUM_LOW_THRESHOLD:
-        return NEON_PURPLE
-    return ""
+        return (f"rgba(191, 0, 255, 0.2)", ACCUM_PURPLE, "#000000")  # Purple bg + purple text + black border
+    return ("transparent", ACCUM_NEUTRAL, "transparent")  # Neutral gray text
 
 
-def _get_order_flow_color(ratio: float, palette: dict) -> str:
-    """Return background color for order flow cell."""
-    if pd.isna(ratio) or ratio is None:
-        return "transparent"
-    if ratio >= BUY_TRIM_THRESHOLD:
-        return palette.get("green", "#3cbf8a")
-    return "transparent"
+def _get_order_flow_color(ratio) -> tuple[str, str, str]:
+    """Return (background_color, text_color, border_color) for order flow cell."""
+    if ratio is None or pd.isna(ratio):
+        return ("transparent", "", "transparent")
+    if ratio >= ORDER_FLOW_HIGH:
+        return (f"rgba(57, 255, 20, 0.2)", BRIGHT_GREEN, "#000000")  # Strong buy + black border
+    if ratio >= BUY_THRESHOLD:
+        return (f"rgba(57, 255, 20, 0.15)", BRIGHT_GREEN, "#000000")  # Buy + black border
+    if ratio <= ORDER_FLOW_LOW:
+        return (f"rgba(255, 68, 68, 0.2)", BRIGHT_RED, "#000000")  # Trim + black border
+    return ("transparent", "", "transparent")  # Neutral
 
 
 # =============================================================================
@@ -182,20 +240,29 @@ def _build_sector_panel_html(
         pct_avg_str = _format_pct_avg(row.get("short_buy_volume"), row.get("total_volume"))
 
         order_flow_val = row.get("order_flow")
-        order_flow_bg = _get_order_flow_color(order_flow_val, palette)
+        order_flow_bg, order_flow_text, order_flow_border = _get_order_flow_color(order_flow_val)
+        order_flow_style = f"background-color: {order_flow_bg};"
+        if order_flow_text:
+            order_flow_style += f" color: {order_flow_text};"
+        if order_flow_border and order_flow_border != "transparent":
+            order_flow_style += f" border: 1px solid {order_flow_border};"
 
         indicator_text, indicator_class = _get_buy_trim(order_flow_val)
 
         accum_score = row.get("accum_score")
         accum_score_str = f"{accum_score:.0f}" if not pd.isna(accum_score) else "NA"
-        accum_color = _get_accum_color(accum_score)
-        accum_style = f'color: {accum_color}; font-weight: 700;' if accum_color else ""
+        accum_bg, accum_text, accum_border = _get_accum_color(accum_score)
+        accum_style = f"background-color: {accum_bg};"
+        if accum_text:
+            accum_style += f" color: {accum_text}; font-weight: 700;"
+        if accum_border and accum_border != "transparent":
+            accum_style += f" border: 1px solid {accum_border};"
 
         rows_html += f"""
             <tr>
                 <td class="col-date">{date_str}</td>
                 <td class="col-volume">{volume_str}</td>
-                <td class="col-order-flow" style="background-color: {order_flow_bg};">{order_flow_str}</td>
+                <td class="col-order-flow" style="{order_flow_style}">{order_flow_str}</td>
                 <td class="col-pct">{pct_avg_str}</td>
                 <td class="col-indicator {indicator_class}">{indicator_text}</td>
                 <td class="col-accum" style="{accum_style}">{accum_score_str}</td>
@@ -203,19 +270,42 @@ def _build_sector_panel_html(
         """
 
     # Calculate average weighted score (average of order_flow ratios)
-    avg_score = rows_df["order_flow"].mean() if not rows_df.empty else 0
-    avg_score_str = f"{avg_score:.2f}" if not pd.isna(avg_score) else "NA"
+    avg_bs_score = rows_df["order_flow"].mean() if not rows_df.empty else 0
+    avg_bs_str = f"{avg_bs_score:.2f}" if not pd.isna(avg_bs_score) else "NA"
 
-    # Determine avg score box color based on value
-    if not pd.isna(avg_score):
-        if avg_score >= 2.0:
-            avg_box_color = palette.get("green", "#3cbf8a")
-        elif avg_score >= 1.5:
-            avg_box_color = palette.get("yellow", "#d6b35b")
+    # Calculate average accumulation score
+    avg_accum_score = rows_df["accum_score"].mean() if not rows_df.empty and "accum_score" in rows_df.columns else 0
+    avg_accum_str = f"{avg_accum_score:.0f}" if not pd.isna(avg_accum_score) else "NA"
+
+    # Determine avg B/S score box style: black bg, colored border and text
+    if not pd.isna(avg_bs_score):
+        if avg_bs_score >= BUY_THRESHOLD:
+            avg_bs_border = BRIGHT_GREEN
+            avg_bs_text = BRIGHT_GREEN
+        elif avg_bs_score <= TRIM_THRESHOLD:
+            avg_bs_border = BRIGHT_RED
+            avg_bs_text = BRIGHT_RED
         else:
-            avg_box_color = palette.get("red", "#d06c6c")
+            avg_bs_border = palette.get("text_muted", "#8b8b8b")
+            avg_bs_text = palette.get("text_muted", "#8b8b8b")
     else:
-        avg_box_color = palette.get("text_muted", "#8b8b8b")
+        avg_bs_border = palette.get("text_muted", "#8b8b8b")
+        avg_bs_text = palette.get("text_muted", "#8b8b8b")
+
+    # Determine avg Accum score box style: black bg, colored border and text based on accum thresholds
+    if not pd.isna(avg_accum_score):
+        if avg_accum_score >= ACCUM_HIGH_THRESHOLD:
+            avg_accum_border = ACCUM_GREEN
+            avg_accum_text = ACCUM_GREEN
+        elif avg_accum_score <= ACCUM_LOW_THRESHOLD:
+            avg_accum_border = ACCUM_PURPLE
+            avg_accum_text = ACCUM_PURPLE
+        else:
+            avg_accum_border = ACCUM_NEUTRAL
+            avg_accum_text = ACCUM_NEUTRAL
+    else:
+        avg_accum_border = palette.get("text_muted", "#8b8b8b")
+        avg_accum_text = palette.get("text_muted", "#8b8b8b")
 
     panel_html = f"""
         <div class="sector-panel">
@@ -227,11 +317,11 @@ def _build_sector_panel_html(
                 <thead>
                     <tr>
                         <th class="col-date">Date</th>
-                        <th class="col-volume">Volume</th>
-                        <th class="col-order-flow">Order Flow</th>
+                        <th class="col-volume">Vol</th>
+                        <th class="col-order-flow">Flow</th>
                         <th class="col-pct">%</th>
                         <th class="col-indicator"></th>
-                        <th class="col-accum">Accum</th>
+                        <th class="col-accum">Acc</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -239,8 +329,14 @@ def _build_sector_panel_html(
                 </tbody>
             </table>
             <div class="panel-footer">
-                <span class="avg-label">Avg Weighted Score</span>
-                <span class="avg-score" style="background-color: {avg_box_color};">{avg_score_str}</span>
+                <div class="footer-labels">
+                    <span class="avg-label">Avg B/S</span>
+                    <span class="avg-label">Avg Acc</span>
+                </div>
+                <div class="footer-scores">
+                    <span class="avg-score" style="background-color: #000000; border: 2px solid {avg_bs_border}; color: {avg_bs_text};">{avg_bs_str}</span>
+                    <span class="avg-score" style="background-color: #000000; border: 2px solid {avg_accum_border}; color: {avg_accum_text};">{avg_accum_str}</span>
+                </div>
             </div>
         </div>
     """
@@ -313,7 +409,7 @@ def build_full_page_html(
 
         .sector-panel {{
             background-color: {palette.get('row_bg', '#0f1012')};
-            border: 1px solid {palette.get('border', '#26262a')};
+            border: 1px solid {BORDER_COLOR};
             border-radius: 8px;
             padding: 12px;
             min-width: 0;
@@ -325,28 +421,34 @@ def build_full_page_html(
             gap: 8px;
             margin-bottom: 10px;
             padding-bottom: 6px;
-            border-bottom: 1px solid {palette.get('border', '#26262a')};
+            border-bottom: 1px solid {BORDER_COLOR};
         }}
 
         .ticker {{
             font-size: 18px;
             font-weight: 700;
-            color: {palette.get('cyan', '#7ab6ff')};
+            color: {ACCENT_ORANGE};
         }}
 
         .sector-name {{
-            font-size: 14px;
-            color: {palette.get('text_muted', '#8b8b8b')};
+            font-size: 12px;
+            color: {ACCENT_ORANGE};
         }}
 
         .panel-table {{
             width: 100%;
             border-collapse: collapse;
-            font-size: 13px;
+            font-size: 12px;
+            table-layout: fixed;
+        }}
+
+        .panel-table th,
+        .panel-table td {{
+            width: 16.66%;
         }}
 
         .panel-table thead {{
-            background-color: {palette.get('header_bg', '#141518')};
+            background-color: {HEADER_BG};
         }}
 
         .panel-table th {{
@@ -354,14 +456,15 @@ def build_full_page_html(
             text-align: left;
             font-weight: 600;
             font-size: 11px;
-            color: {palette.get('text_muted', '#8b8b8b')};
-            border-bottom: 1px solid {palette.get('border', '#26262a')};
+            color: {ACCENT_ORANGE};
+            border-bottom: 1px solid {BORDER_COLOR};
             white-space: nowrap;
+            border-radius: 0;
         }}
 
         .panel-table td {{
             padding: 5px 4px;
-            border-bottom: 1px solid rgba(38, 38, 42, 0.5);
+            border-bottom: 1px solid {BORDER_COLOR};
             white-space: nowrap;
         }}
 
@@ -381,7 +484,7 @@ def build_full_page_html(
             font-family: "Consolas", "Courier New", monospace;
             font-weight: 600;
             color: {palette.get('white', '#ffffff')};
-            border-radius: 3px;
+            border-radius: 6px;
         }}
 
         .col-pct {{
@@ -395,17 +498,21 @@ def build_full_page_html(
             font-weight: 600;
             font-size: 12px;
             padding: 2px 6px;
-            border-radius: 3px;
+            border-radius: 6px;
         }}
 
         .indicator-buy {{
-            color: {palette.get('green', '#3cbf8a')};
-            background-color: rgba(60, 191, 138, 0.15);
+            color: {BRIGHT_GREEN};
+            background-color: rgba(57, 255, 20, 0.15);
+            border: 1px solid #000000;
+            border-radius: 6px;
         }}
 
         .indicator-trim {{
-            color: {palette.get('red', '#d06c6c')};
-            background-color: rgba(208, 108, 108, 0.15);
+            color: {BRIGHT_RED};
+            background-color: rgba(255, 68, 68, 0.15);
+            border: 1px solid #000000;
+            border-radius: 6px;
         }}
 
         .indicator-neutral {{
@@ -413,9 +520,14 @@ def build_full_page_html(
         }}
 
         .col-accum {{
-            text-align: right;
+            text-align: center;
             font-family: "Consolas", "Courier New", monospace;
             font-weight: 600;
+            border-radius: 6px;
+        }}
+
+        .col-order-flow {{
+            border-radius: 6px;
         }}
 
         .panel-footer {{
@@ -424,20 +536,30 @@ def build_full_page_html(
             align-items: center;
             margin-top: 10px;
             padding-top: 8px;
-            border-top: 1px solid {palette.get('border', '#26262a')};
+            border-top: 1px solid {BORDER_COLOR};
+        }}
+
+        .footer-labels {{
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }}
+
+        .footer-scores {{
+            display: flex;
+            gap: 4px;
         }}
 
         .avg-label {{
-            font-size: 12px;
-            color: {palette.get('text_muted', '#8b8b8b')};
+            font-size: 10px;
+            color: {ACCENT_ORANGE};
         }}
 
         .avg-score {{
-            font-size: 14px;
+            font-size: 12px;
             font-weight: 700;
-            color: #000000;
-            padding: 3px 10px;
-            border-radius: 4px;
+            padding: 2px 6px;
+            border-radius: 6px;
         }}
 
         .page-footer {{
@@ -445,7 +567,7 @@ def build_full_page_html(
             padding-top: 12px;
             border-top: 1px solid {palette.get('border', '#26262a')};
             font-size: 11px;
-            color: {palette.get('text_muted', '#8b8b8b')};
+            color: {ACCENT_ORANGE};
             text-align: center;
         }}
 
@@ -466,7 +588,7 @@ def build_full_page_html(
         .legend-color {{
             width: 14px;
             height: 14px;
-            border-radius: 3px;
+            border-radius: 6px;
         }}
 
         /* Header column alignment */
@@ -492,20 +614,24 @@ def build_full_page_html(
 
         <div class="legend">
             <div class="legend-item">
-                <div class="legend-color" style="background-color: {NEON_GREEN};"></div>
-                <span>Accum Score &ge; 70</span>
+                <div class="legend-color" style="background-color: {ACCUM_GREEN};"></div>
+                <span>Accumulating (&ge; 70)</span>
             </div>
             <div class="legend-item">
-                <div class="legend-color" style="background-color: {NEON_PURPLE};"></div>
-                <span>Accum Score &le; 30</span>
+                <div class="legend-color" style="background-color: {ACCUM_NEUTRAL};"></div>
+                <span>Neutral (30-70)</span>
             </div>
             <div class="legend-item">
-                <div class="legend-color" style="background-color: {palette.get('green', '#3cbf8a')};"></div>
-                <span>Buy (Ratio &ge; 1.25)</span>
+                <div class="legend-color" style="background-color: {ACCUM_PURPLE};"></div>
+                <span>Distribution (&le; 30)</span>
             </div>
             <div class="legend-item">
-                <div class="legend-color" style="background-color: {palette.get('red', '#d06c6c')};"></div>
-                <span>Trim (Ratio &lt; 1.25)</span>
+                <div class="legend-color" style="background-color: {BRIGHT_GREEN};"></div>
+                <span>Buy (Flow &ge; 1.25)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: {BRIGHT_RED};"></div>
+                <span>Trim (Flow &lt; 0.75)</span>
             </div>
         </div>
 
@@ -584,6 +710,7 @@ def render_sector_summary(
     dates: list[date],
     tickers: Optional[list[str]] = None,
     title: str = "Sector Summary Dashboard",
+    max_dates: int = 10,
 ) -> tuple[Path, Path]:
     """
     Main entry point - render sector summary dashboard as HTML and PNG.
@@ -594,6 +721,7 @@ def render_sector_summary(
         dates: List of dates to include
         tickers: List of ticker symbols (defaults to SECTOR_SUMMARY_TICKERS)
         title: Page title
+        max_dates: Maximum number of dates to show per ticker (default 10)
 
     Returns:
         Tuple of (html_path, png_path)
@@ -620,14 +748,18 @@ def render_sector_summary(
         if df.empty:
             logger.warning("No data found for dates %s", [d.strftime("%Y-%m-%d") for d in dates])
 
-        # Convert date column
+        # Convert date column and filter out non-trading days (weekends and holidays)
         if "date" in df.columns:
             df["date"] = pd.to_datetime(df["date"]).dt.date
+            # Filter out weekends (Saturday=5, Sunday=6) and US market holidays
+            df = df[df["date"].apply(lambda d: d.weekday() < 5 and d not in US_MARKET_HOLIDAYS)]
 
         # Build panels for each ticker
         panels_html = []
         for ticker in tickers:
             ticker_df = df[df["symbol"] == ticker].copy()
+            # Limit to max_dates most recent dates per ticker
+            ticker_df = ticker_df.head(max_dates)
             panel_html = _build_sector_panel_html(ticker, ticker_df, palette)
             panels_html.append(panel_html)
 
@@ -682,6 +814,12 @@ def main() -> None:
         default="Sector Summary Dashboard",
         help="Page title",
     )
+    parser.add_argument(
+        "--max-dates",
+        type=int,
+        default=10,
+        help="Maximum number of dates to show per ticker (default: 10)",
+    )
 
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -702,6 +840,7 @@ def main() -> None:
         dates=dates,
         tickers=tickers,
         title=args.title,
+        max_dates=args.max_dates,
     )
 
 

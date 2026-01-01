@@ -192,7 +192,8 @@ NULL if (lit_buy + lit_sell) < MIN_LIT_VOLUME
 
 **OTC Participation Rate (proxy):**
 ```
-otc_participation_rate = otc_weekly_volume / weekly_total_volume
+otc_participation_rate = otc_weekly_volume / (otc_weekly_volume + lit_weekly_volume)
+# Result is always in [0, 1] range (0-100%)
 ⚠️ FINRA OTC = all-hours, Polygon = RTH-biased; ratio is a proxy
 ```
 

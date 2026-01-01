@@ -469,26 +469,33 @@ def build_daily_metrics(
     )
 
     # OTC Participation Rate: measures institutional activity intensity (not direction)
-    # weekly_total_volume = sum of daily Polygon volumes for the OTC week
-    # otc_participation_rate = otc_weekly_volume / weekly_total_volume
+    # Formula: otc_volume / (otc_volume + lit_volume) = share of total volume that is OTC
+    # This ensures the rate is always between 0 and 1.
+    # Note: OTC volume is weekly from FINRA, lit volume is aggregated from daily Polygon data
     merged["weekly_total_volume"] = pd.NA
     merged["otc_participation_rate"] = pd.NA
     merged["otc_participation_z"] = pd.NA
     merged["otc_participation_delta"] = pd.NA
 
     if "otc_week_used" in merged.columns and "volume" in merged.columns:
-        # Compute weekly total volume by summing daily Polygon volumes for each (symbol, week)
+        # Compute weekly lit volume by summing daily Polygon volumes for each (symbol, week)
         merged["volume"] = pd.to_numeric(merged["volume"], errors="coerce")
-        weekly_vol = (
+        weekly_lit_vol = (
             merged.groupby(["symbol", "otc_week_used"])["volume"]
             .transform("sum")
         )
-        merged["weekly_total_volume"] = weekly_vol
 
-        # Compute participation rate
-        has_weekly_total = merged["weekly_total_volume"].notna() & (merged["weekly_total_volume"] > 0)
-        has_otc_vol = merged["otc_off_exchange_volume"].notna()
-        valid_participation = has_weekly_total & has_otc_vol
+        # Compute participation rate: OTC / (OTC + Lit)
+        # This formula guarantees rate is in [0, 1] range
+        has_lit_vol = weekly_lit_vol.notna() & (weekly_lit_vol > 0)
+        has_otc_vol = merged["otc_off_exchange_volume"].notna() & (merged["otc_off_exchange_volume"] > 0)
+        valid_participation = has_lit_vol & has_otc_vol
+
+        # Total weekly volume = OTC + Lit (approximation since they may cover different hours)
+        merged.loc[valid_participation, "weekly_total_volume"] = (
+            merged.loc[valid_participation, "otc_off_exchange_volume"]
+            + weekly_lit_vol[valid_participation]
+        )
         merged.loc[valid_participation, "otc_participation_rate"] = (
             merged.loc[valid_participation, "otc_off_exchange_volume"]
             / merged.loc[valid_participation, "weekly_total_volume"]

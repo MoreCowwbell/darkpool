@@ -15,9 +15,11 @@ from pathlib import Path
 import duckdb
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+from matplotlib.gridspec import GridSpec
 import numpy as np
 import pandas as pd
 from scipy.interpolate import PchipInterpolator
+from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
@@ -353,13 +355,24 @@ def plot_symbol_metrics(
 
     # Set up dark theme
     plt.style.use("dark_background")
-    fig, axes = plt.subplots(
-        5,
-        1,
-        figsize=(fig_width, 18),  # Taller to accommodate footer panel
-        gridspec_kw={"height_ratios": [3, 2, 2, 2, 1]},  # Panel 1-4 for data, Panel 5 for footer
-    )
+
+    # Use GridSpec for explicit control over panel spacing
+    fig = plt.figure(figsize=(fig_width, 18))
     fig.patch.set_facecolor(COLORS["background"])
+
+    # Create GridSpec with fixed spacing to prevent layout shifts
+    gs = GridSpec(
+        5, 1,
+        figure=fig,
+        height_ratios=[3, 2, 2, 2, 1],
+        hspace=0.35,  # Fixed vertical spacing between panels
+        left=0.08,    # Fixed left margin
+        right=0.92,   # Fixed right margin
+        top=0.94,     # Fixed top margin (room for suptitle)
+        bottom=0.04,  # Fixed bottom margin
+    )
+
+    axes = [fig.add_subplot(gs[i]) for i in range(5)]
 
     for ax in axes[:4]:  # Only style the 4 data panels
         _apply_primary_axis_style(ax)
@@ -653,10 +666,13 @@ def plot_symbol_metrics(
             linewidths=0.4,
         )
 
-    # Set y-axis for participation rate (0 to ~0.6 typical)
+    # Set y-axis for participation rate (0 to 1.0, typical range 20-60%)
+    # Formula: OTC / (OTC + Lit) guarantees values in [0, 1] range
     max_rate = otc_part_rate.max(skipna=True) if valid_mask3.any() else 0.4
     if pd.isna(max_rate) or max_rate < 0.2:
         max_rate = 0.4
+    # Cap at 1.0 (100%) since participation rate can't exceed this
+    # Add 10% headroom for visual clarity
     y_upper = min(float(np.ceil(max_rate * 10) / 10 + 0.1), 1.0)
     ax3.set_ylim(0, y_upper)
     ax3.set_yticks(np.arange(0, y_upper + 0.05, 0.1))
@@ -719,8 +735,6 @@ def plot_symbol_metrics(
     confidence = df["confidence"].fillna(0.5)
 
     # Create RdYlGn-like gradient: Red (0) -> Gray (50) -> Green (100)
-    from matplotlib.colors import LinearSegmentedColormap
-
     cmap_colors = [
         (0.0, "#b026ff"),      # 0 = Distribution
         (0.5, "#555555"),      # 50 = Neutral (gray)
@@ -899,7 +913,7 @@ def plot_symbol_metrics(
     ax_footer.plot([table_x_start, 0.98], [header_line_y, header_line_y],
                    transform=ax_footer.transAxes, color=COLORS["grid"], linewidth=0.5, alpha=0.5)
 
-    plt.tight_layout(rect=[0, 0.02, 1, 0.96])
+    # Note: tight_layout removed - using GridSpec with fixed margins instead
 
     # Save
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -922,10 +936,26 @@ def plot_short_only_metrics(
         return output_path
 
     plt.style.use("dark_background")
-    fig, axes = plt.subplots(3, 1, figsize=(12, 10), sharex=True)
+
+    # Use GridSpec for explicit control over panel spacing
+    fig = plt.figure(figsize=(12, 10))
     fig.patch.set_facecolor(COLORS["background"])
 
-    for ax in axes[:3]:
+    # Create GridSpec with fixed spacing to prevent layout shifts
+    gs = GridSpec(
+        3, 1,
+        figure=fig,
+        height_ratios=[1, 1, 1],
+        hspace=0.35,  # Fixed vertical spacing between panels
+        left=0.08,    # Fixed left margin
+        right=0.95,   # Fixed right margin
+        top=0.94,     # Fixed top margin (room for suptitle)
+        bottom=0.08,  # Fixed bottom margin (room for footer text)
+    )
+
+    axes = [fig.add_subplot(gs[i]) for i in range(3)]
+
+    for ax in axes:
         _apply_primary_axis_style(ax)
 
     dates = df["date"]
@@ -1059,7 +1089,7 @@ def plot_short_only_metrics(
         color=COLORS["text_muted"],
     )
 
-    plt.tight_layout(rect=[0, 0.03, 1, 0.96])
+    # Note: tight_layout removed - using GridSpec with fixed margins instead
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=150, facecolor=COLORS["background"], edgecolor="none")
