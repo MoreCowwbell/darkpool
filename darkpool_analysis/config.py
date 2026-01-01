@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 # =============================================================================
 # Default Configuration (can be overridden via .env)
 # =============================================================================
-TICKERS_TYPE = ["SUMMARY"]   # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8"]  # ["SINGLE"]
+TICKERS_TYPE = ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8"]  # ["SINGLE"]
 DEFAULT_TICKERS = ["I:SPX"]
 
 SECTOR_CORE_TICKERS = [
@@ -98,7 +98,7 @@ DEFAULT_FETCH_OPTIONS_PREMIUM = True  # Enable/disable options premium fetching
 # Analysis defaults
 DEFAULT_TARGET_DATE = "2025-12-31"  # Last trading day (Monday)
 DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
-DEFAULT_BACKFILL_COUNT = 30  # Number of periods to fetch (days for daily, weeks for weekly)
+DEFAULT_BACKFILL_COUNT = 90  # Number of periods to fetch (days for daily, weeks for weekly)
 DEFAULT_MIN_LIT_VOLUME = 10000
 DEFAULT_MARKET_TZ = "US/Eastern"
 DEFAULT_RTH_START = "09:30"
@@ -141,7 +141,7 @@ DEFAULT_INDEX_CONSTITUENTS_DIR = "data/constituents"
 DEFAULT_INDEX_PROXY_MAP = {"SPX": "SPY"}
 DEFAULT_RENDER_PRICE_CHARTS = True
 DEFAULT_PRICE_BAR_TIMEFRAME = "daily"
-DEFAULT_COMBINATION_PLOT = True
+DEFAULT_COMBINATION_PLOT = False
 
 DEFAULT_TABLE_STYLE = {
     "mode": "scan",
