@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import math
 from datetime import date
 from pathlib import Path
 from typing import Optional
@@ -57,14 +58,14 @@ BORDER_COLOR = "#3a3a3e"   # Lighter gray for borders
 ACCENT_ORANGE = "#FF8C00"  # Orange for headers, labels, ticker
 
 # Thresholds
-BUY_THRESHOLD = 1.5       # ratio >= 1.5 = Buy
-TRIM_THRESHOLD = 0.70     # ratio <= 0.70 = Trim
+BUY_THRESHOLD = 1.5       # ratio >= 1.5 = Buy (legacy, unused)
+TRIM_THRESHOLD = 0.70     # ratio <= 0.70 = Trim (legacy, unused)
 ACCUM_HIGH_THRESHOLD = 70
 ACCUM_LOW_THRESHOLD = 30
 
-# Order flow color thresholds
-ORDER_FLOW_HIGH = 1.5   # Strong buy signal
-ORDER_FLOW_LOW = 0.75   # Trim signal
+# Order flow color thresholds (using log ratio for symmetric coloring)
+# log(1.65) ≈ 0.5, log(0.61) ≈ -0.5
+LOG_FLOW_THRESHOLD = 0.5  # Symmetric threshold for log(ratio)
 
 # US stock market holidays (NYSE/NASDAQ closed)
 US_MARKET_HOLIDAYS = {
@@ -184,37 +185,83 @@ def _format_pct_avg(buy_vol: float, total_vol: float) -> str:
 
 
 def _get_buy_trim(ratio: float) -> tuple[str, str]:
-    """Return (indicator_text, css_class) based on ratio threshold."""
-    if pd.isna(ratio) or ratio is None:
+    """Return (indicator_text, css_class) based on log ratio threshold.
+
+    Uses log(ratio) for symmetric thresholds:
+    - Buy: log(ratio) >= +LOG_FLOW_THRESHOLD (buying pressure)
+    - Trim: log(ratio) <= -LOG_FLOW_THRESHOLD (selling pressure)
+    """
+    if pd.isna(ratio) or ratio is None or ratio <= 0:
         return ("", "indicator-neutral")
-    if ratio >= BUY_THRESHOLD:
+
+    log_ratio = math.log(ratio)
+
+    if log_ratio >= LOG_FLOW_THRESHOLD:
         return ("Buy", "indicator-buy")
-    if ratio <= TRIM_THRESHOLD:
+    if log_ratio <= -LOG_FLOW_THRESHOLD:
         return ("Trim", "indicator-trim")
     return ("", "indicator-neutral")
 
 
 def _get_accum_color(score) -> tuple[str, str, str]:
-    """Return (background_color, text_color, border_color) for accumulation score cell."""
+    """Return (background_color, text_color, border_color) for accumulation score cell.
+
+    Uses dynamic gradient coloring:
+    - score >= 70: green background + green text (max saturation)
+    - score <= 30: purple background + purple text (max saturation)
+    - score 30-70: black background, text follows gradient coloring
+    """
     if score is None or pd.isna(score):
         return ("transparent", "", "transparent")
+
+    # Clamp score to valid range
+    score = max(0, min(100, score))
+
     if score >= ACCUM_HIGH_THRESHOLD:
-        return (f"rgba(57, 255, 20, 0.2)", ACCUM_GREEN, "#000000")  # Green bg + green text + black border
-    if score <= ACCUM_LOW_THRESHOLD:
-        return (f"rgba(191, 0, 255, 0.2)", ACCUM_PURPLE, "#000000")  # Purple bg + purple text + black border
-    return ("transparent", ACCUM_NEUTRAL, "transparent")  # Neutral gray text
+        # Max green: green background + green text
+        return ("rgba(57, 255, 20, 0.2)", ACCUM_GREEN, "#000000")
+    elif score <= ACCUM_LOW_THRESHOLD:
+        # Max purple: purple background + purple text
+        return ("rgba(191, 0, 255, 0.2)", ACCUM_PURPLE, "#000000")
+    elif score >= 50:
+        # Between 50-70: black background, gradient text toward green
+        intensity = (score - 50) / 20  # 0 at 50, 1 at 70
+        # Interpolate between gray and green for text
+        # Green RGB: (57, 255, 20), Gray RGB: (102, 102, 102)
+        r = int(102 + (57 - 102) * intensity)
+        g = int(102 + (255 - 102) * intensity)
+        b = int(102 + (20 - 102) * intensity)
+        text_color = f"rgb({r}, {g}, {b})"
+        return ("transparent", text_color, "transparent")
+    else:
+        # Between 30-50: black background, gradient text toward purple
+        intensity = (50 - score) / 20  # 0 at 50, 1 at 30
+        # Interpolate between gray and purple for text
+        # Purple RGB: (191, 0, 255), Gray RGB: (102, 102, 102)
+        r = int(102 + (191 - 102) * intensity)
+        g = int(102 + (0 - 102) * intensity)
+        b = int(102 + (255 - 102) * intensity)
+        text_color = f"rgb({r}, {g}, {b})"
+        return ("transparent", text_color, "transparent")
 
 
 def _get_order_flow_color(ratio) -> tuple[str, str, str]:
-    """Return (background_color, text_color, border_color) for order flow cell."""
-    if ratio is None or pd.isna(ratio):
+    """Return (background_color, text_color, border_color) for order flow cell.
+
+    Uses log(ratio) for symmetric coloring:
+    - Green: log(ratio) >= +LOG_FLOW_THRESHOLD (buying pressure)
+    - Red: log(ratio) <= -LOG_FLOW_THRESHOLD (selling pressure)
+    - Neutral: between these thresholds
+    """
+    if ratio is None or pd.isna(ratio) or ratio <= 0:
         return ("transparent", "", "transparent")
-    if ratio >= ORDER_FLOW_HIGH:
-        return (f"rgba(57, 255, 20, 0.2)", BRIGHT_GREEN, "#000000")  # Strong buy + black border
-    if ratio >= BUY_THRESHOLD:
-        return (f"rgba(57, 255, 20, 0.15)", BRIGHT_GREEN, "#000000")  # Buy + black border
-    if ratio <= ORDER_FLOW_LOW:
-        return (f"rgba(255, 68, 68, 0.2)", BRIGHT_RED, "#000000")  # Trim + black border
+
+    log_ratio = math.log(ratio)
+
+    if log_ratio >= LOG_FLOW_THRESHOLD:
+        return ("rgba(57, 255, 20, 0.2)", BRIGHT_GREEN, "#000000")  # Buying pressure = green
+    if log_ratio <= -LOG_FLOW_THRESHOLD:
+        return ("rgba(255, 68, 68, 0.2)", BRIGHT_RED, "#000000")  # Selling pressure = red
     return ("transparent", "", "transparent")  # Neutral
 
 
@@ -230,6 +277,9 @@ def _build_sector_panel_html(
 ) -> str:
     """Build HTML for a single sector panel."""
     sector_name = SECTOR_NAMES.get(ticker, ticker)
+
+    # Calculate average B/S score first (needed for flow cell coloring)
+    avg_bs_score = rows_df["order_flow"].mean() if not rows_df.empty else 0
 
     # Build data rows
     rows_html = ""
@@ -264,18 +314,21 @@ def _build_sector_panel_html(
                 <td class="col-volume">{volume_str}</td>
                 <td class="col-order-flow" style="{order_flow_style}">{order_flow_str}</td>
                 <td class="col-pct">{pct_avg_str}</td>
-                <td class="col-indicator {indicator_class}">{indicator_text}</td>
                 <td class="col-accum" style="{accum_style}">{accum_score_str}</td>
+                <td class="col-indicator {indicator_class}">{indicator_text}</td>
             </tr>
         """
 
-    # Calculate average weighted score (average of order_flow ratios)
-    avg_bs_score = rows_df["order_flow"].mean() if not rows_df.empty else 0
+    # Format average B/S score for display (already calculated above)
     avg_bs_str = f"{avg_bs_score:.2f}" if not pd.isna(avg_bs_score) else "NA"
 
     # Calculate average accumulation score
     avg_accum_score = rows_df["accum_score"].mean() if not rows_df.empty and "accum_score" in rows_df.columns else 0
     avg_accum_str = f"{avg_accum_score:.0f}" if not pd.isna(avg_accum_score) else "NA"
+
+    # Calculate median accumulation score
+    med_accum_score = rows_df["accum_score"].median() if not rows_df.empty and "accum_score" in rows_df.columns else 0
+    med_accum_str = f"{med_accum_score:.0f}" if not pd.isna(med_accum_score) else "NA"
 
     # Determine avg B/S score box style: black bg, colored border and text
     if not pd.isna(avg_bs_score):
@@ -292,20 +345,19 @@ def _build_sector_panel_html(
         avg_bs_border = palette.get("text_muted", "#8b8b8b")
         avg_bs_text = palette.get("text_muted", "#8b8b8b")
 
-    # Determine avg Accum score box style: black bg, colored border and text based on accum thresholds
-    if not pd.isna(avg_accum_score):
-        if avg_accum_score >= ACCUM_HIGH_THRESHOLD:
-            avg_accum_border = ACCUM_GREEN
-            avg_accum_text = ACCUM_GREEN
-        elif avg_accum_score <= ACCUM_LOW_THRESHOLD:
-            avg_accum_border = ACCUM_PURPLE
-            avg_accum_text = ACCUM_PURPLE
-        else:
-            avg_accum_border = ACCUM_NEUTRAL
-            avg_accum_text = ACCUM_NEUTRAL
-    else:
-        avg_accum_border = palette.get("text_muted", "#8b8b8b")
+    # Determine avg Accum score box style using dynamic gradient (same as cell coloring)
+    # Border color matches text color for consistent appearance
+    _, avg_accum_text, _ = _get_accum_color(avg_accum_score)
+    if not avg_accum_text:
         avg_accum_text = palette.get("text_muted", "#8b8b8b")
+    avg_accum_border = avg_accum_text  # Border matches text color
+
+    # Determine median Accum score box style using dynamic gradient (same as cell coloring)
+    # Border color matches text color for consistent appearance
+    _, med_accum_text, _ = _get_accum_color(med_accum_score)
+    if not med_accum_text:
+        med_accum_text = palette.get("text_muted", "#8b8b8b")
+    med_accum_border = med_accum_text  # Border matches text color
 
     panel_html = f"""
         <div class="sector-panel">
@@ -320,8 +372,8 @@ def _build_sector_panel_html(
                         <th class="col-volume">Vol</th>
                         <th class="col-order-flow">Flow</th>
                         <th class="col-pct">%</th>
+                        <th class="col-accum">Acc/Dist</th>
                         <th class="col-indicator"></th>
-                        <th class="col-accum">Acc</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -332,10 +384,12 @@ def _build_sector_panel_html(
                 <div class="footer-labels">
                     <span class="avg-label">Avg B/S</span>
                     <span class="avg-label">Avg Acc</span>
+                    <span class="avg-label">Med Acc</span>
                 </div>
                 <div class="footer-scores">
                     <span class="avg-score" style="background-color: #000000; border: 2px solid {avg_bs_border}; color: {avg_bs_text};">{avg_bs_str}</span>
                     <span class="avg-score" style="background-color: #000000; border: 2px solid {avg_accum_border}; color: {avg_accum_text};">{avg_accum_str}</span>
+                    <span class="avg-score" style="background-color: #000000; border: 2px solid {med_accum_border}; color: {med_accum_text};">{med_accum_str}</span>
                 </div>
             </div>
         </div>
@@ -381,7 +435,7 @@ def build_full_page_html(
             font-family: "Segoe UI", Arial, sans-serif;
             font-size: 14px;
             line-height: 1.4;
-            padding: 20px;
+            padding: 5% 8%;
         }}
 
         .page-container {{
@@ -560,22 +614,31 @@ def build_full_page_html(
             font-weight: 700;
             padding: 2px 6px;
             border-radius: 6px;
+            min-width: 36px;
+            text-align: center;
+            display: inline-block;
         }}
 
         .page-footer {{
-            margin-top: 20px;
-            padding-top: 12px;
-            border-top: 1px solid {palette.get('border', '#26262a')};
             font-size: 11px;
             color: {ACCENT_ORANGE};
-            text-align: center;
+            text-align: right;
+            margin-top: 8px;
+        }}
+
+        .footer-row {{
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            margin-top: 16px;
+            padding-top: 12px;
+            border-top: 1px solid {palette.get('border', '#26262a')};
         }}
 
         .legend {{
             display: flex;
             justify-content: flex-end;
             gap: 20px;
-            margin-top: 16px;
             font-size: 12px;
         }}
 
@@ -612,31 +675,28 @@ def build_full_page_html(
 
         {grid_html}
 
-        <div class="legend">
-            <div class="legend-item">
-                <div class="legend-color" style="background-color: {ACCUM_GREEN};"></div>
-                <span>Accumulating (&ge; 70)</span>
+        <div class="footer-row">
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: {BRIGHT_GREEN};"></div>
+                    <span>Buy (Flow &ge; 1.65)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: {BRIGHT_RED};"></div>
+                    <span>Trim (Flow &le; 0.61)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: {ACCUM_GREEN};"></div>
+                    <span>Accumulation (&ge; 70)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: {ACCUM_PURPLE};"></div>
+                    <span>Distribution (&le; 30)</span>
+                </div>
             </div>
-            <div class="legend-item">
-                <div class="legend-color" style="background-color: {ACCUM_NEUTRAL};"></div>
-                <span>Neutral (30-70)</span>
+            <div class="page-footer">
+                Data source: FINRA Reg SHO Daily Short Sale. Order Flow = Buy/Sell Ratio. % = Buy Volume / Total Volume.
             </div>
-            <div class="legend-item">
-                <div class="legend-color" style="background-color: {ACCUM_PURPLE};"></div>
-                <span>Distribution (&le; 30)</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color" style="background-color: {BRIGHT_GREEN};"></div>
-                <span>Buy (Flow &ge; 1.25)</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color" style="background-color: {BRIGHT_RED};"></div>
-                <span>Trim (Flow &lt; 0.75)</span>
-            </div>
-        </div>
-
-        <div class="page-footer">
-            Data source: FINRA Reg SHO Daily Short Sale. Order Flow = Buy/Sell Ratio. % = Buy Volume / Total Volume.
         </div>
     </div>
 </body>
