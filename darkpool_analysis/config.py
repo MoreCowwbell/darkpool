@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 # =============================================================================
 # Default Configuration (can be overridden via .env)
 # =============================================================================
-TICKERS_TYPE = ["SINGLE"]   # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8"]  # ["SINGLE"]
+TICKERS_TYPE = ["SUMMARY"]   # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8"]  # ["SINGLE"]
 DEFAULT_TICKERS = ["META"]
 
 SECTOR_CORE_TICKERS = [
