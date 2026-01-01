@@ -58,8 +58,6 @@ BORDER_COLOR = "#3a3a3e"   # Lighter gray for borders
 ACCENT_ORANGE = "#FF8C00"  # Orange for headers, labels, ticker
 
 # Thresholds
-BUY_THRESHOLD = 1.5       # ratio >= 1.5 = Buy (legacy, unused)
-TRIM_THRESHOLD = 0.70     # ratio <= 0.70 = Trim (legacy, unused)
 ACCUM_HIGH_THRESHOLD = 70
 ACCUM_LOW_THRESHOLD = 30
 
@@ -184,22 +182,49 @@ def _format_pct_avg(buy_vol: float, total_vol: float) -> str:
     return f"{pct:.0f}%"
 
 
-def _get_buy_trim(ratio: float) -> tuple[str, str]:
-    """Return (indicator_text, css_class) based on log ratio threshold.
+def _get_buy_trim(
+    ratio: float,
+    volume: float,
+    avg_volume: float,
+    accum_score: float,
+) -> tuple[str, str]:
+    """Return (indicator_text, css_class) based on volume-weighted flow with Acc/Dist confirmation.
 
-    Uses log(ratio) for symmetric thresholds:
-    - Buy: log(ratio) >= +LOG_FLOW_THRESHOLD (buying pressure)
-    - Trim: log(ratio) <= -LOG_FLOW_THRESHOLD (selling pressure)
+    Primary Signal (both required):
+    - Volume > Average volume for the ticker
+    - Flow: log(ratio) >= +LOG_FLOW_THRESHOLD or <= -LOG_FLOW_THRESHOLD
+
+    Signal Strength:
+    - Soft Buy/Trim: Volume + Flow only (text color only)
+    - Strong Buy/Trim: Volume + Flow + Acc/Dist confirms (text + box)
     """
+    # Check for valid inputs
     if pd.isna(ratio) or ratio is None or ratio <= 0:
+        return ("", "indicator-neutral")
+    if pd.isna(volume) or pd.isna(avg_volume) or avg_volume <= 0:
+        return ("", "indicator-neutral")
+
+    # Primary signal: Volume must be above average
+    if volume <= avg_volume:
         return ("", "indicator-neutral")
 
     log_ratio = math.log(ratio)
 
+    # Check flow direction
     if log_ratio >= LOG_FLOW_THRESHOLD:
-        return ("Buy", "indicator-buy")
+        # Bullish flow + high volume
+        # Check if Acc/Dist confirms (>= 60 for strong signal)
+        if not pd.isna(accum_score) and accum_score >= 60:
+            return ("Buy", "indicator-buy-strong")  # Strong: text + box
+        return ("Buy", "indicator-buy-soft")  # Soft: text only
+
     if log_ratio <= -LOG_FLOW_THRESHOLD:
-        return ("Trim", "indicator-trim")
+        # Bearish flow + high volume
+        # Check if Acc/Dist confirms (<= 40 for strong signal)
+        if not pd.isna(accum_score) and accum_score <= 40:
+            return ("Trim", "indicator-trim-strong")  # Strong: text + box
+        return ("Trim", "indicator-trim-soft")  # Soft: text only
+
     return ("", "indicator-neutral")
 
 
@@ -278,8 +303,9 @@ def _build_sector_panel_html(
     """Build HTML for a single sector panel."""
     sector_name = SECTOR_NAMES.get(ticker, ticker)
 
-    # Calculate average B/S score first (needed for flow cell coloring)
+    # Calculate averages first (needed for signal logic)
     avg_bs_score = rows_df["order_flow"].mean() if not rows_df.empty else 0
+    avg_volume = rows_df["total_volume"].mean() if not rows_df.empty else 0
 
     # Build data rows
     rows_html = ""
@@ -297,9 +323,10 @@ def _build_sector_panel_html(
         if order_flow_border and order_flow_border != "transparent":
             order_flow_style += f" border: 1px solid {order_flow_border};"
 
-        indicator_text, indicator_class = _get_buy_trim(order_flow_val)
-
+        volume_val = row.get("total_volume")
         accum_score = row.get("accum_score")
+        indicator_text, indicator_class = _get_buy_trim(order_flow_val, volume_val, avg_volume, accum_score)
+
         accum_score_str = f"{accum_score:.0f}" if not pd.isna(accum_score) else "NA"
         accum_bg, accum_text, accum_border = _get_accum_color(accum_score)
         accum_style = f"background-color: {accum_bg};"
@@ -322,20 +349,17 @@ def _build_sector_panel_html(
     # Format average B/S score for display (already calculated above)
     avg_bs_str = f"{avg_bs_score:.2f}" if not pd.isna(avg_bs_score) else "NA"
 
-    # Calculate average accumulation score
-    avg_accum_score = rows_df["accum_score"].mean() if not rows_df.empty and "accum_score" in rows_df.columns else 0
-    avg_accum_str = f"{avg_accum_score:.0f}" if not pd.isna(avg_accum_score) else "NA"
-
     # Calculate median accumulation score
     med_accum_score = rows_df["accum_score"].median() if not rows_df.empty and "accum_score" in rows_df.columns else 0
     med_accum_str = f"{med_accum_score:.0f}" if not pd.isna(med_accum_score) else "NA"
 
-    # Determine avg B/S score box style: black bg, colored border and text
-    if not pd.isna(avg_bs_score):
-        if avg_bs_score >= BUY_THRESHOLD:
+    # Determine avg B/S score box style using log ratio (same as cell coloring)
+    if not pd.isna(avg_bs_score) and avg_bs_score > 0:
+        log_avg = math.log(avg_bs_score)
+        if log_avg >= LOG_FLOW_THRESHOLD:
             avg_bs_border = BRIGHT_GREEN
             avg_bs_text = BRIGHT_GREEN
-        elif avg_bs_score <= TRIM_THRESHOLD:
+        elif log_avg <= -LOG_FLOW_THRESHOLD:
             avg_bs_border = BRIGHT_RED
             avg_bs_text = BRIGHT_RED
         else:
@@ -344,13 +368,6 @@ def _build_sector_panel_html(
     else:
         avg_bs_border = palette.get("text_muted", "#8b8b8b")
         avg_bs_text = palette.get("text_muted", "#8b8b8b")
-
-    # Determine avg Accum score box style using dynamic gradient (same as cell coloring)
-    # Border color matches text color for consistent appearance
-    _, avg_accum_text, _ = _get_accum_color(avg_accum_score)
-    if not avg_accum_text:
-        avg_accum_text = palette.get("text_muted", "#8b8b8b")
-    avg_accum_border = avg_accum_text  # Border matches text color
 
     # Determine median Accum score box style using dynamic gradient (same as cell coloring)
     # Border color matches text color for consistent appearance
@@ -373,7 +390,7 @@ def _build_sector_panel_html(
                         <th class="col-order-flow">Flow</th>
                         <th class="col-pct">%</th>
                         <th class="col-accum">Acc/Dist</th>
-                        <th class="col-indicator"></th>
+                        <th class="col-indicator">Signal</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -383,12 +400,10 @@ def _build_sector_panel_html(
             <div class="panel-footer">
                 <div class="footer-labels">
                     <span class="avg-label">Avg B/S</span>
-                    <span class="avg-label">Avg Acc</span>
                     <span class="avg-label">Med Acc</span>
                 </div>
                 <div class="footer-scores">
                     <span class="avg-score" style="background-color: #000000; border: 2px solid {avg_bs_border}; color: {avg_bs_text};">{avg_bs_str}</span>
-                    <span class="avg-score" style="background-color: #000000; border: 2px solid {avg_accum_border}; color: {avg_accum_text};">{avg_accum_str}</span>
                     <span class="avg-score" style="background-color: #000000; border: 2px solid {med_accum_border}; color: {med_accum_text};">{med_accum_str}</span>
                 </div>
             </div>
@@ -435,12 +450,14 @@ def build_full_page_html(
             font-family: "Segoe UI", Arial, sans-serif;
             font-size: 14px;
             line-height: 1.4;
-            padding: 5% 8%;
+            padding: 10px 10px;
         }}
 
         .page-container {{
             max-width: 2400px;
             margin: 0 auto;
+            padding: 40px 60px;
+            background-color: {palette.get('background', '#0f0f10')};
         }}
 
         .page-header {{
@@ -555,16 +572,24 @@ def build_full_page_html(
             border-radius: 6px;
         }}
 
-        .indicator-buy {{
+        .indicator-buy-soft {{
             color: {BRIGHT_GREEN};
-            background-color: rgba(57, 255, 20, 0.15);
+        }}
+
+        .indicator-buy-strong {{
+            color: {BRIGHT_GREEN};
+            background-color: rgba(57, 255, 20, 0.2);
             border: 1px solid #000000;
             border-radius: 6px;
         }}
 
-        .indicator-trim {{
+        .indicator-trim-soft {{
             color: {BRIGHT_RED};
-            background-color: rgba(255, 68, 68, 0.15);
+        }}
+
+        .indicator-trim-strong {{
+            color: {BRIGHT_RED};
+            background-color: rgba(255, 68, 68, 0.2);
             border: 1px solid #000000;
             border-radius: 6px;
         }}
@@ -614,25 +639,35 @@ def build_full_page_html(
             font-weight: 700;
             padding: 2px 6px;
             border-radius: 6px;
-            min-width: 36px;
+            width: 40px;
             text-align: center;
             display: inline-block;
         }}
 
-        .page-footer {{
-            font-size: 11px;
-            color: {ACCENT_ORANGE};
-            text-align: right;
-            margin-top: 8px;
-        }}
-
         .footer-row {{
             display: flex;
-            flex-direction: column;
-            align-items: flex-end;
+            flex-direction: row;
+            justify-content: space-between;
+            align-items: flex-start;
             margin-top: 16px;
             padding-top: 12px;
             border-top: 1px solid {palette.get('border', '#26262a')};
+        }}
+
+        .footer-definitions {{
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 2px;
+            font-size: 10px;
+            color: {palette.get('text_muted', '#8b8b8b')};
+        }}
+
+        .footer-right {{
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 8px;
         }}
 
         .legend {{
@@ -640,6 +675,11 @@ def build_full_page_html(
             justify-content: flex-end;
             gap: 20px;
             font-size: 12px;
+        }}
+
+        .data-source {{
+            font-size: 10px;
+            color: {ACCENT_ORANGE};
         }}
 
         .legend-item {{
@@ -676,26 +716,33 @@ def build_full_page_html(
         {grid_html}
 
         <div class="footer-row">
-            <div class="legend">
-                <div class="legend-item">
-                    <div class="legend-color" style="background-color: {BRIGHT_GREEN};"></div>
-                    <span>Buy (Flow &ge; 1.65)</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background-color: {BRIGHT_RED};"></div>
-                    <span>Trim (Flow &le; 0.61)</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background-color: {ACCUM_GREEN};"></div>
-                    <span>Accumulation (&ge; 70)</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background-color: {ACCUM_PURPLE};"></div>
-                    <span>Distribution (&le; 30)</span>
-                </div>
+            <div class="footer-definitions">
+                <span>Order Flow = Buy/Sell Ratio. % = Buy Volume / Total Volume.</span>
+                <span>Flow coloring: log(ratio) thresholds &mdash; green &ge; +0.5, red &le; -0.5 (symmetric around 1.0)</span>
+                <span>Signal strength: Soft = Vol &gt; Avg + Flow | Strong = Vol &gt; Avg + Flow + Acc/Dist confirms</span>
             </div>
-            <div class="page-footer">
-                Data source: FINRA Reg SHO Daily Short Sale. Order Flow = Buy/Sell Ratio. % = Buy Volume / Total Volume.
+            <div class="footer-right">
+                <div class="legend">
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: {BRIGHT_GREEN};"></div>
+                        <span>Buy (Vol &gt; Avg + Flow &ge; 1.65)</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: {BRIGHT_RED};"></div>
+                        <span>Trim (Vol &gt; Avg + Flow &le; 0.61)</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: {ACCUM_GREEN};"></div>
+                        <span>Accumulation (&ge; 70)</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: {ACCUM_PURPLE};"></div>
+                        <span>Distribution (&le; 30)</span>
+                    </div>
+                </div>
+                <div class="data-source">
+                    Data source: FINRA Reg SHO Daily Short Sale. FINRA Weekly OTC Transparency Report.
+                </div>
             </div>
         </div>
     </div>
