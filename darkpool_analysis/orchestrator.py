@@ -8,6 +8,7 @@ separate pressure proxy and must never replace OTC weekly volume.
 """
 
 import logging
+from datetime import timedelta
 
 import pandas as pd
 
@@ -86,19 +87,37 @@ def _get_existing_metrics(conn, symbols: list[str], dates: list) -> pd.DataFrame
     return conn.execute(query, params).fetchdf()
 
 
-def _metrics_are_complete(existing_metrics: pd.DataFrame, expected_rows: int) -> bool:
+def _metrics_are_complete(
+    existing_metrics: pd.DataFrame,
+    expected_rows: int,
+    short_z_source: str | None = None,
+) -> bool:
     """Check if existing metrics have complete data (non-null key columns)."""
     if len(existing_metrics) != expected_rows:
         return False
 
     # Key columns that must have at least some non-null values for data to be "complete"
-    key_columns = ['accumulation_score', 'short_ratio', 'lit_flow_imbalance']
+    key_columns = ['accumulation_score', 'short_ratio', 'lit_flow_imbalance', 'vwbr']
 
     for col in key_columns:
         if col in existing_metrics.columns:
             # Check if column has at least some non-null values
             if existing_metrics[col].notna().sum() == 0:
                 return False
+
+    if short_z_source:
+        if "accumulation_short_z_source" not in existing_metrics.columns:
+            return False
+        sources = (
+            existing_metrics["accumulation_short_z_source"]
+            .dropna()
+            .astype(str)
+            .str.lower()
+            .unique()
+            .tolist()
+        )
+        if not sources or any(source != short_z_source for source in sources):
+            return False
 
     return True
 
@@ -176,10 +195,13 @@ def main() -> None:
             if not trades_df.empty:
                 upsert_dataframe(conn, "polygon_equity_trades_raw", trades_df, ["symbol", "timestamp", "data_source"])
 
-            # Only compute lit direction if we fetched new trades (not cached)
-            # Avoid overwriting real data with placeholder NA values
-            if trades_cache_stats["fetched"] > 0:
-                lit_df = compute_lit_directional_flow(trades_df, symbols_to_fetch, run_date, config)
+            # Only compute lit direction for symbols actually fetched this run.
+            # Avoid overwriting cached symbols with placeholder rows.
+            fetched_symbols = []
+            if not trades_df.empty and "symbol" in trades_df.columns:
+                fetched_symbols = sorted(trades_df["symbol"].dropna().unique().tolist())
+            if fetched_symbols:
+                lit_df = compute_lit_directional_flow(trades_df, fetched_symbols, run_date, config)
                 upsert_dataframe(conn, "lit_direction_daily", lit_df, ["symbol", "date"])
                 lit_frames.append(lit_df)
 
@@ -222,31 +244,56 @@ def main() -> None:
                 except Exception as exc:
                     logging.warning("Options premium fetch failed for %s: %s", run_date.isoformat(), exc)
 
-        short_all = _concat_frames(short_frames)
-        agg_all = _concat_frames(agg_frames)
+        date_start = min(config.target_dates)
+        date_end = max(config.target_dates)
 
-        # Read agg data from DB if frames are empty (all cached)
-        # This ensures volume data is available for OTC participation calculation
-        if agg_all.empty:
-            agg_all = conn.execute(
-                """
-                SELECT symbol, trade_date, open, high, low, close, vwap, volume, fetch_timestamp
-                FROM polygon_daily_agg_raw
-                WHERE trade_date >= ? AND trade_date <= ?
-                """,
-                [min(config.target_dates), max(config.target_dates)],
-            ).fetchdf()
+        # Always load inputs from DB to avoid partial-frame recomputation when cache is enabled.
+        # This ensures metrics use the full 60-day window even if only some days were fetched.
+        symbol_placeholders = ", ".join(["?" for _ in config.tickers])
+        symbols_params = list(config.tickers)
+
+        finra_all_df = conn.execute(
+            """
+            SELECT *
+            FROM finra_otc_weekly_raw
+            WHERE week_start_date >= ? AND week_start_date <= ?
+            """,
+            [
+                date_start - timedelta(days=date_start.weekday()),
+                date_end - timedelta(days=date_end.weekday()),
+            ],
+        ).fetchdf()
+
+        short_all = conn.execute(
+            f"""
+            SELECT symbol, trade_date, short_volume, short_exempt_volume, total_volume, market, source, source_file
+            FROM finra_short_daily_raw
+            WHERE trade_date >= ? AND trade_date <= ?
+              AND symbol IN ({symbol_placeholders})
+            """,
+            [date_start, date_end] + symbols_params,
+        ).fetchdf()
+
+        agg_all = conn.execute(
+            f"""
+            SELECT symbol, trade_date, open, high, low, close, vwap, volume
+            FROM polygon_daily_agg_raw
+            WHERE trade_date >= ? AND trade_date <= ?
+              AND symbol IN ({symbol_placeholders})
+            """,
+            [date_start, date_end] + symbols_params,
+        ).fetchdf()
 
         # Read lit_direction_daily from DB (includes cached + newly computed)
-        # This ensures we have complete lit data even when trades were cached
         lit_all = conn.execute(
-            """
+            f"""
             SELECT symbol, date, lit_buy_volume, lit_sell_volume, lit_buy_ratio,
                    log_buy_sell, classification_method, lit_coverage_pct, inference_version
             FROM lit_direction_daily
             WHERE date >= ? AND date <= ?
+              AND symbol IN ({symbol_placeholders})
             """,
-            [min(config.target_dates), max(config.target_dates)],
+            [date_start, date_end] + symbols_params,
         ).fetchdf()
 
         # Check if metrics already exist in DB with complete data
@@ -254,7 +301,11 @@ def main() -> None:
         existing_metrics = _get_existing_metrics(conn, config.tickers, config.target_dates)
         expected_rows = len(config.tickers) * len(config.target_dates)
 
-        if _metrics_are_complete(existing_metrics, expected_rows):
+        if _metrics_are_complete(
+            existing_metrics,
+            expected_rows,
+            short_z_source=config.accumulation_short_z_source,
+        ):
             logging.info("Using existing metrics from database (skipping recomputation)")
             daily_metrics_df = existing_metrics
         else:

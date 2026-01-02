@@ -340,3 +340,8 @@ Format:
 - [x] Modified orchestrator to skip recomputation when complete metrics already exist in DB.
 - [x] Now logs "Using existing metrics from database (skipping recomputation)" when using cached data.
 - [x] Added lit data diagnostic cells to `database_check.ipynb` for troubleshooting.
+## 2026-01-01 Session Summary (Codex)
+- [x] Limited lit-direction upserts to newly fetched symbols to prevent cached placeholders from overwriting data.
+- [x] Reloaded FINRA/short/agg/lit inputs from DuckDB for full-date-range metrics recomputation.
+- [x] Routed scanner runs to a dedicated DuckDB file via SCANNER_DB_PATH (default data/darkpool_scanner.duckdb).
+- [x] Added VWBR/VWBR_Z to daily_metrics, configurable accumulation short-z source, and VWBR plot panel.

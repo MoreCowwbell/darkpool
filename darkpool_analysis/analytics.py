@@ -434,6 +434,23 @@ def build_daily_metrics(
         .transform(lambda s: _rolling_zscore(s, config.short_z_window, config.zscore_min_periods))
     )
 
+    # Volume-weighted buy/sell ratio across short + lit volumes.
+    merged["vwbr"] = pd.NA
+    short_buy = pd.to_numeric(merged["short_buy_volume"], errors="coerce").fillna(0.0)
+    short_sell = pd.to_numeric(merged["short_sell_volume"], errors="coerce").fillna(0.0)
+    lit_buy = pd.to_numeric(merged["lit_buy_volume"], errors="coerce").fillna(0.0)
+    lit_sell = pd.to_numeric(merged["lit_sell_volume"], errors="coerce").fillna(0.0)
+    total_buy = short_buy + lit_buy
+    total_sell = short_sell + lit_sell
+    valid_vwbr = (total_sell > 0) & ((total_buy + total_sell) > 0)
+    merged.loc[valid_vwbr, "vwbr"] = total_buy[valid_vwbr] / total_sell[valid_vwbr]
+    merged["vwbr"] = pd.to_numeric(merged["vwbr"], errors="coerce")
+    merged["vwbr_z"] = (
+        merged.sort_values(["symbol", "date"])
+        .groupby("symbol")["vwbr"]
+        .transform(lambda s: _rolling_zscore(s, config.short_z_window, config.zscore_min_periods))
+    )
+
     # Lit flow imbalance: bounded [-1, +1], symmetric around 0
     # Formula: (buy - sell) / (buy + sell)
     merged["lit_flow_imbalance"] = pd.NA
@@ -544,9 +561,17 @@ def build_daily_metrics(
         merged.loc[anchored, "otc_status"] = "Anchored"
 
     # Compute composite accumulation score and confidence
+    short_z_source = config.accumulation_short_z_source
+    if short_z_source not in ("short_buy_sell_ratio_z", "vwbr_z"):
+        logger.warning(
+            "Unknown accumulation_short_z_source '%s'; defaulting to short_buy_sell_ratio_z",
+            short_z_source,
+        )
+        short_z_source = "short_buy_sell_ratio_z"
+
     def _apply_composite(row):
         score, score_display = _compute_composite_score(
-            short_z=row.get("short_buy_sell_ratio_z"),
+            short_z=row.get(short_z_source),
             lit_z=row.get("lit_flow_imbalance_z"),
             price_z=row.get("return_z"),
             otc_participation_z=row.get("otc_participation_z"),
@@ -572,6 +597,7 @@ def build_daily_metrics(
     # Update pressure_context_label to use new score thresholds
     merged["pressure_context_label"] = merged["accumulation_score_display"].apply(_label_from_score)
     merged["inference_version"] = config.inference_version
+    merged["accumulation_short_z_source"] = short_z_source
 
     output = merged[
         [
@@ -587,6 +613,8 @@ def build_daily_metrics(
             "short_ratio_z",
             "short_buy_sell_ratio",
             "short_buy_sell_ratio_z",
+            "vwbr",
+            "vwbr_z",
             "short_ratio_denominator_type",
             "short_ratio_denominator_value",
             "short_ratio_source",
@@ -626,6 +654,7 @@ def build_daily_metrics(
             "confidence",
             "pressure_context_label",
             "inference_version",
+            "accumulation_short_z_source",
         ]
     ].copy()
 

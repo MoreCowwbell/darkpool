@@ -115,6 +115,8 @@ def init_db(conn: duckdb.DuckDBPyConnection) -> None:
             short_ratio_z DOUBLE,
             short_buy_sell_ratio DOUBLE,
             short_buy_sell_ratio_z DOUBLE,
+            vwbr DOUBLE,
+            vwbr_z DOUBLE,
             short_ratio_denominator_type TEXT,
             short_ratio_denominator_value DOUBLE,
             short_ratio_source TEXT,
@@ -153,7 +155,8 @@ def init_db(conn: duckdb.DuckDBPyConnection) -> None:
             has_lit BOOLEAN,
             has_price BOOLEAN,
             pressure_context_label TEXT,
-            inference_version TEXT
+            inference_version TEXT,
+            accumulation_short_z_source TEXT
         )
         """
     )
@@ -162,6 +165,8 @@ def init_db(conn: duckdb.DuckDBPyConnection) -> None:
         "short_sell_volume DOUBLE",
         "short_buy_sell_ratio DOUBLE",
         "short_buy_sell_ratio_z DOUBLE",
+        "vwbr DOUBLE",
+        "vwbr_z DOUBLE",
         "lit_buy_volume DOUBLE",
         "lit_sell_volume DOUBLE",
         "lit_total_volume DOUBLE",
@@ -181,6 +186,7 @@ def init_db(conn: duckdb.DuckDBPyConnection) -> None:
         "accumulation_score DOUBLE",
         "accumulation_score_display DOUBLE",
         "confidence DOUBLE",
+        "accumulation_short_z_source TEXT",
     ]
     for column_def in daily_metrics_columns:
         conn.execute(f"ALTER TABLE daily_metrics ADD COLUMN IF NOT EXISTS {column_def}")

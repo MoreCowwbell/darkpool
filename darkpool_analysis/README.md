@@ -60,6 +60,7 @@ Core:
 - MARKET_TZ (default US/Eastern)
 - RTH_START, RTH_END (default 09:30, 16:15)
 - INFERENCE_VERSION (e.g., PhaseA_v1)
+- ACCUMULATION_SHORT_Z_SOURCE (short_buy_sell_ratio_z or vwbr_z)
 - EXPORT_CSV (true/false)
 - RENDER_PRICE_CHARTS (true/false)
 - PRICE_BAR_TIMEFRAME (daily, weekly, monthly)
@@ -86,6 +87,7 @@ FINRA daily short sale:
 - FINRA_CDN_URL (scanner CDN base, default https://cdn.finra.org/equity/regsho/daily)
 
 Scanner:
+- SCANNER_DB_PATH (optional; default data/darkpool_scanner.duckdb)
 - SCANNER_LOOKBACK_DAYS (default 90)
 - SCANNER_TREND_DAYS (default 3)
 - SCANNER_TOP_N (default 50)
@@ -116,6 +118,7 @@ Open and run:
 
 ## Outputs
 - DuckDB database: darkpool_analysis/data/darkpool.duckdb
+- Scanner DuckDB database: darkpool_analysis/data/darkpool_scanner.duckdb
 - Tables: darkpool_analysis/output/tables/ (HTML/PNG)
 - Plots: darkpool_analysis/output/plots/ (multi-panel PNG per ticker)
 - Price charts: darkpool_analysis/output/price_charts/ (OHLCV PNG per ticker)
@@ -140,7 +143,7 @@ Key knobs:
 - `palette` (muted green/red and neutral tones)
 
 ## Plot Modes
-- layered (default): 4-panel visualization with short sale buy ratio, lit flow imbalance, OTC participation, and accumulation score.
+- layered (default): 5-panel visualization with VWBR, short sale buy ratio, lit flow imbalance, OTC participation, and accumulation score.
 - short_only: short ratio, short sale volume, close price.
 - both: render layered and short_only together.
 
@@ -152,25 +155,29 @@ python plotter_chart.py --dates 2025-12-20 --timeframe daily
 
 ## How to Read the Plot (Layered Mode)
 
-**Panel 1: Short Sale Buy/Sell Ratio (~50% height)**
+**Panel 1: Volume Weighted Buy Ratio (VWBR)**
+- Combined buy/sell ratio across short sale + lit volumes
+- Thresholds: >1.25 = Bullish (BOT), <0.75 = Bearish (SELL), ~1.0 = Neutral
+
+**Panel 2: Short Sale Buy/Sell Ratio (~50% height)**
 - Primary signal: Short volume / (Total volume - Short volume)
 - Thresholds: >1.25 = Bullish (BOT), <0.75 = Bearish (SELL), ~1.0 = Neutral
-- Agreement markers: Green ▲ = short+lit both bullish, Red ▼ = both bearish, Yellow ◆ = divergence
+- Agreement markers: Green ^ = short+lit both bullish, Red v = both bearish, Yellow D = divergence
 
-**Panel 2: Lit Flow Imbalance (~20% height)**
+**Panel 3: Lit Flow Imbalance (~20% height)**
 - Confirmation signal: (LitBuy - LitSell) / (LitBuy + LitSell)
 - Range: [-1, +1], centered at 0
-- Thresholds: ±0.1 (weak signal), ±0.2 (strong signal)
+- Thresholds: +/-0.1 (weak signal), +/-0.2 (strong signal)
 - NULL if lit volume < MIN_LIT_VOLUME (insufficient data)
 
-**Panel 3: OTC Participation (~15% height)**
+**Panel 4: OTC Participation (~15% height)**
 - Institutional activity intensity: OTC_weekly_volume / Weekly_total_volume
 - Color by z-score: Cyan (elevated), Yellow (normal), Gray (low/stale)
 - Week-over-week delta bars: Green = rising, Red = falling
 - NOTE: OTC direction is NOT observable; this measures participation only
 
-**Panel 4: Accumulation Score (~10% height)**
-- Composite score: 0-100 scale (Red <30 → Gray 50 → Green >70)
+**Panel 5: Accumulation Score (~10% height)**
+- Composite score: 0-100 scale (Red <30 -> Gray 50 -> Green >70)
 - Weights: 55% short z-score, 30% lit z-score, 15% price z-score
 - Intensity modulation: High OTC participation amplifies signal, low OTC dampens
 - Confidence bar: White bar below shows data quality (higher = more reliable)
@@ -182,6 +189,11 @@ python plotter_chart.py --dates 2025-12-20 --timeframe daily
 short_buy_volume = short_volume (from FINRA)
 short_sell_volume = total_volume - short_volume
 short_buy_sell_ratio = short_buy_volume / short_sell_volume
+```
+
+**VWBR (Volume Weighted Buy Ratio):**
+```
+vwbr = (short_buy_volume + lit_buy_volume) / (short_sell_volume + lit_sell_volume)
 ```
 
 **Lit Flow Imbalance (bounded [-1, +1]):**

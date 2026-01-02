@@ -64,7 +64,7 @@ def main() -> None:
     max_date = max(config.target_dates)
     history_start = min_date - timedelta(days=config.scanner_lookback_days)
 
-    conn = get_connection(config.db_path)
+    conn = get_connection(config.scanner_db_path)
     metrics_df = pd.DataFrame()
 
     try:

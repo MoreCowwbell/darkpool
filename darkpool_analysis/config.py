@@ -14,8 +14,8 @@ from dotenv import load_dotenv
 # =============================================================================
 # Default Configuration (can be overridden via .env)
 # =============================================================================
-TICKERS_TYPE = ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8"] # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8"]  # ["SINGLE"]
-DEFAULT_TICKERS = ["META"]
+TICKERS_TYPE = ["SINGLE"] # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8"]  # ["SINGLE"]
+DEFAULT_TICKERS = ["NKE", "META"]
 
 SECTOR_CORE_TICKERS = [
     "XLF",  # Financials – rates, credit, liquidity (macro transmission)
@@ -98,7 +98,7 @@ DEFAULT_FETCH_OPTIONS_PREMIUM = True  # Enable/disable options premium fetching
 # Analysis defaults
 DEFAULT_TARGET_DATE = "2025-12-31"  # Last trading day (Monday)
 DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
-DEFAULT_BACKFILL_COUNT = 60  # Number of periods to fetch (days for daily, weeks for weekly)
+DEFAULT_BACKFILL_COUNT = 30  # Number of periods to fetch (days for daily, weeks for weekly)
 DEFAULT_MIN_LIT_VOLUME = 10000
 DEFAULT_MARKET_TZ = "US/Eastern"
 DEFAULT_RTH_START = "09:30"
@@ -209,6 +209,7 @@ DEFAULT_FINRA_REQUEST_METHOD = "POST"
 DEFAULT_FINRA_CDN_URL = "https://cdn.finra.org/equity/regsho/daily"
 
 # Scanner defaults (FINRA CDN full-list short sale scan)
+DEFAULT_SCANNER_DB_NAME = "darkpool_scanner.duckdb"
 DEFAULT_SCANNER_LOOKBACK_DAYS = 90
 DEFAULT_SCANNER_TREND_DAYS = 3
 DEFAULT_SCANNER_TOP_N = 50
@@ -222,6 +223,7 @@ DEFAULT_SCANNER_INFERENCE_VERSION = "Scanner_v1"
 DEFAULT_COMPOSITE_W_SHORT = 0.55  # Short sale primary signal
 DEFAULT_COMPOSITE_W_LIT = 0.30    # Lit flow confirmation
 DEFAULT_COMPOSITE_W_PRICE = 0.15  # Price momentum
+DEFAULT_ACCUMULATION_SHORT_Z_SOURCE = "short_buy_sell_ratio_z"  # or "vwbr_z"
 
 # Intensity Scale Bounds (OTC participation modulation)
 DEFAULT_INTENSITY_SCALE_MIN = 0.7  # Low OTC dampens signal
@@ -306,6 +308,7 @@ class Config:
     price_chart_dir: Path
     scanner_output_dir: Path
     db_path: Path
+    scanner_db_path: Path
     tickers: list[str]
     finra_tickers: list[str]
     min_lit_volume: float
@@ -370,6 +373,7 @@ class Config:
     composite_w_price: float
     intensity_scale_min: float
     intensity_scale_max: float
+    accumulation_short_z_source: str
     # Options premium panel
     options_strike_count: int
     options_min_premium_highlight: float
@@ -448,6 +452,8 @@ def load_config() -> Config:
     finra_short_sale_file = _resolve_path(root_dir, os.getenv("FINRA_SHORT_SALE_FILE"))
     finra_short_sale_dir = _resolve_path(root_dir, os.getenv("FINRA_SHORT_SALE_DIR"))
     index_constituents_file = _resolve_path(root_dir, os.getenv("INDEX_CONSTITUENTS_FILE"))
+    scanner_db_path_raw = _resolve_path(root_dir, os.getenv("SCANNER_DB_PATH"))
+    scanner_db_path = Path(scanner_db_path_raw) if scanner_db_path_raw else root_dir / "data" / DEFAULT_SCANNER_DB_NAME
 
     return Config(
         root_dir=root_dir,
@@ -458,6 +464,7 @@ def load_config() -> Config:
         price_chart_dir=root_dir / "output" / "price_charts",
         scanner_output_dir=root_dir / "output" / "scanner",
         db_path=root_dir / "data" / "darkpool.duckdb",
+        scanner_db_path=scanner_db_path,
         tickers=tickers,
         finra_tickers=finra_tickers,
         min_lit_volume=float(os.getenv("MIN_LIT_VOLUME", str(DEFAULT_MIN_LIT_VOLUME))),
@@ -536,6 +543,9 @@ def load_config() -> Config:
         composite_w_price=float(os.getenv("COMPOSITE_W_PRICE", str(DEFAULT_COMPOSITE_W_PRICE))),
         intensity_scale_min=float(os.getenv("INTENSITY_SCALE_MIN", str(DEFAULT_INTENSITY_SCALE_MIN))),
         intensity_scale_max=float(os.getenv("INTENSITY_SCALE_MAX", str(DEFAULT_INTENSITY_SCALE_MAX))),
+        accumulation_short_z_source=os.getenv(
+            "ACCUMULATION_SHORT_Z_SOURCE", DEFAULT_ACCUMULATION_SHORT_Z_SOURCE
+        ).lower(),
         # Options premium panel
         options_strike_count=int(os.getenv("OPTIONS_STRIKE_COUNT", str(DEFAULT_OPTIONS_STRIKE_COUNT))),
         options_min_premium_highlight=float(os.getenv("OPTIONS_MIN_PREMIUM_HIGHLIGHT", str(DEFAULT_OPTIONS_MIN_PREMIUM_HIGHLIGHT))),

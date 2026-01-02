@@ -2,7 +2,7 @@
 Multi-panel dark-theme plotter for daily metrics.
 
 Generates PNG visualizations from DuckDB daily_metrics data:
-- Layered: short sale buy ratio, lit buy ratios, OTC buy/sell with decision strip
+- Layered: VWBR, short sale buy/sell ratio, lit flow imbalance, OTC participation, accumulation score
 - Short-only: short ratio, short sale volume, close price
 """
 from __future__ import annotations
@@ -230,6 +230,8 @@ def fetch_metrics_for_plot(
             short_ratio_z,
             short_buy_sell_ratio,
             short_buy_sell_ratio_z,
+            vwbr,
+            vwbr_z,
             short_ratio_denominator_type,
             short_ratio_denominator_value,
             short_buy_volume,
@@ -339,12 +341,13 @@ def plot_symbol_metrics(
     title_suffix: str = "",
 ) -> Path:
     """
-    Generate a 3-panel plot plus decision strip for a single symbol.
+    Generate a multi-panel plot plus footer for a single symbol.
 
-    Panel 1: Short Sale Buy Ratio
-    Panel 2: Lit Buy Ratio + Log Buy Ratio
-    Panel 3: OTC buy/sell volumes + OTC Weekly Buy Ratio
-    Decision strip: Accumulating/Distribution/Neutral labels
+    Panel 1: Volume Weighted Buy Ratio (VWBR)
+    Panel 2: Short Sale Buy/Sell Ratio
+    Panel 3: Lit Flow Imbalance
+    Panel 4: OTC Participation Rate
+    Panel 5: Accumulation Score
     """
     if df.empty:
         logger.warning("No data to plot for %s", symbol)
@@ -357,14 +360,14 @@ def plot_symbol_metrics(
     plt.style.use("dark_background")
 
     # Use GridSpec for explicit control over panel spacing
-    fig = plt.figure(figsize=(fig_width, 18))
+    fig = plt.figure(figsize=(fig_width, 21))
     fig.patch.set_facecolor(COLORS["background"])
 
     # Create GridSpec with fixed spacing to prevent layout shifts
     gs = GridSpec(
-        5, 1,
+        6, 1,
         figure=fig,
-        height_ratios=[3, 2, 2, 2, 1],
+        height_ratios=[3, 3, 2, 2, 2, 1],
         hspace=0.35,  # Fixed vertical spacing between panels
         left=0.08,    # Fixed left margin
         right=0.92,   # Fixed right margin
@@ -372,15 +375,63 @@ def plot_symbol_metrics(
         bottom=0.04,  # Fixed bottom margin
     )
 
-    axes = [fig.add_subplot(gs[i]) for i in range(5)]
+    axes = [fig.add_subplot(gs[i]) for i in range(6)]
 
-    for ax in axes[:4]:  # Only style the 4 data panels
+    for ax in axes[:5]:  # Only style the data panels
         _apply_primary_axis_style(ax)
 
     dates = df["date"]
 
-    # Panel 1: Short Sale Buy Ratio
-    ax1 = axes[0]
+    # Panel 1: Volume Weighted Buy Ratio (VWBR)
+    ax0 = axes[0]
+    vwbr = df["vwbr"]
+    valid_mask0 = ~vwbr.isna()
+    if valid_mask0.any():
+        _plot_smooth_line(ax0, dates, vwbr, COLORS["cyan"], valid_mask0, linewidth=PANEL1_LINE_WIDTH)
+        ax0.scatter(
+            dates[valid_mask0],
+            vwbr[valid_mask0],
+            c=COLORS["cyan"],
+            s=MARKER_SIZE,
+            zorder=5,
+            edgecolors=COLORS["white"],
+            linewidths=0.4,
+        )
+
+    _set_abs_ratio_axis(
+        ax0,
+        vwbr,
+        neutral_value=NEUTRAL_RATIO,
+        linestyle="--",
+        linewidth=THRESHOLD_LINE_WIDTH,
+        alpha=0.6,
+    )
+    _add_ratio_thresholds(ax0, bot=BOT_THRESHOLD, sell=SELL_THRESHOLD)
+    ax0.set_ylabel("Volume Weighted Buy Ratio (VWBR)", color=YLABEL_COLOR, fontsize=YLABEL_SIZE)
+    ax0.set_title("Volume Weighted Buy Ratio (VWBR)", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
+    legend_handles_0 = [
+        Line2D([0], [0], color=COLORS["cyan"], linewidth=MAIN_LINE_WIDTH, label="VWBR"),
+        Line2D([0], [0], color=COLORS["green"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="BOT (1.25)"),
+        Line2D([0], [0], color=COLORS["red"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="SELL (0.75)"),
+    ]
+    legend0 = ax0.legend(
+        legend_handles_0,
+        [h.get_label() for h in legend_handles_0],
+        loc="upper right",
+        ncol=len(legend_handles_0),
+        fontsize=7,
+        frameon=True,
+        facecolor=COLORS["background"],
+        framealpha=0.7,
+        edgecolor=COLORS["grid"],
+        columnspacing=1.0,
+        handletextpad=0.4,
+    )
+    for text in legend0.get_texts():
+        text.set_color(COLORS["text"])
+
+    # Panel 2: Short Sale Buy Ratio
+    ax1 = axes[1]
     short_ratio = df["short_buy_sell_ratio"]
 
     valid_mask = ~short_ratio.isna()
@@ -398,7 +449,7 @@ def plot_symbol_metrics(
 
     # Agreement markers: show when short and lit signals agree/disagree
     lit_imbalance = df["lit_flow_imbalance"]
-    for i, (d, sr, li) in enumerate(zip(dates, short_ratio, lit_imbalance)):
+    for d, sr, li in zip(dates, short_ratio, lit_imbalance):
         if pd.isna(sr) or pd.isna(li):
             continue
         short_bullish = sr > BOT_THRESHOLD
@@ -478,8 +529,8 @@ def plot_symbol_metrics(
     for text in legend1.get_texts():
         text.set_color(COLORS["text"])
 
-    # Panel 2: Lit Flow Imbalance (bounded [-1, +1])
-    ax2 = axes[1]
+    # Panel 3: Lit Flow Imbalance (bounded [-1, +1])
+    ax2 = axes[2]
     lit_imbalance_series = df["lit_flow_imbalance"]
 
     valid_mask2 = ~lit_imbalance_series.isna()
@@ -566,8 +617,8 @@ def plot_symbol_metrics(
     ]
     _add_panel_legend(ax2, legend_handles_2, [h.get_label() for h in legend_handles_2], loc="upper right")
 
-    # Panel 3: OTC Participation Rate (weekly step bands)
-    ax3 = axes[2]
+    # Panel 4: OTC Participation Rate (weekly step bands)
+    ax3 = axes[3]
     otc_part_rate = df["otc_participation_rate"]
     otc_part_z = df["otc_participation_z"]
     otc_part_delta = df["otc_participation_delta"]
@@ -725,8 +776,8 @@ def plot_symbol_metrics(
     for text in legend3.get_texts():
         text.set_color(COLORS["text"])
 
-    # Panel 4: Accumulation Score + Confidence Bar
-    ax4 = axes[3]
+    # Panel 5: Accumulation Score + Confidence Bar
+    ax4 = axes[4]
     ax4.set_facecolor(COLORS["panel_bg"])
     ax4.tick_params(colors=COLORS["text"], labelsize=8)
 
@@ -838,7 +889,7 @@ def plot_symbol_metrics(
     x_formatter = mdates.DateFormatter("%y-%m-%d")
 
     # Format x-axis dates on ALL panels (not just bottom)
-    for ax in [axes[0], axes[1], axes[2], ax4]:
+    for ax in [axes[0], axes[1], axes[2], axes[3], ax4]:
         ax.set_xlim(x_min, x_max)
         ax.xaxis.set_major_formatter(x_formatter)
         ax.xaxis.set_major_locator(x_locator)  # Show every day
@@ -856,8 +907,8 @@ def plot_symbol_metrics(
         y=0.98,
     )
 
-    # Panel 5: Footer with definitions and table (as proper subplot)
-    ax_footer = axes[4]
+    # Panel 6: Footer with definitions and table (as proper subplot)
+    ax_footer = axes[5]
     ax_footer.set_facecolor(COLORS["background"])
     ax_footer.axis("off")  # Hide all axis elements
 
@@ -867,6 +918,7 @@ def plot_symbol_metrics(
 
     # Left side: Definitions
     footer_definitions = [
+        ("VWBR", "Volume-weighted buy/sell ratio across short sale + lit volumes"),
         ("Short Sale Ratio", "Institutional buy/sell pressure proxy from FINRA 'Daily Short-Sale Volume'"),
         ("Lit Imbalance", "Net buying vs selling on lit exchanges (positive = buyers dominate)"),
         ("OTC Participation", "Institutional dark-pool activity proxy from FINRA 'Weekly Over-The-Counter(OTC) Report'"),
@@ -891,7 +943,7 @@ def plot_symbol_metrics(
     # Table data with tighter column spacing
     score_inputs_table = [
         ("Input", "Weight", "Source", "What it measures"),  # Header
-        ("short_buy_sell_ratio_z", "55%", "FINRA Daily Short", "Z-score of short sale ratio"),
+        ("short_buy_sell_ratio_z / vwbr_z", "55%", "FINRA + Polygon", "Configurable short signal z-score"),
         ("lit_flow_imbalance_z", "30%", "Polygon Trades", "Z-score of lit imbalance"),
         ("return_z", "15%", "Polygon Daily Agg", "Z-score of price momentum"),
         ("otc_participation_z", "Mult.", "FINRA OTC Weekly", "Modulates score intensity"),
