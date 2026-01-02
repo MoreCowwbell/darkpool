@@ -948,7 +948,7 @@ def plot_symbol_metrics(
     )
 
     # Draw score bars with gradient color
-    for i, (d, score, conf) in enumerate(zip(dates, score_display, confidence)):
+    for i, (xv, score, conf) in enumerate(zip(x_values, score_display, confidence)):
         if pd.isna(score):
             score = 50
         if pd.isna(conf):
@@ -966,7 +966,7 @@ def plot_symbol_metrics(
 
         # Main score bar - height proportional to score (0-100 -> 0.0-1.0)
         bar_height = score / 100.0  # Normalize to 0-1 range
-        ax4.bar(d, bar_height, bottom=0, color=bar_color, alpha=alpha, width=0.8, zorder=2)
+        ax4.bar(xv, bar_height, bottom=0, color=bar_color, alpha=alpha, width=0.8, zorder=2)
 
         # Thin confidence bar below (shows confidence level) - colored by confidence
         conf_height = 0.08 * conf  # Scale confidence to bar height
@@ -976,13 +976,13 @@ def plot_symbol_metrics(
             conf_color = COLORS["yellow"]
         else:
             conf_color = COLORS["red"]
-        ax4.bar(d, conf_height, bottom=-0.12, color=conf_color, alpha=0.6, width=0.6, zorder=3)
+        ax4.bar(xv, conf_height, bottom=-0.12, color=conf_color, alpha=0.6, width=0.6, zorder=3)
 
         # Score label on bar (position at bar top or center, whichever is visible)
         if not pd.isna(score):
             label_y = max(bar_height / 2, 0.15)  # Ensure label is visible even for low scores
             ax4.text(
-                d,
+                xv,
                 label_y,
                 f"{score:.0f}",
                 ha="center",

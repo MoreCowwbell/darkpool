@@ -95,12 +95,12 @@ EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 # User-facing defaults (most commonly edited)
 # -----------------------------------------------------------------------------
 
-TICKERS_TYPE = ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8"]  # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8"], ["SINGLE"] 
-DEFAULT_TICKERS = ["NVDA"]
+TICKERS_TYPE = ["SINGLE"]  # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8"], ["SINGLE"] 
+DEFAULT_TICKERS = ["TQQQ", "XLE"]
 
 DEFAULT_TARGET_DATE = "2025-12-31"  # Last trading day (Monday)
 DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
-DEFAULT_BACKFILL_COUNT = 180  # Number of periods to fetch (days for daily, weeks for weekly)
+DEFAULT_BACKFILL_COUNT = 30  # Number of periods to fetch (days for daily, weeks for weekly)
 
 DEFAULT_MARKET_TZ = "US/Eastern"
 DEFAULT_RTH_START = "09:30"
@@ -129,7 +129,7 @@ DEFAULT_EXPORT_CSV = False  # Export tables to CSV files
 DEFAULT_RENDER_PRICE_CHARTS = True  # Render OHLC price charts
 DEFAULT_PRICE_BAR_TIMEFRAME = "daily"  # daily, weekly, monthly
 DEFAULT_COMBINATION_PLOT = False  # Render combined multi-ticker plot
-DEFAULT_PLOT_TRADING_GAPS = True  # Keep weekend/holiday gaps in plots
+DEFAULT_PLOT_TRADING_GAPS = False  # Keep weekend/holiday gaps in plots
 DEFAULT_PANEL1_METRIC = "finra_buy_volume"  # "vw_flow", "combined_ratio", or "finra_buy_volume"
 
 # -----------------------------------------------------------------------------
@@ -165,7 +165,7 @@ DEFAULT_INTENSITY_SCALE_MAX = 1.3  # High OTC amplifies signal
 # -----------------------------------------------------------------------------
 # Tickers with daily (0DTE) options expiration
 DAILY_EXPIRATION_TICKERS = {"SPY", "SPX", "SPXW", "QQQ", "IWM", "XSP"}
-DEFAULT_OPTIONS_STRIKE_COUNT = 30  # 30 contracts from ATM
+DEFAULT_OPTIONS_STRIKE_COUNT = 20  # 30 contracts from ATM
 DEFAULT_OPTIONS_MIN_PREMIUM_HIGHLIGHT = 4.0  # $M threshold for highlighting
 DEFAULT_FETCH_OPTIONS_PREMIUM = True  # Enable/disable options premium fetching
 

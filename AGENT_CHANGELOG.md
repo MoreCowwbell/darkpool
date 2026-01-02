@@ -366,3 +366,9 @@ Format:
 - [x] Moved experimental imbalance panel into the main sandbox figure before accumulation panels.
 - [x] Added flow-panel buy/sell threshold lines in the sandbox notebook.
 - [x] Adjusted sandbox accumulation panels: bar labels restored, slimmer bars, removed legend, unified panel heights.
+
+## 2026-01-02 Session Summary (Claude Code) - Plotter Bug Fix
+- [x] Fixed Panel 5 (accumulation score) not rendering when `plot_trading_gaps=False`.
+  - Root cause: Panel 5 used `dates` (datetime) for bar positioning instead of `x_values` (integer indices).
+  - When `plot_trading_gaps=False`, bars were drawn at datetime positions on an integer-indexed x-axis (off-screen).
+  - Fix: Changed loop variable from `dates` to `x_values` for bar/text positioning (lines 951, 969, 979, 985).
