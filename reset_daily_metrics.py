@@ -1,18 +1,32 @@
-# instruction to celar database without loosing raw data
-# python reset_daily_metrics.py
-# python reset_daily_metrics.py --mode reset-vwflow
+#--------------------------------------
+### instruction to claar database without loosing raw data
+#--------------------------------------
 
+# python reset_daily_metrics.py
+## simple reset of all daily metrics
+
+# python reset_daily_metrics.py --mode reset-vwflow
 ## Keeps all rows, but sets vwbr, vwbr_z, and accumulation_short_z_source to NULL in daily_metrics.
 ## This forces a recompute of VW Flow without wiping other metrics.
 ## Prompts for DELETE to confirm.
 
 # python reset_daily_metrics.py --mode delete --include-index --yes
-
 ## Deletes all rows in daily_metrics and index_constituent_short_agg_daily.
 ## --yes skips the confirmation prompt.
 
+# python reset_daily_metrics.py --mode delete-keep-lit
+## Deletes all non-lit tables but keeps:
+## - polygon_equity_trades_raw (tick data)
+## - lit_direction_daily (derived lit flow)
+## - polygon_ingestion_state (cache keys)
+## Prompts for DELETE to confirm.
+
+### Example with dates
 # python reset_daily_metrics.py --mode reset-vwflow --start-date 2025-11-01 --end-date 2025-12-31
 # python reset_daily_metrics.py --mode delete --start-date 2025-11-01 --end-date 2025-12-31 --include-index
+# python reset_daily_metrics.py --mode delete-keep-lit --start-date 2025-11-01 --end-date 2025-12-31
+# python reset_daily_metrics.py --mode delete-keep-lit --start-date 2025-11-01 --end-date 2025-12-31
+#----------------------------------------
 
 
 
@@ -69,9 +83,13 @@ def main() -> int:
     parser.add_argument(
         "--mode",
         type=str,
-        choices=["delete", "reset-vwflow"],
+        choices=["delete", "reset-vwflow", "delete-keep-lit"],
         default="delete",
-        help="delete: remove daily_metrics rows; reset-vwflow: NULL vw flow fields.",
+        help=(
+            "delete: remove daily_metrics rows; "
+            "reset-vwflow: NULL vw flow fields; "
+            "delete-keep-lit: clear all non-lit tables."
+        ),
     )
     parser.add_argument(
         "--start-date",
@@ -142,6 +160,45 @@ def main() -> int:
                 else:
                     conn.execute("DELETE FROM index_constituent_short_agg_daily")
             print("Delete complete.")
+        elif args.mode == "delete-keep-lit":
+            action = (
+                "This will DELETE all non-lit tables (daily_metrics, index_constituent_short_agg_daily, "
+                "finra_otc_weekly_raw, finra_short_daily_raw, finra_short_daily_all_raw, "
+                "polygon_daily_agg_raw, options_premium_daily, options_premium_summary, "
+                "scanner_daily_metrics, composite_signal). "
+                "It will KEEP polygon_equity_trades_raw, lit_direction_daily, and polygon_ingestion_state."
+            )
+            if not args.yes and not _confirm(action):
+                print("Aborted.")
+                return 1
+
+            tables_to_clear = [
+                ("daily_metrics", "date"),
+                ("index_constituent_short_agg_daily", "trade_date"),
+                ("finra_otc_weekly_raw", "week_start_date"),
+                ("finra_short_daily_raw", "trade_date"),
+                ("finra_short_daily_all_raw", "trade_date"),
+                ("polygon_daily_agg_raw", "trade_date"),
+                ("options_premium_daily", "trade_date"),
+                ("options_premium_summary", "trade_date"),
+                ("scanner_daily_metrics", "date"),
+                ("composite_signal", "date"),
+            ]
+            for table, date_col in tables_to_clear:
+                exists = conn.execute(
+                    "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = ?",
+                    [table],
+                ).fetchone()[0]
+                if not exists:
+                    continue
+                if start_date and end_date:
+                    conn.execute(
+                        f"DELETE FROM {table} WHERE {date_col} >= ? AND {date_col} <= ?",
+                        [start_date, end_date],
+                    )
+                else:
+                    conn.execute(f"DELETE FROM {table}")
+            print("Non-lit tables cleared.")
         else:
             action = "This will NULL vw flow fields in daily_metrics (vwbr, vwbr_z, accumulation_short_z_source)."
             if not args.yes and not _confirm(action):

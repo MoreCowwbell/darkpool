@@ -357,3 +357,4 @@ Format:
 - [x] Updated plotter footer/legend to reflect the selected panel 1 metric.
 - [x] Added `accumulation_signal_sandbox.ipynb` with three score variants and dot overlay options.
 - [x] Documented PANEL1_METRIC and new formulas in `darkpool_analysis/README.md`.
+- [x] Added reset mode to clear non-lit tables while preserving tick data and lit outputs.
