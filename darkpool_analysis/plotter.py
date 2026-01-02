@@ -2,7 +2,8 @@
 Multi-panel dark-theme plotter for daily metrics.
 
 Generates PNG visualizations from DuckDB daily_metrics data:
-- Layered: VW Flow, short sale buy/sell ratio, lit flow imbalance, OTC participation, accumulation score
+- Layered: configurable panel 1 metric, short sale buy/sell ratio, lit flow imbalance,
+  OTC participation, accumulation score
 - Short-only: short ratio, short sale volume, close price
 """
 from __future__ import annotations
@@ -58,6 +59,27 @@ BAR_ALPHA_SECONDARY = 0.25
 BOT_THRESHOLD = 1.25
 SELL_THRESHOLD = 0.75
 NEUTRAL_RATIO = 1.0
+DEFAULT_PANEL1_METRIC = "vw_flow"
+PANEL1_METRICS = {
+    "vw_flow": {
+        "label": "Volume Weighted Directional Flow",
+        "legend": "VW Flow",
+        "axis": "flow",
+        "definition": "Net buy minus sell volume across short sale + lit markets",
+    },
+    "combined_ratio": {
+        "label": "Combined Buy/Sell Ratio",
+        "legend": "Combined Ratio",
+        "axis": "ratio",
+        "definition": "Ratio of (short + lit) buy volume to (short + lit) sell volume",
+    },
+    "finra_buy_volume": {
+        "label": "FINRA Buy Volume (B)",
+        "legend": "FINRA Buy Vol",
+        "axis": "volume",
+        "definition": "FINRA daily short sale buy volume proxy (B)",
+    },
+}
 
 
 def _clean_upper_bound(value: float, min_upper: float = 2.0) -> float:
@@ -195,6 +217,21 @@ def _set_flow_axis(
     )
 
 
+def _set_volume_axis(
+    ax,
+    values: pd.Series,
+    padding_ratio: float = 0.1,
+) -> None:
+    series = pd.to_numeric(values, errors="coerce")
+    max_val = series.max(skipna=True)
+    if pd.isna(max_val) or max_val <= 0:
+        max_val = 1.0
+    y_max = max_val * (1 + padding_ratio)
+    ax.set_ylim(0, y_max)
+    ax.set_yticks(np.linspace(0, y_max, 5))
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: _format_volume(x)))
+
+
 def _set_log_ratio_axis(
     ax,
     values: pd.Series,
@@ -237,6 +274,41 @@ def _add_ratio_thresholds(ax, bot: float = BOT_THRESHOLD, sell: float = SELL_THR
         zorder=1,
     )
 
+
+def _resolve_panel1_metric(value: str | None) -> str:
+    if not value:
+        return DEFAULT_PANEL1_METRIC
+    normalized = value.strip().lower()
+    if normalized in PANEL1_METRICS:
+        return normalized
+    logger.warning("Unknown panel1_metric '%s'; defaulting to %s.", value, DEFAULT_PANEL1_METRIC)
+    return DEFAULT_PANEL1_METRIC
+
+
+def _compute_combined_ratio(df: pd.DataFrame) -> pd.Series:
+    short_buy = pd.to_numeric(df.get("short_buy_volume"), errors="coerce")
+    short_sell = pd.to_numeric(df.get("short_sell_volume"), errors="coerce")
+    lit_buy = pd.to_numeric(df.get("lit_buy_volume"), errors="coerce")
+    lit_sell = pd.to_numeric(df.get("lit_sell_volume"), errors="coerce")
+    total_buy = short_buy.fillna(0.0) + lit_buy.fillna(0.0)
+    total_sell = short_sell.fillna(0.0) + lit_sell.fillna(0.0)
+    ratio = pd.Series(np.nan, index=df.index)
+    valid = total_sell > 0
+    ratio.loc[valid] = total_buy.loc[valid] / total_sell.loc[valid]
+    return ratio
+
+
+def _compute_vw_flow(df: pd.DataFrame) -> pd.Series:
+    short_buy = pd.to_numeric(df.get("short_buy_volume"), errors="coerce")
+    short_sell = pd.to_numeric(df.get("short_sell_volume"), errors="coerce")
+    lit_buy = pd.to_numeric(df.get("lit_buy_volume"), errors="coerce")
+    lit_sell = pd.to_numeric(df.get("lit_sell_volume"), errors="coerce")
+    total_buy = short_buy.fillna(0.0) + lit_buy.fillna(0.0)
+    total_sell = short_sell.fillna(0.0) + lit_sell.fillna(0.0)
+    flow = pd.Series(np.nan, index=df.index)
+    has_flow = short_buy.notna() | short_sell.notna() | lit_buy.notna() | lit_sell.notna()
+    flow.loc[has_flow] = total_buy.loc[has_flow] - total_sell.loc[has_flow]
+    return flow
 def fetch_metrics_for_plot(
     conn: duckdb.DuckDBPyConnection,
     symbol: str,
@@ -255,11 +327,15 @@ def fetch_metrics_for_plot(
             short_ratio_z,
             short_buy_sell_ratio,
             short_buy_sell_ratio_z,
+            combined_ratio,
+            vw_flow,
+            finra_buy_volume,
             vwbr,
             vwbr_z,
             short_ratio_denominator_type,
             short_ratio_denominator_value,
             short_buy_volume,
+            short_sell_volume,
             log_buy_sell,
             lit_buy_ratio,
             lit_buy_ratio_z,
@@ -383,11 +459,12 @@ def plot_symbol_metrics(
     output_path: Path,
     title_suffix: str = "",
     plot_trading_gaps: bool = True,
+    panel1_metric: str | None = None,
 ) -> Path:
     """
     Generate a multi-panel plot plus footer for a single symbol.
 
-    Panel 1: Volume Weighted Directional Flow (VW Flow)
+    Panel 1: Configurable metric (VW Flow, combined ratio, or FINRA buy volume)
     Panel 2: Short Sale Buy/Sell Ratio
     Panel 3: Lit Flow Imbalance
     Panel 4: OTC Participation Rate
@@ -427,15 +504,31 @@ def plot_symbol_metrics(
     dates = df["date"]
     x_values, x_labels = _build_plot_x(df, plot_trading_gaps)
 
-    # Panel 1: Volume Weighted Directional Flow (VW Flow)
+    # Panel 1: Configurable metric
     ax0 = axes[0]
-    vw_flow = df["vwbr"]
-    valid_mask0 = ~vw_flow.isna()
+    panel1_key = _resolve_panel1_metric(panel1_metric)
+    panel1_meta = PANEL1_METRICS[panel1_key]
+
+    if panel1_key == "vw_flow":
+        panel1_series = df["vw_flow"] if "vw_flow" in df.columns else df["vwbr"]
+        if panel1_series.isna().all():
+            panel1_series = _compute_vw_flow(df)
+    elif panel1_key == "combined_ratio":
+        panel1_series = df["combined_ratio"] if "combined_ratio" in df.columns else _compute_combined_ratio(df)
+        if panel1_series.isna().all():
+            panel1_series = _compute_combined_ratio(df)
+    else:
+        panel1_series = df["finra_buy_volume"] if "finra_buy_volume" in df.columns else df["short_buy_volume"]
+        if panel1_series.isna().all():
+            panel1_series = df["short_buy_volume"]
+
+    panel1_series = pd.to_numeric(panel1_series, errors="coerce")
+    valid_mask0 = ~panel1_series.isna()
     if valid_mask0.any():
-        _plot_smooth_line(ax0, x_values, vw_flow, COLORS["cyan"], valid_mask0, linewidth=PANEL1_LINE_WIDTH)
+        _plot_smooth_line(ax0, x_values, panel1_series, COLORS["cyan"], valid_mask0, linewidth=PANEL1_LINE_WIDTH)
         ax0.scatter(
             x_values[valid_mask0],
-            vw_flow[valid_mask0],
+            panel1_series[valid_mask0],
             c=COLORS["cyan"],
             s=MARKER_SIZE,
             zorder=5,
@@ -443,11 +536,25 @@ def plot_symbol_metrics(
             linewidths=0.4,
         )
 
-    _set_flow_axis(ax0, vw_flow)
-    ax0.set_ylabel("Volume Weighted Directional Flow", color=YLABEL_COLOR, fontsize=YLABEL_SIZE)
-    ax0.set_title("Volume Weighted Directional Flow", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
+    if panel1_meta["axis"] == "flow":
+        _set_flow_axis(ax0, panel1_series)
+    elif panel1_meta["axis"] == "ratio":
+        _set_abs_ratio_axis(
+            ax0,
+            panel1_series,
+            neutral_value=NEUTRAL_RATIO,
+            linestyle="--",
+            linewidth=THRESHOLD_LINE_WIDTH,
+            alpha=0.6,
+        )
+        _add_ratio_thresholds(ax0, bot=BOT_THRESHOLD, sell=SELL_THRESHOLD)
+    else:
+        _set_volume_axis(ax0, panel1_series)
+
+    ax0.set_ylabel(panel1_meta["label"], color=YLABEL_COLOR, fontsize=YLABEL_SIZE)
+    ax0.set_title(panel1_meta["label"], color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
     legend_handles_0 = [
-        Line2D([0], [0], color=COLORS["cyan"], linewidth=MAIN_LINE_WIDTH, label="VW Flow"),
+        Line2D([0], [0], color=COLORS["cyan"], linewidth=MAIN_LINE_WIDTH, label=panel1_meta["legend"]),
     ]
     legend0 = ax0.legend(
         legend_handles_0,
@@ -973,7 +1080,7 @@ def plot_symbol_metrics(
 
     # Left side: Definitions
     footer_definitions = [
-        ("VW Flow", "Volume-weighted directional flow across short sale + lit volumes"),
+        (panel1_meta["label"], panel1_meta["definition"]),
         ("Short Sale Ratio", "Institutional buy/sell pressure proxy from FINRA 'Daily Short-Sale Volume'"),
         ("Lit Imbalance", "Net buying vs selling on lit exchanges (positive = buyers dominate)"),
         ("OTC Participation", "Institutional dark-pool activity proxy from FINRA 'Weekly Over-The-Counter(OTC) Report'"),
@@ -1226,6 +1333,7 @@ def render_metrics_plots(
     tickers: list[str],
     mode: str = "layered",
     plot_trading_gaps: bool = True,
+    panel1_metric: str | None = None,
 ) -> list[Path]:
     """Render multi-panel plots for each ticker."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1252,7 +1360,13 @@ def render_metrics_plots(
 
             if mode in ("layered", "both"):
                 output_path = output_dir / f"{symbol.lower()}_metrics_{file_suffix}.png"
-                plot_symbol_metrics(df, symbol, output_path, plot_trading_gaps=plot_trading_gaps)
+                plot_symbol_metrics(
+                    df,
+                    symbol,
+                    output_path,
+                    plot_trading_gaps=plot_trading_gaps,
+                    panel1_metric=panel1_metric,
+                )
                 output_paths.append(output_path)
 
             if mode in ("short_only", "both"):
@@ -1300,6 +1414,13 @@ def main() -> None:
         choices=["true", "false"],
         help="Show gaps for non-trading days (true/false). Defaults to config.",
     )
+    parser.add_argument(
+        "--panel1-metric",
+        type=str,
+        default=None,
+        choices=sorted(PANEL1_METRICS.keys()),
+        help="Panel 1 metric: vw_flow, combined_ratio, or finra_buy_volume (default: config).",
+    )
 
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -1317,6 +1438,7 @@ def main() -> None:
     plot_trading_gaps = config.plot_trading_gaps
     if args.plot_trading_gaps is not None:
         plot_trading_gaps = args.plot_trading_gaps.lower() == "true"
+    panel1_metric = args.panel1_metric or config.panel1_metric
 
     paths = render_metrics_plots(
         db_path=config.db_path,
@@ -1325,6 +1447,7 @@ def main() -> None:
         tickers=tickers,
         mode=args.mode,
         plot_trading_gaps=plot_trading_gaps,
+        panel1_metric=panel1_metric,
     )
     print(f"Generated {len(paths)} plot(s)")
 

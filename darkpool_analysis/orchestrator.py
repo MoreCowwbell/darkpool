@@ -97,7 +97,14 @@ def _metrics_are_complete(
         return False
 
     # Key columns that must have at least some non-null values for data to be "complete"
-    key_columns = ['accumulation_score', 'short_ratio', 'lit_flow_imbalance', 'vwbr']
+    key_columns = [
+        "accumulation_score",
+        "short_ratio",
+        "lit_flow_imbalance",
+        "combined_ratio",
+        "vw_flow",
+        "finra_buy_volume",
+    ]
 
     for col in key_columns:
         if col in existing_metrics.columns:
@@ -370,6 +377,7 @@ def main() -> None:
             tickers=config.tickers,
             mode="layered",
             plot_trading_gaps=config.plot_trading_gaps,
+            panel1_metric=config.panel1_metric,
         )
     except Exception as exc:
         logging.error("Failed to render metrics plots: %s", exc)

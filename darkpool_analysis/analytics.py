@@ -434,17 +434,28 @@ def build_daily_metrics(
         .transform(lambda s: _rolling_zscore(s, config.short_z_window, config.zscore_min_periods))
     )
 
-    # Volume-weighted directional flow across short + lit volumes (signed).
-    merged["vwbr"] = pd.NA
     short_buy = pd.to_numeric(merged["short_buy_volume"], errors="coerce")
     short_sell = pd.to_numeric(merged["short_sell_volume"], errors="coerce")
     lit_buy = pd.to_numeric(merged["lit_buy_volume"], errors="coerce")
     lit_sell = pd.to_numeric(merged["lit_sell_volume"], errors="coerce")
     total_buy = short_buy.fillna(0.0) + lit_buy.fillna(0.0)
     total_sell = short_sell.fillna(0.0) + lit_sell.fillna(0.0)
+
+    merged["combined_ratio"] = pd.NA
+    valid_combined = total_sell > 0
+    merged.loc[valid_combined, "combined_ratio"] = total_buy[valid_combined] / total_sell[valid_combined]
+    merged["combined_ratio"] = pd.to_numeric(merged["combined_ratio"], errors="coerce")
+
+    # Volume-weighted directional flow across short + lit volumes (signed).
+    merged["vw_flow"] = pd.NA
     has_flow = short_buy.notna() | short_sell.notna() | lit_buy.notna() | lit_sell.notna()
-    merged.loc[has_flow, "vwbr"] = total_buy[has_flow] - total_sell[has_flow]
-    merged["vwbr"] = pd.to_numeric(merged["vwbr"], errors="coerce")
+    merged.loc[has_flow, "vw_flow"] = total_buy[has_flow] - total_sell[has_flow]
+    merged["vw_flow"] = pd.to_numeric(merged["vw_flow"], errors="coerce")
+
+    merged["finra_buy_volume"] = pd.to_numeric(merged["short_buy_volume"], errors="coerce")
+
+    # Keep vwbr/vwbr_z for backward compatibility (vw_flow under legacy column name).
+    merged["vwbr"] = merged["vw_flow"]
     merged["vwbr_z"] = (
         merged.sort_values(["symbol", "date"])
         .groupby("symbol")["vwbr"]
@@ -613,6 +624,9 @@ def build_daily_metrics(
             "short_ratio_z",
             "short_buy_sell_ratio",
             "short_buy_sell_ratio_z",
+            "combined_ratio",
+            "vw_flow",
+            "finra_buy_volume",
             "vwbr",
             "vwbr_z",
             "short_ratio_denominator_type",

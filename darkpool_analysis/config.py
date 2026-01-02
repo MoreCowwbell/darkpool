@@ -130,6 +130,7 @@ DEFAULT_RENDER_PRICE_CHARTS = True  # Render OHLC price charts
 DEFAULT_PRICE_BAR_TIMEFRAME = "daily"  # daily, weekly, monthly
 DEFAULT_COMBINATION_PLOT = False  # Render combined multi-ticker plot
 DEFAULT_PLOT_TRADING_GAPS = True  # Keep weekend/holiday gaps in plots
+DEFAULT_PANEL1_METRIC = "vw_flow"  # "vw_flow", "combined_ratio", or "finra_buy_volume"
 
 # -----------------------------------------------------------------------------
 # Provenance and scoring controls
@@ -336,6 +337,7 @@ class Config:
     price_bar_timeframe: str
     combination_plot: bool
     plot_trading_gaps: bool
+    panel1_metric: str
     polygon_api_key: Optional[str]
     polygon_base_url: str
     polygon_trades_file: Optional[str]
@@ -501,6 +503,7 @@ def load_config() -> Config:
         plot_trading_gaps=os.getenv(
             "PLOT_TRADING_GAPS", str(DEFAULT_PLOT_TRADING_GAPS)
         ).lower() in ("true", "1", "yes"),
+        panel1_metric=os.getenv("PANEL1_METRIC", DEFAULT_PANEL1_METRIC).lower(),
         polygon_api_key=os.getenv("POLYGON_API_KEY"),
         polygon_base_url=os.getenv("POLYGON_BASE_URL", DEFAULT_POLYGON_BASE_URL),
         polygon_trades_file=polygon_trades_file,

@@ -65,6 +65,7 @@ Core:
 - RENDER_PRICE_CHARTS (true/false)
 - PRICE_BAR_TIMEFRAME (daily, weekly, monthly)
 - PLOT_TRADING_GAPS (true/false)
+- PANEL1_METRIC (vw_flow, combined_ratio, finra_buy_volume)
 
 Polygon:
 - POLYGON_API_KEY (required for API fetch)
@@ -144,7 +145,7 @@ Key knobs:
 - `palette` (muted green/red and neutral tones)
 
 ## Plot Modes
-- layered (default): 5-panel visualization with VW Flow, short sale buy ratio, lit flow imbalance, OTC participation, and accumulation score.
+- layered (default): 5-panel visualization with configurable panel 1 metric, short sale buy ratio, lit flow imbalance, OTC participation, and accumulation score.
 - short_only: short ratio, short sale volume, close price.
 - both: render layered and short_only together.
 Use `PLOT_TRADING_GAPS=false` to compress non-trading days on the x-axis.
@@ -152,14 +153,17 @@ Use `PLOT_TRADING_GAPS=false` to compress non-trading days on the x-axis.
 Example:
 ```
 python plotter.py --dates 2025-12-20 --mode short_only
+python plotter.py --dates 2025-12-20 --panel1-metric combined_ratio
 python plotter_chart.py --dates 2025-12-20 --timeframe daily
 ```
 
 ## How to Read the Plot (Layered Mode)
 
-**Panel 1: Volume Weighted Directional Flow (VW Flow)**
-- Signed net flow across short sale + lit volumes
-- Raw volume units (no normalization)
+**Panel 1: Configurable Flow Metric**
+- PANEL1_METRIC choices: vw_flow, combined_ratio, finra_buy_volume
+- vw_flow: signed net flow across short sale + lit volumes
+- combined_ratio: (short + lit) buy / (short + lit) sell
+- finra_buy_volume: FINRA daily short sale buy volume proxy (B)
 
 **Panel 2: Short Sale Buy/Sell Ratio (~50% height)**
 - Primary signal: Short volume / (Total volume - Short volume)
@@ -196,6 +200,16 @@ short_buy_sell_ratio = short_buy_volume / short_sell_volume
 **VW Flow (Volume Weighted Directional Flow):**
 ```
 vw_flow = (short_buy_volume + lit_buy_volume) - (short_sell_volume + lit_sell_volume)
+```
+
+**Combined Buy/Sell Ratio:**
+```
+combined_ratio = (short_buy_volume + lit_buy_volume) / (short_sell_volume + lit_sell_volume)
+```
+
+**FINRA Buy Volume (B):**
+```
+finra_buy_volume = short_buy_volume
 ```
 
 **Lit Flow Imbalance (bounded [-1, +1]):**

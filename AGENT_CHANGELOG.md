@@ -351,3 +351,9 @@ Format:
 - [x] Replaced VWBR ratio with volume-weighted directional flow and updated plots/docs.
 - [x] Added `reset_daily_metrics.py` to clear or reset daily metrics without touching raw tables.
 - [x] Added date-range filters to `reset_daily_metrics.py` for targeted resets.
+## 2026-01-02 Session Summary (Codex)
+- [x] Added combined_ratio, vw_flow, and finra_buy_volume columns to daily_metrics and analytics output.
+- [x] Added PANEL1_METRIC config and plotter support for configurable panel 1 metric.
+- [x] Updated plotter footer/legend to reflect the selected panel 1 metric.
+- [x] Added `accumulation_signal_sandbox.ipynb` with three score variants and dot overlay options.
+- [x] Documented PANEL1_METRIC and new formulas in `darkpool_analysis/README.md`.
