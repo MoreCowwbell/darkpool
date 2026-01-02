@@ -144,7 +144,7 @@ Key knobs:
 - `palette` (muted green/red and neutral tones)
 
 ## Plot Modes
-- layered (default): 5-panel visualization with VWBR, short sale buy ratio, lit flow imbalance, OTC participation, and accumulation score.
+- layered (default): 5-panel visualization with VW Flow, short sale buy ratio, lit flow imbalance, OTC participation, and accumulation score.
 - short_only: short ratio, short sale volume, close price.
 - both: render layered and short_only together.
 Use `PLOT_TRADING_GAPS=false` to compress non-trading days on the x-axis.
@@ -157,9 +157,9 @@ python plotter_chart.py --dates 2025-12-20 --timeframe daily
 
 ## How to Read the Plot (Layered Mode)
 
-**Panel 1: Volume Weighted Buy Ratio (VWBR)**
-- Combined buy/sell ratio across short sale + lit volumes
-- Thresholds: >1.25 = Bullish (BOT), <0.75 = Bearish (SELL), ~1.0 = Neutral
+**Panel 1: Volume Weighted Directional Flow (VW Flow)**
+- Signed net flow across short sale + lit volumes
+- Raw volume units (no normalization)
 
 **Panel 2: Short Sale Buy/Sell Ratio (~50% height)**
 - Primary signal: Short volume / (Total volume - Short volume)
@@ -193,9 +193,9 @@ short_sell_volume = total_volume - short_volume
 short_buy_sell_ratio = short_buy_volume / short_sell_volume
 ```
 
-**VWBR (Volume Weighted Buy Ratio):**
+**VW Flow (Volume Weighted Directional Flow):**
 ```
-vwbr = (short_buy_volume + lit_buy_volume) / (short_sell_volume + lit_sell_volume)
+vw_flow = (short_buy_volume + lit_buy_volume) - (short_sell_volume + lit_sell_volume)
 ```
 
 **Lit Flow Imbalance (bounded [-1, +1]):**

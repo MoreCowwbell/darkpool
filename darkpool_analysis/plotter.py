@@ -2,7 +2,7 @@
 Multi-panel dark-theme plotter for daily metrics.
 
 Generates PNG visualizations from DuckDB daily_metrics data:
-- Layered: VWBR, short sale buy/sell ratio, lit flow imbalance, OTC participation, accumulation score
+- Layered: VW Flow, short sale buy/sell ratio, lit flow imbalance, OTC participation, accumulation score
 - Short-only: short ratio, short sale volume, close price
 """
 from __future__ import annotations
@@ -166,6 +166,31 @@ def _set_abs_ratio_axis(
         linestyle=linestyle,
         linewidth=linewidth,
         alpha=alpha,
+        zorder=1,
+    )
+
+
+def _set_flow_axis(
+    ax,
+    values: pd.Series,
+    padding_ratio: float = 0.1,
+) -> Line2D:
+    series = pd.to_numeric(values, errors="coerce")
+    max_abs = series.abs().max(skipna=True)
+    if pd.isna(max_abs) or max_abs == 0:
+        max_abs = 1.0
+    padding = max(max_abs * padding_ratio, 1.0)
+    y_max = max_abs + padding
+    y_min = -y_max
+    ax.set_ylim(y_min, y_max)
+    ax.set_yticks(np.linspace(y_min, y_max, 5))
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: _format_volume(x)))
+    return ax.axhline(
+        y=0.0,
+        color=COLORS["neutral"],
+        linestyle="--",
+        linewidth=CENTERLINE_WIDTH,
+        alpha=0.7,
         zorder=1,
     )
 
@@ -362,7 +387,7 @@ def plot_symbol_metrics(
     """
     Generate a multi-panel plot plus footer for a single symbol.
 
-    Panel 1: Volume Weighted Buy Ratio (VWBR)
+    Panel 1: Volume Weighted Directional Flow (VW Flow)
     Panel 2: Short Sale Buy/Sell Ratio
     Panel 3: Lit Flow Imbalance
     Panel 4: OTC Participation Rate
@@ -402,15 +427,15 @@ def plot_symbol_metrics(
     dates = df["date"]
     x_values, x_labels = _build_plot_x(df, plot_trading_gaps)
 
-    # Panel 1: Volume Weighted Buy Ratio (VWBR)
+    # Panel 1: Volume Weighted Directional Flow (VW Flow)
     ax0 = axes[0]
-    vwbr = df["vwbr"]
-    valid_mask0 = ~vwbr.isna()
+    vw_flow = df["vwbr"]
+    valid_mask0 = ~vw_flow.isna()
     if valid_mask0.any():
-        _plot_smooth_line(ax0, x_values, vwbr, COLORS["cyan"], valid_mask0, linewidth=PANEL1_LINE_WIDTH)
+        _plot_smooth_line(ax0, x_values, vw_flow, COLORS["cyan"], valid_mask0, linewidth=PANEL1_LINE_WIDTH)
         ax0.scatter(
             x_values[valid_mask0],
-            vwbr[valid_mask0],
+            vw_flow[valid_mask0],
             c=COLORS["cyan"],
             s=MARKER_SIZE,
             zorder=5,
@@ -418,21 +443,11 @@ def plot_symbol_metrics(
             linewidths=0.4,
         )
 
-    _set_abs_ratio_axis(
-        ax0,
-        vwbr,
-        neutral_value=NEUTRAL_RATIO,
-        linestyle="--",
-        linewidth=THRESHOLD_LINE_WIDTH,
-        alpha=0.6,
-    )
-    _add_ratio_thresholds(ax0, bot=BOT_THRESHOLD, sell=SELL_THRESHOLD)
-    ax0.set_ylabel("Volume Weighted Buy Ratio (VWBR)", color=YLABEL_COLOR, fontsize=YLABEL_SIZE)
-    ax0.set_title("Volume Weighted Buy Ratio (VWBR)", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
+    _set_flow_axis(ax0, vw_flow)
+    ax0.set_ylabel("Volume Weighted Directional Flow", color=YLABEL_COLOR, fontsize=YLABEL_SIZE)
+    ax0.set_title("Volume Weighted Directional Flow", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
     legend_handles_0 = [
-        Line2D([0], [0], color=COLORS["cyan"], linewidth=MAIN_LINE_WIDTH, label="VWBR"),
-        Line2D([0], [0], color=COLORS["green"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="BOT (1.25)"),
-        Line2D([0], [0], color=COLORS["red"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="SELL (0.75)"),
+        Line2D([0], [0], color=COLORS["cyan"], linewidth=MAIN_LINE_WIDTH, label="VW Flow"),
     ]
     legend0 = ax0.legend(
         legend_handles_0,
@@ -958,7 +973,7 @@ def plot_symbol_metrics(
 
     # Left side: Definitions
     footer_definitions = [
-        ("VWBR", "Volume-weighted buy/sell ratio across short sale + lit volumes"),
+        ("VW Flow", "Volume-weighted directional flow across short sale + lit volumes"),
         ("Short Sale Ratio", "Institutional buy/sell pressure proxy from FINRA 'Daily Short-Sale Volume'"),
         ("Lit Imbalance", "Net buying vs selling on lit exchanges (positive = buyers dominate)"),
         ("OTC Participation", "Institutional dark-pool activity proxy from FINRA 'Weekly Over-The-Counter(OTC) Report'"),
@@ -983,7 +998,7 @@ def plot_symbol_metrics(
     # Table data with tighter column spacing
     score_inputs_table = [
         ("Input", "Weight", "Source", "What it measures"),  # Header
-        ("short_buy_sell_ratio_z / vwbr_z", "55%", "FINRA + Polygon", "Configurable short signal z-score"),
+        ("short_buy_sell_ratio_z / vwbr_z", "55%", "FINRA + Polygon", "Configurable short signal z-score (flow z-score)"),
         ("lit_flow_imbalance_z", "30%", "Polygon Trades", "Z-score of lit imbalance"),
         ("return_z", "15%", "Polygon Daily Agg", "Z-score of price momentum"),
         ("otc_participation_z", "Mult.", "FINRA OTC Weekly", "Modulates score intensity"),

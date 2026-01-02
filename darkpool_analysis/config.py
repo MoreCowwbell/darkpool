@@ -94,10 +94,10 @@ EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 # -----------------------------------------------------------------------------
 # User-facing defaults (most commonly edited)
 # -----------------------------------------------------------------------------
-TICKERS_TYPE = ["SINGLE"]  # ["SINGLE", "SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8"]
-DEFAULT_TICKERS = ["NKE", "META"]
-DEFAULT_INCLUDE_POLYGON_ONLY_TICKERS = True  # Include tickers without FINRA coverage
 
+TICKERS_TYPE = ["SECTOR"]  # ["SINGLE", "SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8"]
+
+DEFAULT_TICKERS = ["NKE", "META"]
 DEFAULT_TARGET_DATE = "2025-12-31"  # Last trading day (Monday)
 DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
 DEFAULT_BACKFILL_COUNT = 30  # Number of periods to fetch (days for daily, weeks for weekly)
@@ -105,8 +105,8 @@ DEFAULT_BACKFILL_COUNT = 30  # Number of periods to fetch (days for daily, weeks
 DEFAULT_MARKET_TZ = "US/Eastern"
 DEFAULT_RTH_START = "09:30"
 DEFAULT_RTH_END = "16:15"
-
 DEFAULT_MIN_LIT_VOLUME = 10000  # Minimum lit volume for ratios to be valid
+DEFAULT_INCLUDE_POLYGON_ONLY_TICKERS = True  # Include tickers without FINRA coverage
 
 # -----------------------------------------------------------------------------
 # Polygon Trades Mode (controls data granularity for lit direction inference)
@@ -137,7 +137,7 @@ DEFAULT_PLOT_TRADING_GAPS = True  # Keep weekend/holiday gaps in plots
 # This string is stored in the database to track which algorithm version
 # produced the data. Useful for debugging and reproducibility.
 DEFAULT_INFERENCE_VERSION = "PhaseA_v1"
-DEFAULT_ACCUMULATION_SHORT_Z_SOURCE = "short_buy_sell_ratio_z"  # "short_buy_sell_ratio_z" or "vwbr_z"
+DEFAULT_ACCUMULATION_SHORT_Z_SOURCE = "short_buy_sell_ratio_z"  # "short_buy_sell_ratio_z" or "vwbr_z" (flow z-score)
 
 # Z-score windows and thresholds
 DEFAULT_SHORT_Z_WINDOW = 20

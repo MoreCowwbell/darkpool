@@ -434,16 +434,16 @@ def build_daily_metrics(
         .transform(lambda s: _rolling_zscore(s, config.short_z_window, config.zscore_min_periods))
     )
 
-    # Volume-weighted buy/sell ratio across short + lit volumes.
+    # Volume-weighted directional flow across short + lit volumes (signed).
     merged["vwbr"] = pd.NA
-    short_buy = pd.to_numeric(merged["short_buy_volume"], errors="coerce").fillna(0.0)
-    short_sell = pd.to_numeric(merged["short_sell_volume"], errors="coerce").fillna(0.0)
-    lit_buy = pd.to_numeric(merged["lit_buy_volume"], errors="coerce").fillna(0.0)
-    lit_sell = pd.to_numeric(merged["lit_sell_volume"], errors="coerce").fillna(0.0)
-    total_buy = short_buy + lit_buy
-    total_sell = short_sell + lit_sell
-    valid_vwbr = (total_sell > 0) & ((total_buy + total_sell) > 0)
-    merged.loc[valid_vwbr, "vwbr"] = total_buy[valid_vwbr] / total_sell[valid_vwbr]
+    short_buy = pd.to_numeric(merged["short_buy_volume"], errors="coerce")
+    short_sell = pd.to_numeric(merged["short_sell_volume"], errors="coerce")
+    lit_buy = pd.to_numeric(merged["lit_buy_volume"], errors="coerce")
+    lit_sell = pd.to_numeric(merged["lit_sell_volume"], errors="coerce")
+    total_buy = short_buy.fillna(0.0) + lit_buy.fillna(0.0)
+    total_sell = short_sell.fillna(0.0) + lit_sell.fillna(0.0)
+    has_flow = short_buy.notna() | short_sell.notna() | lit_buy.notna() | lit_sell.notna()
+    merged.loc[has_flow, "vwbr"] = total_buy[has_flow] - total_sell[has_flow]
     merged["vwbr"] = pd.to_numeric(merged["vwbr"], errors="coerce")
     merged["vwbr_z"] = (
         merged.sort_values(["symbol", "date"])

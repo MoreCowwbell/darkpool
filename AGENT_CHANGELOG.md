@@ -348,3 +348,6 @@ Format:
 - [x] Forced OTC merge_asof join keys to datetime64[ns] to avoid dtype mismatch.
 - [x] Centralized US market holiday calendar and added plot toggle for trading-day gaps.
 - [x] Reordered config defaults and clarified annotations for common inputs.
+- [x] Replaced VWBR ratio with volume-weighted directional flow and updated plots/docs.
+- [x] Added `reset_daily_metrics.py` to clear or reset daily metrics without touching raw tables.
+- [x] Added date-range filters to `reset_daily_metrics.py` for targeted resets.
