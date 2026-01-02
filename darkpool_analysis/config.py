@@ -19,9 +19,10 @@ except ImportError:
 # =============================================================================
 # Default Configuration (can be overridden via .env)
 # =============================================================================
-TICKERS_TYPE = ["SINGLE"] # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8"]  # ["SINGLE"]
-DEFAULT_TICKERS = ["NKE", "META"]
 
+# -----------------------------------------------------------------------------
+# Ticker groups (used when TICKERS_TYPE is set)
+# -----------------------------------------------------------------------------
 SECTOR_CORE_TICKERS = [
     "XLF",  # Financials – rates, credit, liquidity (macro transmission)
     "KRE",  # Regional Banks – stress canary for funding/liquidity
@@ -88,26 +89,25 @@ MAG8_TICKERS = [
     "META",  # Ads + engagement + AI leverage
     "TSLA",  # Highest beta: auto + AI + macro sensitivity
 ]
-
-
 EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 
-# Options Premium Panel Configuration
-# Tickers with daily (0DTE) options expiration
-DAILY_EXPIRATION_TICKERS = {"SPY", "SPX", "SPXW", "QQQ", "IWM", "XSP"}
-DEFAULT_OPTIONS_STRIKE_COUNT = 30  # ±30 contracts from ATM
-DEFAULT_OPTIONS_MIN_PREMIUM_HIGHLIGHT = 4.0  # $M threshold for highlighting
-DEFAULT_FETCH_OPTIONS_PREMIUM = True  # Enable/disable options premium fetching
 # -----------------------------------------------------------------------------
+# User-facing defaults (most commonly edited)
+# -----------------------------------------------------------------------------
+TICKERS_TYPE = ["SINGLE"]  # ["SINGLE", "SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8"]
+DEFAULT_TICKERS = ["NKE", "META"]
+DEFAULT_INCLUDE_POLYGON_ONLY_TICKERS = True  # Include tickers without FINRA coverage
 
-# Analysis defaults
 DEFAULT_TARGET_DATE = "2025-12-31"  # Last trading day (Monday)
 DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
 DEFAULT_BACKFILL_COUNT = 30  # Number of periods to fetch (days for daily, weeks for weekly)
-DEFAULT_MIN_LIT_VOLUME = 10000
+
 DEFAULT_MARKET_TZ = "US/Eastern"
 DEFAULT_RTH_START = "09:30"
 DEFAULT_RTH_END = "16:15"
+
+DEFAULT_MIN_LIT_VOLUME = 10000  # Minimum lit volume for ratios to be valid
+
 # -----------------------------------------------------------------------------
 # Polygon Trades Mode (controls data granularity for lit direction inference)
 # -----------------------------------------------------------------------------
@@ -120,34 +120,66 @@ DEFAULT_RTH_END = "16:15"
 DEFAULT_POLYGON_TRADES_MODE = "tick"
 
 # -----------------------------------------------------------------------------
-# Inference Version (provenance label, NOT a mode selector)
-# -----------------------------------------------------------------------------
-# This string is stored in the database to track which algorithm version
-# produced the data. Useful for debugging and reproducibility.
-DEFAULT_INFERENCE_VERSION = "PhaseA_v1"
-
-# -----------------------------------------------------------------------------
-# Caching (skip already-fetched data)
+# Caching and output behavior
 # -----------------------------------------------------------------------------
 # When True, check polygon_ingestion_state before fetching and skip symbols
 # that have already been fetched for a given date+source. No TTL (cache forever).
 DEFAULT_SKIP_CACHED = True
-
 DEFAULT_EXPORT_CSV = False  # Export tables to CSV files
-DEFAULT_INCLUDE_POLYGON_ONLY_TICKERS = True  # Include tickers without FINRA data (Polygon-only)
+DEFAULT_RENDER_PRICE_CHARTS = True  # Render OHLC price charts
+DEFAULT_PRICE_BAR_TIMEFRAME = "daily"  # daily, weekly, monthly
+DEFAULT_COMBINATION_PLOT = False  # Render combined multi-ticker plot
+DEFAULT_PLOT_TRADING_GAPS = True  # Keep weekend/holiday gaps in plots
+
+# -----------------------------------------------------------------------------
+# Provenance and scoring controls
+# -----------------------------------------------------------------------------
+# This string is stored in the database to track which algorithm version
+# produced the data. Useful for debugging and reproducibility.
+DEFAULT_INFERENCE_VERSION = "PhaseA_v1"
+DEFAULT_ACCUMULATION_SHORT_Z_SOURCE = "short_buy_sell_ratio_z"  # "short_buy_sell_ratio_z" or "vwbr_z"
+
+# Z-score windows and thresholds
 DEFAULT_SHORT_Z_WINDOW = 20
 DEFAULT_RETURN_Z_WINDOW = 20
 DEFAULT_ZSCORE_MIN_PERIODS = 5
 DEFAULT_SHORT_Z_HIGH = 1.0
 DEFAULT_SHORT_Z_LOW = -1.0
 DEFAULT_RETURN_Z_MIN = 0.5
-DEFAULT_SHORT_SALE_PREFERRED_SOURCE = "CNMS"
-DEFAULT_INDEX_CONSTITUENTS_DIR = "data/constituents"
-DEFAULT_INDEX_PROXY_MAP = {"SPX": "SPY"}
-DEFAULT_RENDER_PRICE_CHARTS = True
-DEFAULT_PRICE_BAR_TIMEFRAME = "daily"
-DEFAULT_COMBINATION_PLOT = False
-DEFAULT_PLOT_TRADING_GAPS = True
+DEFAULT_SHORT_SALE_PREFERRED_SOURCE = "CNMS"  # Preferred FINRA market code
+DEFAULT_INDEX_CONSTITUENTS_DIR = "data/constituents"  # Index member files
+DEFAULT_INDEX_PROXY_MAP = {"SPX": "SPY"}  # Index return proxy map
+
+# Composite Score Weights (Phase 4)
+DEFAULT_COMPOSITE_W_SHORT = 0.55  # Short sale primary signal
+DEFAULT_COMPOSITE_W_LIT = 0.30    # Lit flow confirmation
+DEFAULT_COMPOSITE_W_PRICE = 0.15  # Price momentum
+
+# Intensity Scale Bounds (OTC participation modulation)
+DEFAULT_INTENSITY_SCALE_MIN = 0.7  # Low OTC dampens signal
+DEFAULT_INTENSITY_SCALE_MAX = 1.3  # High OTC amplifies signal
+
+# -----------------------------------------------------------------------------
+# Options premium panel
+# -----------------------------------------------------------------------------
+# Tickers with daily (0DTE) options expiration
+DAILY_EXPIRATION_TICKERS = {"SPY", "SPX", "SPXW", "QQQ", "IWM", "XSP"}
+DEFAULT_OPTIONS_STRIKE_COUNT = 30  # 30 contracts from ATM
+DEFAULT_OPTIONS_MIN_PREMIUM_HIGHLIGHT = 4.0  # $M threshold for highlighting
+DEFAULT_FETCH_OPTIONS_PREMIUM = True  # Enable/disable options premium fetching
+
+# -----------------------------------------------------------------------------
+# Scanner defaults (FINRA CDN full-list short sale scan)
+# -----------------------------------------------------------------------------
+DEFAULT_SCANNER_DB_NAME = "darkpool_scanner.duckdb"
+DEFAULT_SCANNER_LOOKBACK_DAYS = 90  # Lookback window for scanner z-scores
+DEFAULT_SCANNER_TREND_DAYS = 3  # Trend window length
+DEFAULT_SCANNER_TOP_N = 50  # Top N symbols to report
+DEFAULT_SCANNER_OUTLIER_Z = 2.0
+DEFAULT_SCANNER_VOLUME_Z = 2.0
+DEFAULT_SCANNER_RATIO_Z = 2.0
+DEFAULT_SCANNER_EXPORT_FULL = True
+DEFAULT_SCANNER_INFERENCE_VERSION = "Scanner_v1"
 
 DEFAULT_TABLE_STYLE = {
     "mode": "scan",
@@ -204,7 +236,9 @@ DEFAULT_TABLE_STYLE = {
     },
 }
 
+# -----------------------------------------------------------------------------
 # API endpoints (not secrets)
+# -----------------------------------------------------------------------------
 DEFAULT_POLYGON_BASE_URL = "https://api.polygon.io"
 
 # FINRA OTC endpoint (returns all tiers: T1, T2, OTC via tierIdentifier field)
@@ -213,28 +247,6 @@ DEFAULT_FINRA_SHORT_SALE_URL = "https://api.finra.org/data/group/otcMarket/name/
 DEFAULT_FINRA_TOKEN_URL = "https://ews.fip.finra.org/fip/rest/ews/oauth2/access_token?grant_type=client_credentials"
 DEFAULT_FINRA_REQUEST_METHOD = "POST"
 DEFAULT_FINRA_CDN_URL = "https://cdn.finra.org/equity/regsho/daily"
-
-# Scanner defaults (FINRA CDN full-list short sale scan)
-DEFAULT_SCANNER_DB_NAME = "darkpool_scanner.duckdb"
-DEFAULT_SCANNER_LOOKBACK_DAYS = 90
-DEFAULT_SCANNER_TREND_DAYS = 3
-DEFAULT_SCANNER_TOP_N = 50
-DEFAULT_SCANNER_OUTLIER_Z = 2.0
-DEFAULT_SCANNER_VOLUME_Z = 2.0
-DEFAULT_SCANNER_RATIO_Z = 2.0
-DEFAULT_SCANNER_EXPORT_FULL = True
-DEFAULT_SCANNER_INFERENCE_VERSION = "Scanner_v1"
-
-# Composite Score Weights (Phase 4)
-DEFAULT_COMPOSITE_W_SHORT = 0.55  # Short sale primary signal
-DEFAULT_COMPOSITE_W_LIT = 0.30    # Lit flow confirmation
-DEFAULT_COMPOSITE_W_PRICE = 0.15  # Price momentum
-DEFAULT_ACCUMULATION_SHORT_Z_SOURCE = "short_buy_sell_ratio_z"  # "short_buy_sell_ratio_z"  or "vwbr_z"
-
-# Intensity Scale Bounds (OTC participation modulation)
-DEFAULT_INTENSITY_SCALE_MIN = 0.7  # Low OTC dampens signal
-DEFAULT_INTENSITY_SCALE_MAX = 1.3  # High OTC amplifies signal
-
 
 def _parse_date(value: Optional[str]) -> Optional[date]:
     if not value:

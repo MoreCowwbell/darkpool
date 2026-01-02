@@ -347,3 +347,4 @@ Format:
 - [x] Added VWBR/VWBR_Z to daily_metrics, configurable accumulation short-z source, and VWBR plot panel.
 - [x] Forced OTC merge_asof join keys to datetime64[ns] to avoid dtype mismatch.
 - [x] Centralized US market holiday calendar and added plot toggle for trading-day gaps.
+- [x] Reordered config defaults and clarified annotations for common inputs.
