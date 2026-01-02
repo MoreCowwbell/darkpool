@@ -39,6 +39,7 @@ COLORS = {
     "cyan": "#00d4ff",
     "white": "#ffffff",
     "neutral": "#6b6b6b",
+    "orange": "#ff8c00",
 }
 
 MAIN_LINE_WIDTH = 2.3
@@ -553,8 +554,22 @@ def plot_symbol_metrics(
 
     ax0.set_ylabel(panel1_meta["label"], color=YLABEL_COLOR, fontsize=YLABEL_SIZE)
     ax0.set_title(panel1_meta["label"], color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
+
+    # Add mean line for Panel 1
+    panel1_mean = panel1_series.mean(skipna=True)
+    if not pd.isna(panel1_mean):
+        ax0.axhline(
+            y=panel1_mean,
+            color=COLORS["orange"],
+            linestyle="--",
+            linewidth=THRESHOLD_LINE_WIDTH,
+            alpha=0.8,
+            zorder=2,
+        )
+
     legend_handles_0 = [
         Line2D([0], [0], color=COLORS["cyan"], linewidth=MAIN_LINE_WIDTH, label=panel1_meta["legend"]),
+        Line2D([0], [0], color=COLORS["orange"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label=f"Mean ({panel1_mean:.2f})" if not pd.isna(panel1_mean) else "Mean"),
     ]
     legend0 = ax0.legend(
         legend_handles_0,
@@ -644,10 +659,24 @@ def plot_symbol_metrics(
         alpha=0.6,
     )
     _add_ratio_thresholds(ax1, bot=BOT_THRESHOLD, sell=SELL_THRESHOLD)
+
+    # Add mean line for Panel 2
+    short_ratio_mean = short_ratio.mean(skipna=True)
+    if not pd.isna(short_ratio_mean):
+        ax1.axhline(
+            y=short_ratio_mean,
+            color=COLORS["orange"],
+            linestyle="--",
+            linewidth=THRESHOLD_LINE_WIDTH,
+            alpha=0.8,
+            zorder=2,
+        )
+
     ax1.set_ylabel("Short Sale Buy/Sell Ratio", color=YLABEL_COLOR, fontsize=YLABEL_SIZE)
     ax1.set_title("Short Sale Buy/Sell Ratio", color=COLORS["white"], fontsize=11, fontweight="bold", loc="left")
     legend_handles_1 = [
         Line2D([0], [0], color=COLORS["cyan"], linewidth=MAIN_LINE_WIDTH, label="Ratio"),
+        Line2D([0], [0], color=COLORS["orange"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label=f"Mean ({short_ratio_mean:.2f})" if not pd.isna(short_ratio_mean) else "Mean"),
         Line2D([0], [0], color=COLORS["green"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="BOT (1.25)"),
         Line2D([0], [0], color=COLORS["red"], linewidth=THRESHOLD_LINE_WIDTH, linestyle="--", label="SELL (0.75)"),
         Line2D([0], [0], linestyle="none", marker="^", color=COLORS["green"], markersize=6, label="Short+Lit Bull"),

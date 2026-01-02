@@ -96,7 +96,7 @@ EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 # -----------------------------------------------------------------------------
 
 TICKERS_TYPE = ["SINGLE"]  # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8"], ["SINGLE"] 
-DEFAULT_TICKERS = ["TQQQ", "XLE"]
+DEFAULT_TICKERS = ["TQQQ"]
 
 DEFAULT_TARGET_DATE = "2025-12-31"  # Last trading day (Monday)
 DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
