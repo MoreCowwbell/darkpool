@@ -345,3 +345,5 @@ Format:
 - [x] Reloaded FINRA/short/agg/lit inputs from DuckDB for full-date-range metrics recomputation.
 - [x] Routed scanner runs to a dedicated DuckDB file via SCANNER_DB_PATH (default data/darkpool_scanner.duckdb).
 - [x] Added VWBR/VWBR_Z to daily_metrics, configurable accumulation short-z source, and VWBR plot panel.
+- [x] Forced OTC merge_asof join keys to datetime64[ns] to avoid dtype mismatch.
+- [x] Centralized US market holiday calendar and added plot toggle for trading-day gaps.

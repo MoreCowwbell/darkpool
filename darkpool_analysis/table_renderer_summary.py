@@ -21,8 +21,10 @@ logger = logging.getLogger(__name__)
 
 try:
     from .config import DEFAULT_TABLE_STYLE, SECTOR_SUMMARY_TICKERS
+    from .market_calendar import is_trading_day
 except ImportError:
     from config import DEFAULT_TABLE_STYLE, SECTOR_SUMMARY_TICKERS
+    from market_calendar import is_trading_day
 
 # =============================================================================
 # Constants
@@ -65,42 +67,6 @@ ACCUM_LOW_THRESHOLD = 30
 # log(1.65) ≈ 0.5, log(0.61) ≈ -0.5
 LOG_FLOW_THRESHOLD = 0.5  # Symmetric threshold for log(ratio)
 
-# US stock market holidays (NYSE/NASDAQ closed)
-US_MARKET_HOLIDAYS = {
-    # 2024
-    date(2024, 1, 1),    # New Year's Day
-    date(2024, 1, 15),   # MLK Day
-    date(2024, 2, 19),   # Presidents' Day
-    date(2024, 3, 29),   # Good Friday
-    date(2024, 5, 27),   # Memorial Day
-    date(2024, 6, 19),   # Juneteenth
-    date(2024, 7, 4),    # Independence Day
-    date(2024, 9, 2),    # Labor Day
-    date(2024, 11, 28),  # Thanksgiving
-    date(2024, 12, 25),  # Christmas
-    # 2025
-    date(2025, 1, 1),    # New Year's Day
-    date(2025, 1, 20),   # MLK Day
-    date(2025, 2, 17),   # Presidents' Day
-    date(2025, 4, 18),   # Good Friday
-    date(2025, 5, 26),   # Memorial Day
-    date(2025, 6, 19),   # Juneteenth
-    date(2025, 7, 4),    # Independence Day
-    date(2025, 9, 1),    # Labor Day
-    date(2025, 11, 27),  # Thanksgiving
-    date(2025, 12, 25),  # Christmas
-    # 2026
-    date(2026, 1, 1),    # New Year's Day
-    date(2026, 1, 19),   # MLK Day
-    date(2026, 2, 16),   # Presidents' Day
-    date(2026, 4, 3),    # Good Friday
-    date(2026, 5, 25),   # Memorial Day
-    date(2026, 6, 19),   # Juneteenth
-    date(2026, 7, 3),    # Independence Day (observed)
-    date(2026, 9, 7),    # Labor Day
-    date(2026, 11, 26),  # Thanksgiving
-    date(2026, 12, 25),  # Christmas
-}
 
 # =============================================================================
 # Data Functions
@@ -842,6 +808,9 @@ def render_sector_summary(
     palette = DEFAULT_TABLE_STYLE.get("palette", {})
 
     # Build file name
+    dates = [d for d in dates if is_trading_day(d)]
+    if not dates:
+        raise ValueError("No trading dates provided for sector summary rendering.")
     sorted_dates = sorted(dates, reverse=True)
     if len(sorted_dates) == 1:
         date_label = sorted_dates[0].strftime("%Y-%m-%d")
@@ -858,8 +827,7 @@ def render_sector_summary(
         # Convert date column and filter out non-trading days (weekends and holidays)
         if "date" in df.columns:
             df["date"] = pd.to_datetime(df["date"]).dt.date
-            # Filter out weekends (Saturday=5, Sunday=6) and US market holidays
-            df = df[df["date"].apply(lambda d: d.weekday() < 5 and d not in US_MARKET_HOLIDAYS)]
+            df = df[df["date"].apply(is_trading_day)]
 
         # Build panels for each ticker
         panels_html = []

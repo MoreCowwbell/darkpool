@@ -297,7 +297,7 @@ def _format_volume(value: float) -> str:
 
 def _plot_smooth_line(
     ax,
-    dates,
+    x_values,
     values,
     color,
     valid_mask,
@@ -307,16 +307,24 @@ def _plot_smooth_line(
 ):
     """Plot a smooth PCHIP-interpolated line through valid data points."""
     if valid_mask.sum() >= 3:
-        valid_dates = dates[valid_mask]
+        valid_x = x_values[valid_mask]
         valid_values = values[valid_mask]
-        date_nums = mdates.date2num(valid_dates)
 
-        x_smooth = np.linspace(date_nums.min(), date_nums.max(), 150)
-        interp = PchipInterpolator(date_nums, valid_values.to_numpy())
-        y_smooth = interp(x_smooth)
+        if pd.api.types.is_datetime64_any_dtype(valid_x):
+            x_nums = mdates.date2num(pd.to_datetime(valid_x))
+            x_smooth = np.linspace(x_nums.min(), x_nums.max(), 150)
+            interp = PchipInterpolator(x_nums, valid_values.to_numpy())
+            y_smooth = interp(x_smooth)
+            x_plot = mdates.num2date(x_smooth)
+        else:
+            x_nums = np.asarray(valid_x, dtype=float)
+            x_smooth = np.linspace(x_nums.min(), x_nums.max(), 150)
+            interp = PchipInterpolator(x_nums, valid_values.to_numpy())
+            y_smooth = interp(x_smooth)
+            x_plot = x_smooth
 
         ax.plot(
-            mdates.num2date(x_smooth),
+            x_plot,
             y_smooth,
             color=color,
             linewidth=linewidth,
@@ -325,7 +333,7 @@ def _plot_smooth_line(
         )
     else:
         ax.plot(
-            dates[valid_mask],
+            x_values[valid_mask],
             values[valid_mask],
             color=color,
             linewidth=linewidth,
@@ -334,11 +342,22 @@ def _plot_smooth_line(
         )
 
 
+def _build_plot_x(df: pd.DataFrame, plot_trading_gaps: bool) -> tuple[pd.Series, list[str] | None]:
+    """Return x-values and labels for plotting with or without trading-day gaps."""
+    dates = df["date"]
+    if plot_trading_gaps:
+        return dates, None
+    x_values = pd.Series(np.arange(len(dates)), index=dates.index)
+    labels = pd.to_datetime(dates).dt.strftime("%y-%m-%d").tolist()
+    return x_values, labels
+
+
 def plot_symbol_metrics(
     df: pd.DataFrame,
     symbol: str,
     output_path: Path,
     title_suffix: str = "",
+    plot_trading_gaps: bool = True,
 ) -> Path:
     """
     Generate a multi-panel plot plus footer for a single symbol.
@@ -381,15 +400,16 @@ def plot_symbol_metrics(
         _apply_primary_axis_style(ax)
 
     dates = df["date"]
+    x_values, x_labels = _build_plot_x(df, plot_trading_gaps)
 
     # Panel 1: Volume Weighted Buy Ratio (VWBR)
     ax0 = axes[0]
     vwbr = df["vwbr"]
     valid_mask0 = ~vwbr.isna()
     if valid_mask0.any():
-        _plot_smooth_line(ax0, dates, vwbr, COLORS["cyan"], valid_mask0, linewidth=PANEL1_LINE_WIDTH)
+        _plot_smooth_line(ax0, x_values, vwbr, COLORS["cyan"], valid_mask0, linewidth=PANEL1_LINE_WIDTH)
         ax0.scatter(
-            dates[valid_mask0],
+            x_values[valid_mask0],
             vwbr[valid_mask0],
             c=COLORS["cyan"],
             s=MARKER_SIZE,
@@ -436,9 +456,9 @@ def plot_symbol_metrics(
 
     valid_mask = ~short_ratio.isna()
     if valid_mask.any():
-        _plot_smooth_line(ax1, dates, short_ratio, COLORS["cyan"], valid_mask, linewidth=PANEL1_LINE_WIDTH)
+        _plot_smooth_line(ax1, x_values, short_ratio, COLORS["cyan"], valid_mask, linewidth=PANEL1_LINE_WIDTH)
         ax1.scatter(
-            dates[valid_mask],
+            x_values[valid_mask],
             short_ratio[valid_mask],
             c=COLORS["cyan"],
             s=MARKER_SIZE,
@@ -449,7 +469,7 @@ def plot_symbol_metrics(
 
     # Agreement markers: show when short and lit signals agree/disagree
     lit_imbalance = df["lit_flow_imbalance"]
-    for d, sr, li in zip(dates, short_ratio, lit_imbalance):
+    for d, sr, li in zip(x_values, short_ratio, lit_imbalance):
         if pd.isna(sr) or pd.isna(li):
             continue
         short_bullish = sr > BOT_THRESHOLD
@@ -535,9 +555,9 @@ def plot_symbol_metrics(
 
     valid_mask2 = ~lit_imbalance_series.isna()
     if valid_mask2.any():
-        _plot_smooth_line(ax2, dates, lit_imbalance_series, COLORS["yellow"], valid_mask2, linewidth=MAIN_LINE_WIDTH)
+        _plot_smooth_line(ax2, x_values, lit_imbalance_series, COLORS["yellow"], valid_mask2, linewidth=MAIN_LINE_WIDTH)
         ax2.scatter(
-            dates[valid_mask2],
+            x_values[valid_mask2],
             lit_imbalance_series[valid_mask2],
             c=COLORS["yellow"],
             s=MARKER_SIZE_SMALL,
@@ -546,7 +566,7 @@ def plot_symbol_metrics(
             linewidths=0.4,
         )
 
-    for d, sr, li in zip(dates, short_ratio, lit_imbalance_series):
+    for d, sr, li in zip(x_values, short_ratio, lit_imbalance_series):
         if pd.isna(sr) or pd.isna(li):
             continue
         short_bullish = sr > BOT_THRESHOLD
@@ -645,6 +665,7 @@ def plot_symbol_metrics(
             if pd.isna(week_start):
                 continue
             week_dates = week_data["date"]
+            week_x = x_values.loc[week_data.index]
             rate = week_data["otc_participation_rate"].iloc[0]
             z_score = week_data["otc_participation_z"].iloc[0] if "otc_participation_z" in week_data.columns else 0
             status = week_data["otc_status"].iloc[0] if "otc_status" in week_data.columns else None
@@ -670,10 +691,19 @@ def plot_symbol_metrics(
 
             # Draw horizontal band for this week
             if len(week_dates) > 0:
-                x_start = mdates.date2num(week_dates.iloc[0]) - 0.4
-                x_end = mdates.date2num(week_dates.iloc[-1]) + 0.4
+                if plot_trading_gaps:
+                    x_start = mdates.date2num(week_dates.iloc[0]) - 0.4
+                    x_end = mdates.date2num(week_dates.iloc[-1]) + 0.4
+                    x_span = [mdates.num2date(x_start), mdates.num2date(x_end)]
+                    mid_x = mdates.num2date((x_start + x_end) / 2)
+                else:
+                    x_start = float(week_x.iloc[0]) - 0.4
+                    x_end = float(week_x.iloc[-1]) + 0.4
+                    x_span = [x_start, x_end]
+                    mid_x = (x_start + x_end) / 2
+
                 ax3.fill_between(
-                    [mdates.num2date(x_start), mdates.num2date(x_end)],
+                    x_span,
                     [0, 0],
                     [rate, rate],
                     color=color,
@@ -681,7 +711,6 @@ def plot_symbol_metrics(
                     zorder=2,
                 )
                 # Add week label
-                mid_x = mdates.num2date((x_start + x_end) / 2)
                 week_label = pd.to_datetime(week_start).strftime("%m-%d")
                 label_text = f"Wk {week_label}"
                 if status == "Staled":
@@ -700,7 +729,7 @@ def plot_symbol_metrics(
     # Also show participation rate as line for trend visibility
     if valid_mask3.any():
         ax3.plot(
-            dates[valid_mask3],
+            x_values[valid_mask3],
             otc_part_rate[valid_mask3],
             color=COLORS["yellow"],
             linewidth=SECONDARY_LINE_WIDTH,
@@ -708,7 +737,7 @@ def plot_symbol_metrics(
             zorder=4,
         )
         ax3.scatter(
-            dates[valid_mask3],
+            x_values[valid_mask3],
             otc_part_rate[valid_mask3],
             c=COLORS["yellow"],
             s=MARKER_SIZE_SMALL,
@@ -739,7 +768,7 @@ def plot_symbol_metrics(
     if valid_delta.any():
         delta_colors = [COLORS["green"] if d > 0 else COLORS["red"] for d in otc_part_delta[valid_delta]]
         ax3b.bar(
-            dates[valid_delta],
+            x_values[valid_delta],
             otc_part_delta[valid_delta],
             color=delta_colors,
             alpha=0.4,
@@ -883,18 +912,29 @@ def plot_symbol_metrics(
     for text in legend4.get_texts():
         text.set_color(COLORS["text"])
 
-    x_min = dates.min() - timedelta(hours=12)
-    x_max = dates.max() + timedelta(hours=12)
-    x_locator = mdates.DayLocator(interval=1)
-    x_formatter = mdates.DateFormatter("%y-%m-%d")
+    if plot_trading_gaps:
+        x_min = dates.min() - timedelta(hours=12)
+        x_max = dates.max() + timedelta(hours=12)
+        x_locator = mdates.DayLocator(interval=1)
+        x_formatter = mdates.DateFormatter("%y-%m-%d")
 
-    # Format x-axis dates on ALL panels (not just bottom)
-    for ax in [axes[0], axes[1], axes[2], axes[3], ax4]:
-        ax.set_xlim(x_min, x_max)
-        ax.xaxis.set_major_formatter(x_formatter)
-        ax.xaxis.set_major_locator(x_locator)  # Show every day
-        ax.tick_params(axis="x", labelbottom=True)  # Enable x labels on all panels
-        plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha="right", fontsize=8)
+        # Format x-axis dates on ALL panels (not just bottom)
+        for ax in [axes[0], axes[1], axes[2], axes[3], ax4]:
+            ax.set_xlim(x_min, x_max)
+            ax.xaxis.set_major_formatter(x_formatter)
+            ax.xaxis.set_major_locator(x_locator)  # Show every day
+            ax.tick_params(axis="x", labelbottom=True)  # Enable x labels on all panels
+            plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha="right", fontsize=8)
+    else:
+        x_min = -0.5
+        x_max = len(dates) - 0.5
+        x_ticks = x_values.tolist()
+        labels = x_labels or ["" for _ in x_ticks]
+        for ax in [axes[0], axes[1], axes[2], axes[3], ax4]:
+            ax.set_xlim(x_min, x_max)
+            ax.set_xticks(x_ticks)
+            ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=8)
+            ax.tick_params(axis="x", labelbottom=True)
 
     ax3b.set_xlim(x_min, x_max)
 
@@ -981,6 +1021,7 @@ def plot_short_only_metrics(
     symbol: str,
     output_path: Path,
     title_suffix: str = "",
+    plot_trading_gaps: bool = True,
 ) -> Path:
     """Generate a short-only plot using daily short sale data and price context."""
     if df.empty:
@@ -1011,6 +1052,7 @@ def plot_short_only_metrics(
         _apply_primary_axis_style(ax)
 
     dates = df["date"]
+    x_values, x_labels = _build_plot_x(df, plot_trading_gaps)
 
     # Panel 1: Short Ratio (daily)
     ax1 = axes[0]
@@ -1020,9 +1062,9 @@ def plot_short_only_metrics(
 
     valid_mask = ~short_ratio.isna()
     if valid_mask.any():
-        _plot_smooth_line(ax1, dates, short_ratio, COLORS["cyan"], valid_mask, linewidth=MAIN_LINE_WIDTH)
+        _plot_smooth_line(ax1, x_values, short_ratio, COLORS["cyan"], valid_mask, linewidth=MAIN_LINE_WIDTH)
         ax1.scatter(
-            dates,
+            x_values,
             short_ratio,
             c=colors1,
             s=MARKER_SIZE,
@@ -1077,7 +1119,7 @@ def plot_short_only_metrics(
     valid_mask2 = ~short_vol.isna()
     if valid_mask2.any():
         ax2.bar(
-            dates[valid_mask2],
+            x_values[valid_mask2],
             short_vol[valid_mask2],
             color=COLORS["yellow"],
             alpha=0.5,
@@ -1094,9 +1136,9 @@ def plot_short_only_metrics(
     close = df["close"]
     valid_mask3 = ~close.isna()
     if valid_mask3.any():
-        ax3.plot(dates[valid_mask3], close[valid_mask3], color=COLORS["green"], linewidth=MAIN_LINE_WIDTH, alpha=0.85)
+        ax3.plot(x_values[valid_mask3], close[valid_mask3], color=COLORS["green"], linewidth=MAIN_LINE_WIDTH, alpha=0.85)
         ax3.scatter(
-            dates[valid_mask3],
+            x_values[valid_mask3],
             close[valid_mask3],
             color=COLORS["green"],
             s=MARKER_SIZE_SMALL,
@@ -1112,18 +1154,29 @@ def plot_short_only_metrics(
     ]
     _add_panel_legend(ax3, legend_handles_3, [h.get_label() for h in legend_handles_3], loc="upper left")
 
-    # Format x-axis dates on ALL panels (not just bottom)
-    for ax in axes:
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%y-%m-%d"))
-        ax.xaxis.set_major_locator(mdates.DayLocator(interval=1))  # Show every day
-        ax.tick_params(axis="x", labelbottom=True)  # Enable x labels on all panels
-        plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha="right", fontsize=8)
+    if plot_trading_gaps:
+        # Format x-axis dates on ALL panels (not just bottom)
+        for ax in axes:
+            ax.xaxis.set_major_formatter(mdates.DateFormatter("%y-%m-%d"))
+            ax.xaxis.set_major_locator(mdates.DayLocator(interval=1))  # Show every day
+            ax.tick_params(axis="x", labelbottom=True)  # Enable x labels on all panels
+            plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha="right", fontsize=8)
 
-    # Add padding to x-axis so data doesn't sit at edges
-    x_min = dates.min() - timedelta(hours=12)
-    x_max = dates.max() + timedelta(hours=12)
-    for ax in axes:
-        ax.set_xlim(x_min, x_max)
+        # Add padding to x-axis so data doesn't sit at edges
+        x_min = dates.min() - timedelta(hours=12)
+        x_max = dates.max() + timedelta(hours=12)
+        for ax in axes:
+            ax.set_xlim(x_min, x_max)
+    else:
+        x_min = -0.5
+        x_max = len(dates) - 0.5
+        x_ticks = x_values.tolist()
+        labels = x_labels or ["" for _ in x_ticks]
+        for ax in axes:
+            ax.set_xlim(x_min, x_max)
+            ax.set_xticks(x_ticks)
+            ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=8)
+            ax.tick_params(axis="x", labelbottom=True)
 
     fig.suptitle(
         f"Short Sale Pressure (Daily){title_suffix}",
@@ -1157,6 +1210,7 @@ def render_metrics_plots(
     dates: list[date],
     tickers: list[str],
     mode: str = "layered",
+    plot_trading_gaps: bool = True,
 ) -> list[Path]:
     """Render multi-panel plots for each ticker."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1183,12 +1237,12 @@ def render_metrics_plots(
 
             if mode in ("layered", "both"):
                 output_path = output_dir / f"{symbol.lower()}_metrics_{file_suffix}.png"
-                plot_symbol_metrics(df, symbol, output_path)
+                plot_symbol_metrics(df, symbol, output_path, plot_trading_gaps=plot_trading_gaps)
                 output_paths.append(output_path)
 
             if mode in ("short_only", "both"):
                 output_path = output_dir / f"{symbol.lower()}_short_only_{file_suffix}.png"
-                plot_short_only_metrics(df, symbol, output_path)
+                plot_short_only_metrics(df, symbol, output_path, plot_trading_gaps=plot_trading_gaps)
                 output_paths.append(output_path)
     finally:
         conn.close()
@@ -1224,6 +1278,13 @@ def main() -> None:
         choices=["layered", "short_only", "both"],
         help="Plot mode: layered, short_only, or both (default: layered)",
     )
+    parser.add_argument(
+        "--plot-trading-gaps",
+        type=str,
+        default=None,
+        choices=["true", "false"],
+        help="Show gaps for non-trading days (true/false). Defaults to config.",
+    )
 
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -1238,12 +1299,17 @@ def main() -> None:
     tickers = [t.strip().upper() for t in args.tickers.split(",")] if args.tickers else config.tickers
     output_dir = Path(args.output_dir) if args.output_dir else config.plot_dir
 
+    plot_trading_gaps = config.plot_trading_gaps
+    if args.plot_trading_gaps is not None:
+        plot_trading_gaps = args.plot_trading_gaps.lower() == "true"
+
     paths = render_metrics_plots(
         db_path=config.db_path,
         output_dir=output_dir,
         dates=dates_list,
         tickers=tickers,
         mode=args.mode,
+        plot_trading_gaps=plot_trading_gaps,
     )
     print(f"Generated {len(paths)} plot(s)")
 

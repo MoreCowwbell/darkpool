@@ -64,6 +64,7 @@ Core:
 - EXPORT_CSV (true/false)
 - RENDER_PRICE_CHARTS (true/false)
 - PRICE_BAR_TIMEFRAME (daily, weekly, monthly)
+- PLOT_TRADING_GAPS (true/false)
 
 Polygon:
 - POLYGON_API_KEY (required for API fetch)
@@ -146,6 +147,7 @@ Key knobs:
 - layered (default): 5-panel visualization with VWBR, short sale buy ratio, lit flow imbalance, OTC participation, and accumulation score.
 - short_only: short ratio, short sale volume, close price.
 - both: render layered and short_only together.
+Use `PLOT_TRADING_GAPS=false` to compress non-trading days on the x-axis.
 
 Example:
 ```
@@ -229,6 +231,7 @@ confidence = staleness_penalty * coverage_penalty * (0.9 if lit_flow_imbalance N
 - log(Buy/Sell) is computed only when both buy and sell volumes are > 0.
 - Short Sale Buy Ratio uses ShortVolume / ShortSellVolume (short-exempt excluded); if total volume is missing, Polygon daily volume is used to derive the sell volume and flagged as POLYGON_TOTAL.
 - OTC weekly data is delayed; OTC status is Anchored, Staled, or None based on the week used.
+- Target dates exclude weekends and US market holidays.
 - Price context is sourced from Polygon daily aggregates only.
 - Constituent aggregation requires a maintained index list; see data/constituents/spx_sample.csv as a format example.
 

@@ -11,6 +11,11 @@ from copy import deepcopy
 import pytz
 from dotenv import load_dotenv
 
+try:
+    from .market_calendar import get_past_trading_days
+except ImportError:
+    from market_calendar import get_past_trading_days
+
 # =============================================================================
 # Default Configuration (can be overridden via .env)
 # =============================================================================
@@ -142,6 +147,7 @@ DEFAULT_INDEX_PROXY_MAP = {"SPX": "SPY"}
 DEFAULT_RENDER_PRICE_CHARTS = True
 DEFAULT_PRICE_BAR_TIMEFRAME = "daily"
 DEFAULT_COMBINATION_PLOT = False
+DEFAULT_PLOT_TRADING_GAPS = True
 
 DEFAULT_TABLE_STYLE = {
     "mode": "scan",
@@ -223,7 +229,7 @@ DEFAULT_SCANNER_INFERENCE_VERSION = "Scanner_v1"
 DEFAULT_COMPOSITE_W_SHORT = 0.55  # Short sale primary signal
 DEFAULT_COMPOSITE_W_LIT = 0.30    # Lit flow confirmation
 DEFAULT_COMPOSITE_W_PRICE = 0.15  # Price momentum
-DEFAULT_ACCUMULATION_SHORT_Z_SOURCE = "short_buy_sell_ratio_z"  # or "vwbr_z"
+DEFAULT_ACCUMULATION_SHORT_Z_SOURCE = "short_buy_sell_ratio_z"  # "short_buy_sell_ratio_z"  or "vwbr_z"
 
 # Intensity Scale Bounds (OTC participation modulation)
 DEFAULT_INTENSITY_SCALE_MIN = 0.7  # Low OTC dampens signal
@@ -285,17 +291,8 @@ def _get_past_fridays(count: int, from_date: date) -> list[date]:
 
 
 def _get_past_trading_days(count: int, from_date: date) -> list[date]:
-    """Return the last N trading days (excludes weekends)."""
-    days = []
-    current = from_date
-
-    while len(days) < count:
-        # Skip weekends (Saturday=5, Sunday=6)
-        if current.weekday() < 5:
-            days.append(current)
-        current -= timedelta(days=1)
-
-    return days  # Most recent first
+    """Return the last N trading days (excludes weekends and holidays)."""
+    return get_past_trading_days(count, from_date)
 
 
 @dataclass(frozen=True)
@@ -326,6 +323,7 @@ class Config:
     render_price_charts: bool
     price_bar_timeframe: str
     combination_plot: bool
+    plot_trading_gaps: bool
     polygon_api_key: Optional[str]
     polygon_base_url: str
     polygon_trades_file: Optional[str]
@@ -487,6 +485,9 @@ def load_config() -> Config:
         ).lower(),
         combination_plot=os.getenv(
             "COMBINATION_PLOT", str(DEFAULT_COMBINATION_PLOT)
+        ).lower() in ("true", "1", "yes"),
+        plot_trading_gaps=os.getenv(
+            "PLOT_TRADING_GAPS", str(DEFAULT_PLOT_TRADING_GAPS)
         ).lower() in ("true", "1", "yes"),
         polygon_api_key=os.getenv("POLYGON_API_KEY"),
         polygon_base_url=os.getenv("POLYGON_BASE_URL", DEFAULT_POLYGON_BASE_URL),

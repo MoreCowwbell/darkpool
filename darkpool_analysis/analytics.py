@@ -320,7 +320,7 @@ def build_daily_metrics(
         for symbol, group in merged.groupby("symbol"):
             weekly = otc_weekly[otc_weekly["symbol"] == symbol].copy()
             weekly = weekly.sort_values("week_start_date")
-            weekly["week_start_date"] = pd.to_datetime(weekly["week_start_date"])
+            weekly["week_start_date"] = pd.to_datetime(weekly["week_start_date"]).astype("datetime64[ns]")
             # Drop symbol to avoid duplicate column (symbol_x, symbol_y) after merge_asof
             weekly = weekly.drop(columns=["symbol"])
             if weekly.empty:
@@ -329,7 +329,7 @@ def build_daily_metrics(
                 mapped.append(group)
                 continue
             daily_sorted = group.sort_values("date")
-            daily_sorted["date"] = pd.to_datetime(daily_sorted["date"])
+            daily_sorted["date"] = pd.to_datetime(daily_sorted["date"]).astype("datetime64[ns]")
             aligned = pd.merge_asof(
                 daily_sorted,
                 weekly,

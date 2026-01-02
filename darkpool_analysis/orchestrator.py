@@ -369,6 +369,7 @@ def main() -> None:
             dates=config.target_dates,
             tickers=config.tickers,
             mode="layered",
+            plot_trading_gaps=config.plot_trading_gaps,
         )
     except Exception as exc:
         logging.error("Failed to render metrics plots: %s", exc)

@@ -19,8 +19,10 @@ logger = logging.getLogger(__name__)
 
 try:
     from .config import DEFAULT_TABLE_STYLE
+    from .market_calendar import is_trading_day
 except ImportError:
     from config import DEFAULT_TABLE_STYLE
+    from market_calendar import is_trading_day
 
 GLYPH_MAP = {"dot": "●", "up": "▲", "down": "▼"}
 
@@ -1228,6 +1230,9 @@ def render_daily_metrics_table(
     table_style: Optional[dict] = None,
 ) -> tuple[Path, Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
+    dates = [d for d in dates if is_trading_day(d)]
+    if not dates:
+        raise ValueError("No trading dates provided for table rendering.")
     sorted_dates = sorted(dates, reverse=True)
     if len(sorted_dates) == 1:
         date_label = sorted_dates[0].strftime("%Y-%m-%d")
@@ -1244,6 +1249,9 @@ def render_daily_metrics_table(
         df = fetch_metrics_df(conn, dates, tickers)
         if df.empty:
             logger.warning("No data found for dates %s", [d.strftime("%Y-%m-%d") for d in dates])
+        if "date" in df.columns:
+            df["date"] = pd.to_datetime(df["date"]).dt.date
+            df = df[df["date"].apply(is_trading_day)]
 
         style = _resolve_table_style(table_style)
         display_df = format_display_df(df, tickers, dates, palette=style["palette"])
