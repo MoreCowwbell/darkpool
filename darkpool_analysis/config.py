@@ -95,7 +95,7 @@ EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 # User-facing defaults (most commonly edited)
 # -----------------------------------------------------------------------------
 
-TICKERS_TYPE = ["SECTOR"]  # ["SINGLE", "SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8"]
+TICKERS_TYPE = ["SUMMARY"]  # ["SINGLE", "SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8"]
 
 DEFAULT_TICKERS = ["NKE", "META"]
 DEFAULT_TARGET_DATE = "2025-12-31"  # Last trading day (Monday)
