@@ -95,12 +95,12 @@ EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 # User-facing defaults (most commonly edited)
 # -----------------------------------------------------------------------------
 
-TICKERS_TYPE = ["SUMMARY"]  # ["SINGLE", "SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8"]
+TICKERS_TYPE = ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8"]  # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8"], ["SINGLE"] 
+DEFAULT_TICKERS = ["NVDA"]
 
-DEFAULT_TICKERS = ["NKE", "META"]
 DEFAULT_TARGET_DATE = "2025-12-31"  # Last trading day (Monday)
 DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
-DEFAULT_BACKFILL_COUNT = 30  # Number of periods to fetch (days for daily, weeks for weekly)
+DEFAULT_BACKFILL_COUNT = 180  # Number of periods to fetch (days for daily, weeks for weekly)
 
 DEFAULT_MARKET_TZ = "US/Eastern"
 DEFAULT_RTH_START = "09:30"
@@ -117,7 +117,7 @@ DEFAULT_INCLUDE_POLYGON_ONLY_TICKERS = True  # Include tickers without FINRA cov
 #             Faster but less accurate (bid/ask approximated from bar range).
 # - "daily" : Skip lit inference entirely, use only short-sale ratio.
 #             Fastest option when you only need short pressure signals.
-DEFAULT_POLYGON_TRADES_MODE = "tick"
+DEFAULT_POLYGON_TRADES_MODE = "minute"
 
 # -----------------------------------------------------------------------------
 # Caching and output behavior
@@ -130,7 +130,7 @@ DEFAULT_RENDER_PRICE_CHARTS = True  # Render OHLC price charts
 DEFAULT_PRICE_BAR_TIMEFRAME = "daily"  # daily, weekly, monthly
 DEFAULT_COMBINATION_PLOT = False  # Render combined multi-ticker plot
 DEFAULT_PLOT_TRADING_GAPS = True  # Keep weekend/holiday gaps in plots
-DEFAULT_PANEL1_METRIC = "vw_flow"  # "vw_flow", "combined_ratio", or "finra_buy_volume"
+DEFAULT_PANEL1_METRIC = "finra_buy_volume"  # "vw_flow", "combined_ratio", or "finra_buy_volume"
 
 # -----------------------------------------------------------------------------
 # Provenance and scoring controls

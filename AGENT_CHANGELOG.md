@@ -352,6 +352,9 @@ Format:
 - [x] Added `reset_daily_metrics.py` to clear or reset daily metrics without touching raw tables.
 - [x] Added date-range filters to `reset_daily_metrics.py` for targeted resets.
 ## 2026-01-02 Session Summary (Codex)
+- [x] Switched sandbox flow-panel thresholds to median+MAD bands and ensured 70/30 dot triggers are inclusive.
+- [x] Added per-panel threshold overrides in the sandbox notebook (fixed buy/sell lines).
+- [x] Reordered sandbox panel axes to match code order and removed borders on accumulation panels.
 - [x] Added combined_ratio, vw_flow, and finra_buy_volume columns to daily_metrics and analytics output.
 - [x] Added PANEL1_METRIC config and plotter support for configurable panel 1 metric.
 - [x] Updated plotter footer/legend to reflect the selected panel 1 metric.
