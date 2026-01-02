@@ -361,3 +361,5 @@ Format:
 - [x] Added per-panel formula annotations in `accumulation_signal_sandbox.ipynb`.
 - [x] Moved accumulation dots to sit just above the triggering bar in the sandbox notebook.
 - [x] Moved experimental imbalance panel into the main sandbox figure before accumulation panels.
+- [x] Added flow-panel buy/sell threshold lines in the sandbox notebook.
+- [x] Adjusted sandbox accumulation panels: bar labels restored, slimmer bars, removed legend, unified panel heights.
