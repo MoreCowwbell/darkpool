@@ -52,7 +52,7 @@ python -m pip install -r requirements.txt
 ## Configuration (Environment Variables)
 Core:
 - TICKERS (comma-separated)
-- TICKERS_TYPE (DEFAULT, SECTOR_CORE, GLOBAL_MACRO, COMMODITIES)
+- TICKERS_TYPE (SINGLE, SECTOR, SUMMARY, GLOBAL, COMMODITIES, MAG8, SPECULATIVE, ALL)
 - FETCH_MODE ("single", "daily", "weekly")
 - TARGET_DATE (YYYY-MM-DD)
 - BACKFILL_COUNT (int)
@@ -60,7 +60,7 @@ Core:
 - MARKET_TZ (default US/Eastern)
 - RTH_START, RTH_END (default 09:30, 16:15)
 - INFERENCE_VERSION (e.g., PhaseA_v1)
-- ACCUMULATION_SHORT_Z_SOURCE (short_buy_sell_ratio_z or vwbr_z)
+- ACCUMULATION_SHORT_Z_SOURCE (short_buy_sell_ratio_z, vwbr_z, or finra_buy_volume_z)
 - EXPORT_CSV (true/false)
 - RENDER_PRICE_CHARTS (true/false)
 - PRICE_BAR_TIMEFRAME (daily, weekly, monthly)

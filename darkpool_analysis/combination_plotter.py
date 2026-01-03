@@ -34,6 +34,7 @@ try:
         GLOBAL_MACRO_TICKERS,
         MAG8_TICKERS,
         SECTOR_CORE_TICKERS,
+        SPECULATIVE_TICKERS,
         load_config,
     )
     from .plotter import (
@@ -56,6 +57,7 @@ except ImportError:
         GLOBAL_MACRO_TICKERS,
         MAG8_TICKERS,
         SECTOR_CORE_TICKERS,
+        SPECULATIVE_TICKERS,
         load_config,
     )
     from plotter import (
@@ -335,6 +337,18 @@ def _resolve_combination_title(tickers: list[str]) -> str:
         return "Commodities Overlay"
     if tickers_set == set(MAG8_TICKERS):
         return "Mag 8 Overlay"
+    if tickers_set == set(SPECULATIVE_TICKERS):
+        return "Speculative / High-Beta Growth Overlay"
+    # Check for ALL (superset of all groups)
+    all_groups = (
+        set(SECTOR_CORE_TICKERS)
+        | set(GLOBAL_MACRO_TICKERS)
+        | set(COMMODITIES_TICKERS)
+        | set(MAG8_TICKERS)
+        | set(SPECULATIVE_TICKERS)
+    )
+    if tickers_set == all_groups:
+        return "All Tickers Overlay"
     return "Multi-Ticker Overlay"
 
 

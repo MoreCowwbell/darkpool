@@ -453,6 +453,11 @@ def build_daily_metrics(
     merged["vw_flow"] = pd.to_numeric(merged["vw_flow"], errors="coerce")
 
     merged["finra_buy_volume"] = pd.to_numeric(merged["short_buy_volume"], errors="coerce")
+    merged["finra_buy_volume_z"] = (
+        merged.sort_values(["symbol", "date"])
+        .groupby("symbol")["finra_buy_volume"]
+        .transform(lambda s: _rolling_zscore(s, config.short_z_window, config.zscore_min_periods))
+    )
 
     # Keep vwbr/vwbr_z for backward compatibility (vw_flow under legacy column name).
     merged["vwbr"] = merged["vw_flow"]
@@ -573,7 +578,7 @@ def build_daily_metrics(
 
     # Compute composite accumulation score and confidence
     short_z_source = config.accumulation_short_z_source
-    if short_z_source not in ("short_buy_sell_ratio_z", "vwbr_z"):
+    if short_z_source not in ("short_buy_sell_ratio_z", "vwbr_z", "finra_buy_volume_z"):
         logger.warning(
             "Unknown accumulation_short_z_source '%s'; defaulting to short_buy_sell_ratio_z",
             short_z_source,
@@ -627,6 +632,7 @@ def build_daily_metrics(
             "combined_ratio",
             "vw_flow",
             "finra_buy_volume",
+            "finra_buy_volume_z",
             "vwbr",
             "vwbr_z",
             "short_ratio_denominator_type",

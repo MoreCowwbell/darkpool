@@ -89,18 +89,32 @@ MAG8_TICKERS = [
     "META",  # Ads + engagement + AI leverage
     "TSLA",  # Highest beta: auto + AI + macro sensitivity
 ]
+
+SPECULATIVE_TICKERS = [
+    "ARKK",  # ARK Innovation ETF - disruptive tech basket
+    "COIN",  # Coinbase - crypto exchange beta
+    "PLTR",  # Palantir - high-beta AI/defense
+    "RIVN",  # Rivian - EV speculative
+    "LCID",  # Lucid - EV speculative
+    "SOFI",  # SoFi - fintech growth
+    "HOOD",  # Robinhood - retail trading proxy
+    "MSTR",  # MicroStrategy - leveraged Bitcoin play
+    "SMCI",  # Super Micro Computer - AI infrastructure
+    "ARM",   # ARM Holdings - semiconductor IP
+]
+
 EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 
 # -----------------------------------------------------------------------------
 # User-facing defaults (most commonly edited)
 # -----------------------------------------------------------------------------
 
-TICKERS_TYPE =  ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8"]  # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8"], ["SINGLE"] 
+TICKERS_TYPE =  ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8",]  # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8", "SPECULATIVE"], ["SINGLE"], ["ALL"] 
 DEFAULT_TICKERS = ["TQQQ"]
 
 DEFAULT_TARGET_DATE = "2025-12-31"  # Last trading day (Monday)
 DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
-DEFAULT_BACKFILL_COUNT = 252  # Number of periods to fetch (days for daily, weeks for weekly)
+DEFAULT_BACKFILL_COUNT = 30  # Number of periods to fetch (days for daily, weeks for weekly)
 
 DEFAULT_MARKET_TZ = "US/Eastern"
 DEFAULT_RTH_START = "09:30"
@@ -138,7 +152,7 @@ DEFAULT_PANEL1_METRIC = "finra_buy_volume"  # "vw_flow", "combined_ratio", or "f
 # This string is stored in the database to track which algorithm version
 # produced the data. Useful for debugging and reproducibility.
 DEFAULT_INFERENCE_VERSION = "PhaseA_v1"
-DEFAULT_ACCUMULATION_SHORT_Z_SOURCE = "short_buy_sell_ratio_z"  # "short_buy_sell_ratio_z" or "vwbr_z" (flow z-score)
+DEFAULT_ACCUMULATION_SHORT_Z_SOURCE = "short_buy_sell_ratio_z"  # "short_buy_sell_ratio_z", "vwbr_z", or "finra_buy_volume_z"
 
 # Z-score windows and thresholds
 DEFAULT_SHORT_Z_WINDOW = 20
@@ -433,7 +447,18 @@ def load_config() -> Config:
         "GLOBAL": GLOBAL_MACRO_TICKERS,
         "COMMODITIES": COMMODITIES_TICKERS,
         "MAG8": MAG8_TICKERS,
+        "SPECULATIVE": SPECULATIVE_TICKERS,
     }
+
+    # Compute ALL by combining all groups (excluding SINGLE), preserving order
+    all_tickers = []
+    seen_all = set()
+    for key in ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8", "SPECULATIVE"]:
+        for ticker in ticker_type_map[key]:
+            if ticker not in seen_all:
+                all_tickers.append(ticker)
+                seen_all.add(ticker)
+    ticker_type_map["ALL"] = all_tickers
 
     # Support both string and list for TICKERS_TYPE
     tickers_type_raw = os.getenv("TICKERS_TYPE") or TICKERS_TYPE
