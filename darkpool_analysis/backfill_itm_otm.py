@@ -29,6 +29,22 @@ def _resolve_db_path(raw: str | None) -> Path:
     return Path(__file__).resolve().parent / "data" / "darkpool.duckdb"
 
 
+def _ensure_columns_exist(conn: duckdb.DuckDBPyConnection) -> None:
+    """Add ITM/OTM columns if they don't exist (schema migration)."""
+    columns_to_add = [
+        "otm_call_premium DOUBLE",
+        "itm_call_premium DOUBLE",
+        "otm_put_premium DOUBLE",
+        "itm_put_premium DOUBLE",
+        "directional_score DOUBLE",
+    ]
+    for column_def in columns_to_add:
+        try:
+            conn.execute(f"ALTER TABLE options_premium_summary ADD COLUMN IF NOT EXISTS {column_def}")
+        except Exception as e:
+            logger.debug("Column may already exist: %s", e)
+
+
 def _parse_date(value: str | None) -> date | None:
     if not value:
         return None
@@ -228,6 +244,9 @@ def main() -> int:
 
     conn = duckdb.connect(str(db_path))
     try:
+        # Ensure ITM/OTM columns exist (schema migration)
+        _ensure_columns_exist(conn)
+
         # Show current state
         summary_count = conn.execute(
             "SELECT COUNT(*) FROM options_premium_summary"

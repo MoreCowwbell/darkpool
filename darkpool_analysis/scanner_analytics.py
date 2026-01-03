@@ -6,7 +6,7 @@ import logging
 import pandas as pd
 
 try:
-    from .config import Config
+    from ..darkpool_analysis.config import Config
 except ImportError:
     from config import Config
 
