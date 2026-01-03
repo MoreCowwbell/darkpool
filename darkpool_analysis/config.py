@@ -95,12 +95,12 @@ EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 # User-facing defaults (most commonly edited)
 # -----------------------------------------------------------------------------
 
-TICKERS_TYPE = ["SINGLE"]  # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8"], ["SINGLE"] 
+TICKERS_TYPE =  ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8"]  # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8"], ["SINGLE"] 
 DEFAULT_TICKERS = ["TQQQ"]
 
 DEFAULT_TARGET_DATE = "2025-12-31"  # Last trading day (Monday)
 DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
-DEFAULT_BACKFILL_COUNT = 30  # Number of periods to fetch (days for daily, weeks for weekly)
+DEFAULT_BACKFILL_COUNT = 252  # Number of periods to fetch (days for daily, weeks for weekly)
 
 DEFAULT_MARKET_TZ = "US/Eastern"
 DEFAULT_RTH_START = "09:30"
@@ -126,7 +126,7 @@ DEFAULT_POLYGON_TRADES_MODE = "minute"
 # that have already been fetched for a given date+source. No TTL (cache forever).
 DEFAULT_SKIP_CACHED = True
 DEFAULT_EXPORT_CSV = False  # Export tables to CSV files
-DEFAULT_RENDER_PRICE_CHARTS = True  # Render OHLC price charts
+DEFAULT_RENDER_PRICE_CHARTS = False  # Render OHLC price charts
 DEFAULT_PRICE_BAR_TIMEFRAME = "daily"  # daily, weekly, monthly
 DEFAULT_COMBINATION_PLOT = False  # Render combined multi-ticker plot
 DEFAULT_PLOT_TRADING_GAPS = False  # Keep weekend/holiday gaps in plots

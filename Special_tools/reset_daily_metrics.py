@@ -51,7 +51,8 @@ import duckdb
 def _resolve_db_path(raw: str | None) -> Path:
     if raw:
         return Path(raw).expanduser()
-    return Path(__file__).resolve().parent / "darkpool_analysis" / "data" / "darkpool.duckdb"
+    # Script is in Special_tools/, database is in darkpool_analysis/data/
+    return Path(__file__).resolve().parent.parent / "darkpool_analysis" / "data" / "darkpool.duckdb"
 
 
 def _parse_date(value: str | None) -> date | None:

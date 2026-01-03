@@ -15,13 +15,13 @@ try:
     from .config import load_config
     from .db import get_connection, init_db, upsert_dataframe
     from .fetch_finra_short_cdn import fetch_finra_short_cdn_daily
-    from ..Scanner_code.scanner_analytics import build_scanner_metrics
+    from .scanner_analytics import build_scanner_metrics
     from .scanner_renderer import render_scanner_outputs
 except ImportError:
     from config import load_config
     from db import get_connection, init_db, upsert_dataframe
     from fetch_finra_short_cdn import fetch_finra_short_cdn_daily
-    from darkpool.Scanner_code.scanner_analytics import build_scanner_metrics
+    from scanner_analytics import build_scanner_metrics
     from scanner_renderer import render_scanner_outputs
 
 
