@@ -340,11 +340,26 @@ def init_db(conn: duckdb.DuckDBPyConnection) -> None:
             log_ratio DOUBLE,
             strikes_count INTEGER,
             atm_strike DOUBLE,
+            otm_call_premium DOUBLE,
+            itm_call_premium DOUBLE,
+            otm_put_premium DOUBLE,
+            itm_put_premium DOUBLE,
+            directional_score DOUBLE,
             fetch_timestamp TIMESTAMP,
             PRIMARY KEY (symbol, trade_date, expiration_type)
         )
         """
     )
+    # Migration: add ITM/OTM columns if they don't exist
+    options_premium_columns = [
+        "otm_call_premium DOUBLE",
+        "itm_call_premium DOUBLE",
+        "otm_put_premium DOUBLE",
+        "itm_put_premium DOUBLE",
+        "directional_score DOUBLE",
+    ]
+    for column_def in options_premium_columns:
+        conn.execute(f"ALTER TABLE options_premium_summary ADD COLUMN IF NOT EXISTS {column_def}")
 
 
 def upsert_dataframe(

@@ -402,6 +402,8 @@ def main() -> None:
                 tickers=config.tickers,
                 timeframe=config.price_bar_timeframe,
                 min_premium_highlight=config.options_min_premium_highlight,
+                options_premium_display_mode=config.options_premium_display_mode,
+                itm_call_hedge_threshold=config.itm_call_hedge_threshold,
             )
         except Exception as exc:
             logging.error("Failed to render price charts: %s", exc)

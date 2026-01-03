@@ -169,6 +169,16 @@ DEFAULT_OPTIONS_STRIKE_COUNT = 20  # 30 contracts from ATM
 DEFAULT_OPTIONS_MIN_PREMIUM_HIGHLIGHT = 4.0  # $M threshold for highlighting
 DEFAULT_FETCH_OPTIONS_PREMIUM = True  # Enable/disable options premium fetching
 
+# Options premium display mode (affects visualization only, all data is always stored)
+# - "TOTAL": Current behavior - total call/put premium (backwards compatible)
+# - "WTD_STYLE": OTM focus with ITM call hedge warning (WTD's recommended approach)
+# - "FULL_BREAKDOWN": Show all 4 categories (OTM/ITM x Call/Put)
+DEFAULT_OPTIONS_PREMIUM_DISPLAY_MODE = "WTD_STYLE"
+
+# Threshold for ITM call hedge warning (% of total call premium)
+# When ITM calls exceed this ratio, shows warning marker in WTD_STYLE mode
+DEFAULT_ITM_CALL_HEDGE_THRESHOLD = 0.30  # 30%
+
 # -----------------------------------------------------------------------------
 # Scanner defaults (FINRA CDN full-list short sale scan)
 # -----------------------------------------------------------------------------
@@ -390,6 +400,8 @@ class Config:
     options_strike_count: int
     options_min_premium_highlight: float
     fetch_options_premium: bool
+    options_premium_display_mode: str  # "TOTAL", "WTD_STYLE", or "FULL_BREAKDOWN"
+    itm_call_hedge_threshold: float  # Threshold for ITM call hedge warning
 
 
 def load_config() -> Config:
@@ -566,4 +578,6 @@ def load_config() -> Config:
         options_strike_count=int(os.getenv("OPTIONS_STRIKE_COUNT", str(DEFAULT_OPTIONS_STRIKE_COUNT))),
         options_min_premium_highlight=float(os.getenv("OPTIONS_MIN_PREMIUM_HIGHLIGHT", str(DEFAULT_OPTIONS_MIN_PREMIUM_HIGHLIGHT))),
         fetch_options_premium=os.getenv("FETCH_OPTIONS_PREMIUM", str(DEFAULT_FETCH_OPTIONS_PREMIUM)).lower() in ("true", "1", "yes"),
+        options_premium_display_mode=os.getenv("OPTIONS_PREMIUM_DISPLAY_MODE", DEFAULT_OPTIONS_PREMIUM_DISPLAY_MODE).upper(),
+        itm_call_hedge_threshold=float(os.getenv("ITM_CALL_HEDGE_THRESHOLD", str(DEFAULT_ITM_CALL_HEDGE_THRESHOLD))),
     )

@@ -262,24 +262,58 @@ def fetch_options_premium_for_date(
     return df
 
 
-def compute_premium_summary(df: pd.DataFrame) -> pd.DataFrame:
+def compute_premium_summary(df: pd.DataFrame, atm_price: float) -> pd.DataFrame:
     """
-    Aggregate individual contract premiums into summary metrics.
+    Aggregate individual contract premiums into summary metrics with ITM/OTM breakdown.
+
+    ITM/OTM determination (per WTD's methodology):
+    - For calls: OTM = strike > atm_price, ITM = strike < atm_price
+    - For puts: OTM = strike < atm_price, ITM = strike > atm_price
 
     Returns DataFrame with:
     - symbol, trade_date, expiration_type
     - total_call_premium, total_put_premium, net_premium, log_ratio
+    - otm_call_premium, itm_call_premium, otm_put_premium, itm_put_premium
+    - directional_score
     """
     if df.empty:
         return pd.DataFrame()
 
-    grouped = df.groupby(["symbol", "trade_date", "expiration_type"]).apply(
-        lambda g: pd.Series({
-            "total_call_premium": g[g["option_type"] == "C"]["premium"].sum(),
-            "total_put_premium": g[g["option_type"] == "P"]["premium"].sum(),
+    def compute_group_summary(g: pd.DataFrame) -> pd.Series:
+        calls = g[g["option_type"] == "C"]
+        puts = g[g["option_type"] == "P"]
+
+        # Total premiums (backwards compatible)
+        total_call_premium = calls["premium"].sum()
+        total_put_premium = puts["premium"].sum()
+
+        # ITM/OTM breakdown using atm_price
+        # Calls: OTM when strike > ATM, ITM when strike < ATM
+        otm_call_premium = calls[calls["strike"] > atm_price]["premium"].sum()
+        itm_call_premium = calls[calls["strike"] < atm_price]["premium"].sum()
+
+        # Puts: OTM when strike < ATM, ITM when strike > ATM
+        otm_put_premium = puts[puts["strike"] < atm_price]["premium"].sum()
+        itm_put_premium = puts[puts["strike"] > atm_price]["premium"].sum()
+
+        # Directional score (per WTD's insight):
+        # OTM calls are bullish, OTM puts are bearish, ITM calls sold are bearish (hedge)
+        directional_score = otm_call_premium - otm_put_premium - (itm_call_premium * 0.5)
+
+        return pd.Series({
+            "total_call_premium": total_call_premium,
+            "total_put_premium": total_put_premium,
             "strikes_count": g["strike"].nunique(),
-            "atm_strike": g["strike"].median(),
+            "atm_strike": atm_price,  # Use actual ATM price, not median
+            "otm_call_premium": otm_call_premium,
+            "itm_call_premium": itm_call_premium,
+            "otm_put_premium": otm_put_premium,
+            "itm_put_premium": itm_put_premium,
+            "directional_score": directional_score,
         })
+
+    grouped = df.groupby(["symbol", "trade_date", "expiration_type"]).apply(
+        compute_group_summary
     ).reset_index()
 
     grouped["net_premium"] = grouped["total_call_premium"] - grouped["total_put_premium"]
@@ -359,8 +393,8 @@ def fetch_and_store_options_premium(
         stats["fetched"] += 1
         all_detail_rows.append(df)
 
-        # Compute summary
-        summary = compute_premium_summary(df)
+        # Compute summary with ITM/OTM breakdown
+        summary = compute_premium_summary(df, atm_price)
         if not summary.empty:
             all_summary_rows.append(summary)
 
@@ -393,6 +427,11 @@ def fetch_and_store_options_premium(
                           log_ratio = EXCLUDED.log_ratio,
                           strikes_count = EXCLUDED.strikes_count,
                           atm_strike = EXCLUDED.atm_strike,
+                          otm_call_premium = EXCLUDED.otm_call_premium,
+                          itm_call_premium = EXCLUDED.itm_call_premium,
+                          otm_put_premium = EXCLUDED.otm_put_premium,
+                          itm_put_premium = EXCLUDED.itm_put_premium,
+                          directional_score = EXCLUDED.directional_score,
                           fetch_timestamp = EXCLUDED.fetch_timestamp
             """
         )
