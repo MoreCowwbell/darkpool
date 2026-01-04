@@ -110,11 +110,11 @@ EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 # -----------------------------------------------------------------------------
 
 TICKERS_TYPE =  ["SUMMARY"]  # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8", "SPECULATIVE"], ["SINGLE"], ["ALL"] 
-DEFAULT_TICKERS = ["PLTR"]
+DEFAULT_TICKERS = ["PLTR", "MU"]
 
-DEFAULT_TARGET_DATE = "2025-12-31"  # Last trading day (Monday)
+DEFAULT_TARGET_DATE = "2026-01-02"  # Last trading day (Monday)
 DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
-DEFAULT_BACKFILL_COUNT = 5  # Number of periods to fetch (days for daily, weeks for weekly)
+DEFAULT_BACKFILL_COUNT = 30  # Number of periods to fetch (days for daily, weeks for weekly)
 
 DEFAULT_MARKET_TZ = "US/Eastern"
 DEFAULT_RTH_START = "09:30"
@@ -140,11 +140,11 @@ DEFAULT_POLYGON_TRADES_MODE = "minute"
 # that have already been fetched for a given date+source. No TTL (cache forever).
 DEFAULT_SKIP_CACHED = True
 DEFAULT_EXPORT_CSV = False  # Export tables to CSV files
-DEFAULT_RENDER_PRICE_CHARTS = False  # Render OHLC price charts
+DEFAULT_RENDER_PRICE_CHARTS = True  # Render OHLC price charts
 DEFAULT_PRICE_BAR_TIMEFRAME = "daily"  # daily, weekly, monthly
-DEFAULT_COMBINATION_PLOT = False  # Render combined multi-ticker plot
-DEFAULT_PLOT_TRADING_GAPS = False  # Keep weekend/holiday gaps in plots
-DEFAULT_PANEL1_METRIC = "combined_ratio"  # "vw_flow", "combined_ratio", or "finra_buy_volume"
+DEFAULT_COMBINATION_PLOT = True  # Render combined multi-ticker plot
+DEFAULT_PLOT_TRADING_GAPS = True  # Keep weekend/holiday gaps in plots
+DEFAULT_PANEL1_METRIC = "finra_buy_volume"  # "vw_flow", "combined_ratio", or "finra_buy_volume"
 
 # -----------------------------------------------------------------------------
 # Provenance and scoring controls
