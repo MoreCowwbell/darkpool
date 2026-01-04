@@ -1,0 +1,63 @@
+SECTOR_ZOOM_MAP = {
+    "SECTOR_CORE": {
+        "XLF": ["BRK.B","JPM","BAC","WFC","GS","MS","C","V","MA","AXP"],
+        "KRE": ["TFC","PNC","USB","FITB","KEY","HBAN","RF","CFG","ZION","MTB"],
+        "XLK": ["AAPL","MSFT","NVDA","AVGO","CRM","ORCL","AMD","ADBE","CSCO","QCOM"],
+        "SMH": ["NVDA","TSM","AVGO","AMD","ASML","MU","AMAT","LRCX","KLAC","INTC"],
+        "XLI": ["GE","CAT","RTX","BA","LMT","NOC","DE","ETN","HON","GD"],
+        "XLY": ["AMZN","TSLA","HD","MCD","BKNG","LOW","NKE","TJX","SBUX","RCL"],
+        "XLE": ["XOM","CVX","COP","SLB","EOG","OXY","MPC","VLO","PSX","HAL"],
+        "XLV": ["LLY","JNJ","ABBV","UNH","MRK","PFE","TMO","AMGN","BMY","MDT"],
+        "XLP": ["WMT","COST","PG","KO","PEP","PM","MO","MDLZ","CL","KMB"],
+        "XLU": ["NEE","SO","DUK","AEP","EXC","SRE","XEL","ED","EIX","PEG"],
+    },
+
+    "SECTOR_SUMMARY": {
+        "XLE": ["XOM","CVX","COP","SLB","EOG","OXY","MPC","VLO","PSX","HAL"],
+        "XLF": ["BRK.B","JPM","BAC","WFC","GS","MS","C","V","MA","AXP"],
+        "XLK": ["AAPL","MSFT","NVDA","AVGO","CRM","ORCL","AMD","ADBE","CSCO","QCOM"],
+        "XLY": ["AMZN","TSLA","HD","MCD","BKNG","LOW","NKE","TJX","SBUX","RCL"],
+        "XLP": ["WMT","COST","PG","KO","PEP","PM","MO","MDLZ","CL","KMB"],
+        "XLV": ["LLY","JNJ","ABBV","UNH","MRK","PFE","TMO","AMGN","BMY","MDT"],
+        "XLU": ["NEE","SO","DUK","AEP","EXC","SRE","XEL","ED","EIX","PEG"],
+        "XLI": ["GE","CAT","RTX","BA","LMT","NOC","DE","ETN","HON","GD"],
+        "XLC": ["META","GOOGL","GOOG","NFLX","TMUS","VZ","T","DIS","CMCSA","CHTR"],
+        "XLB": ["LIN","FCX","NEM","SHW","APD","ECL","DOW","DD","NUE","MLM"],
+        "XLRE": ["PLD","AMT","EQIX","WELL","SPG","O","VTR","PSA","CCI","AVB"],
+        "SPY": ["NVDA","AAPL","MSFT","AMZN","GOOGL","META","BRK.B","AVGO","TSLA","JPM"],
+    },
+
+    "GLOBAL_MACRO": {
+        "SPY":  ["NVDA","AAPL","MSFT","AMZN","GOOGL","META","BRK.B","AVGO","TSLA","JPM"],
+        "QQQ":  ["NVDA","AAPL","MSFT","AMZN","AVGO","META","GOOGL","TSLA","COST","NFLX"],
+        "TQQQ": ["NVDA","AAPL","MSFT","AMZN","AVGO","META","GOOGL","TSLA","COST","NFLX"],
+
+        # Note: IWM/VGK/EWJ/EFA/EEM/FXI are ADR + local-ticker mixes for “scan lists”
+        "IWM": ["SMCI","PLTR","AXON","CVNA","RIVN","SOFI","RNR","GTLB","CELH","CROX"],
+        "VGK": ["ASML","SAP","NVS","AZN","SHEL","HSBC","TTE","SNY","UL","NOVN.SW"],
+        "EWJ": ["TM","MUFG","SMFG","SONY","HMC","NTTYY","MFG","TOELY","KDDIY","CAJ"],
+        "EFA": ["ASML","RHHBY","NVS","AZN","HSBC","SHEL","TM","SAP","NESN.SW","NOVN.SW"],
+        "EEM": ["TSM","TCEHY","SSNLF","BABA","RELIANCE.NS","MEITF","ICICIBANK.NS","INFY","000660.KS","PDD"],
+        "FXI": ["TCEHY","BABA","MEITF","XIACF","JD","BIDU","CICHY","IDCBY","PNGAY","NTES"],
+
+        # These aren’t equity “holdings” ETFs—so this is an “instrument proxy” list for scanning.
+        "UUP":  ["DXY","EURUSD","USDJPY","GBPUSD","USDCAD","USDSEK","USDCHF","AUDUSD","NZDUSD","USDMXN"],
+        "TLT":  ["UST20Y+","UST30Y","UST25Y","UST22Y","UST27Y","UST21Y","UST24Y","UST28Y","UST23Y","UST26Y"],
+        "GLD":  ["XAUUSD","GC=F","IAU","BAR","SGOL","PHYS","GLDM","GOLD","NEM","AEM"],
+        "USO":  ["CL=F","BZ=F","XOM","CVX","COP","OXY","SLB","MPC","VLO","PSX"],
+        "VIXY": ["VX=F","VIX","SVXY","UVXY","VXX","SPX","ES=F","SKEW","MOVE","VVIX"],
+    },
+
+    "COMMODITIES": {
+        "GLD": ["XAUUSD","GC=F","IAU","BAR","SGOL","PHYS","GLDM","GOLD","NEM","AEM"],
+        "SLV": ["XAGUSD","SI=F","SIVR","PSLV","SLVP","SIL","WPM","PAAS","HL","AG"],
+        "GDX": ["NEM","AEM","GOLD","WPM","AU","FNV","KGC","RGLD","BVN","SSRM"],
+        "USO": ["CL=F","BZ=F","XOM","CVX","COP","OXY","SLB","MPC","VLO","PSX"],
+        "UNG": ["NG=F","EQT","CHK","AR","SWN","DVN","CTRA","RRC","CNX","COG"],
+        "URA": ["CCJ","NXE","UEC","LEU","DNN","UUUU","SRUUF","PALAF","PDN.AX","BOE.AX"],
+    },
+
+    "MAG8": {
+        "MAG8": ["MSFT","AAPL","GOOGL","AMZN","NVDA","AVGO","META","TSLA"]
+    }
+}
