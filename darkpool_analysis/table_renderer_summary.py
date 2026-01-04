@@ -70,7 +70,7 @@ LOG_FLOW_THRESHOLD = 0.5  # Symmetric threshold for log(ratio)
 # VWBR coloring mode: "mean_threshold" or "zscore"
 # - mean_threshold: compares value to 30-day mean ± k*std (computed at render time)
 # - zscore: uses pre-computed finra_buy_volume_z from database
-VWBR_COLOR_MODE = "mean_threshold"  # Options: "mean_threshold", "zscore"
+VWBR_COLOR_MODE = "zscore"  # Options: "mean_threshold", "zscore"
 
 # VWBR mean_threshold mode settings (30-day mean +/- k*std)
 VWBR_LOOKBACK_DAYS = 30
@@ -78,8 +78,8 @@ VWBR_K_BUY = 1.0   # mean + k*std = green (high buying)
 VWBR_K_SELL = 1.0  # mean - k*std = red (low buying)
 
 # VWBR zscore mode thresholds (uses finra_buy_volume_z from database)
-VWBR_Z_BUY = 1.0   # z >= 1.0 = green (high buying)
-VWBR_Z_SELL = -1.0  # z <= -1.0 = red (low buying)
+VWBR_Z_BUY = 1.8   # z >= 1.0 = green (high buying)
+VWBR_Z_SELL = -1.8  # z <= -1.0 = red (low buying)
 
 
 # =============================================================================
@@ -123,16 +123,20 @@ def fetch_vwbr_stats(
     tickers: list[str],
     lookback_days: int = VWBR_LOOKBACK_DAYS,
 ) -> dict[str, tuple[float, float]]:
-    """Fetch 30-day rolling mean/std of finra_buy_volume (VWBR) per ticker.
+    """Fetch rolling mean/std of finra_buy_volume (VWBR) per ticker.
+
+    Uses forward-valid calculation (excludes reference_date, uses prior days only).
+    This avoids look-ahead bias - matching professional quant practice.
 
     Returns:
-        Dict mapping ticker -> (mean, std). Falls back to available data if < 20 days.
+        Dict mapping ticker -> (mean, std). Falls back to available data if < lookback days.
     """
     if not tickers:
         return {}
 
     ticker_placeholders = ", ".join(["?" for _ in tickers])
 
+    # Forward-valid: date < reference_date (excludes current day, uses prior days only)
     query = f"""
         SELECT
             symbol,
@@ -141,7 +145,7 @@ def fetch_vwbr_stats(
             COUNT(*) AS day_count
         FROM daily_metrics
         WHERE symbol IN ({ticker_placeholders})
-          AND date <= ?
+          AND date < ?
           AND date >= ? - INTERVAL '{lookback_days}' DAY
           AND finra_buy_volume IS NOT NULL
         GROUP BY symbol
