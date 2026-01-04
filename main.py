@@ -8,7 +8,6 @@ and applied proportionally to FINRA OTC volume.
 
 Usage:
     python main.py
-    python main.py -scanner
 """
 from __future__ import annotations
 
@@ -21,10 +20,6 @@ if str(_package_dir) not in sys.path:
     sys.path.insert(0, str(_package_dir))
 
 from orchestrator import main
-from scanner_orchestrator import main as scanner_main
 
 if __name__ == "__main__":
-    args = {arg.lower() for arg in sys.argv[1:]}
-    if "-scanner" in args or "--scanner" in args:
-        sys.exit(scanner_main() or 0)
     sys.exit(main() or 0)

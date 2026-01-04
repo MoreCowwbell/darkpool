@@ -164,9 +164,9 @@ def main() -> int:
         elif args.mode == "delete-keep-lit":
             action = (
                 "This will DELETE all non-lit tables (daily_metrics, index_constituent_short_agg_daily, "
-                "finra_otc_weekly_raw, finra_short_daily_raw, finra_short_daily_all_raw, "
+                "finra_otc_weekly_raw, finra_short_daily_raw, "
                 "polygon_daily_agg_raw, options_premium_daily, options_premium_summary, "
-                "scanner_daily_metrics, composite_signal). "
+                "composite_signal). "
                 "It will KEEP polygon_equity_trades_raw, lit_direction_daily, and polygon_ingestion_state."
             )
             if not args.yes and not _confirm(action):
@@ -178,11 +178,9 @@ def main() -> int:
                 ("index_constituent_short_agg_daily", "trade_date"),
                 ("finra_otc_weekly_raw", "week_start_date"),
                 ("finra_short_daily_raw", "trade_date"),
-                ("finra_short_daily_all_raw", "trade_date"),
                 ("polygon_daily_agg_raw", "trade_date"),
                 ("options_premium_daily", "trade_date"),
                 ("options_premium_summary", "trade_date"),
-                ("scanner_daily_metrics", "date"),
                 ("composite_signal", "date"),
             ]
             for table, date_col in tables_to_clear:

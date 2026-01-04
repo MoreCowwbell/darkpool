@@ -193,19 +193,6 @@ DEFAULT_OPTIONS_PREMIUM_DISPLAY_MODE = "WTD_STYLE"
 # When ITM calls exceed this ratio, shows warning marker in WTD_STYLE mode
 DEFAULT_ITM_CALL_HEDGE_THRESHOLD = 0.30  # 30%
 
-# -----------------------------------------------------------------------------
-# Scanner defaults (FINRA CDN full-list short sale scan)
-# -----------------------------------------------------------------------------
-DEFAULT_SCANNER_DB_NAME = "darkpool_scanner.duckdb"
-DEFAULT_SCANNER_LOOKBACK_DAYS = 90  # Lookback window for scanner z-scores
-DEFAULT_SCANNER_TREND_DAYS = 3  # Trend window length
-DEFAULT_SCANNER_TOP_N = 50  # Top N symbols to report
-DEFAULT_SCANNER_OUTLIER_Z = 2.0
-DEFAULT_SCANNER_VOLUME_Z = 2.0
-DEFAULT_SCANNER_RATIO_Z = 2.0
-DEFAULT_SCANNER_EXPORT_FULL = True
-DEFAULT_SCANNER_INFERENCE_VERSION = "Scanner_v1"
-
 DEFAULT_TABLE_STYLE = {
     "mode": "scan",
     "font_family": '"Segoe UI", Arial, sans-serif',
@@ -340,9 +327,7 @@ class Config:
     table_dir: Path
     plot_dir: Path
     price_chart_dir: Path
-    scanner_output_dir: Path
     db_path: Path
-    scanner_db_path: Path
     tickers: list[str]
     finra_tickers: list[str]
     min_lit_volume: float
@@ -396,14 +381,6 @@ class Config:
     index_constituents_file: Optional[str]
     index_proxy_map: dict
     table_style: dict
-    scanner_lookback_days: int
-    scanner_trend_days: int
-    scanner_top_n: int
-    scanner_outlier_z: float
-    scanner_volume_z: float
-    scanner_ratio_z: float
-    scanner_export_full: bool
-    scanner_inference_version: str
     composite_w_short: float
     composite_w_lit: float
     composite_w_price: float
@@ -501,8 +478,6 @@ def load_config() -> Config:
     finra_short_sale_file = _resolve_path(root_dir, os.getenv("FINRA_SHORT_SALE_FILE"))
     finra_short_sale_dir = _resolve_path(root_dir, os.getenv("FINRA_SHORT_SALE_DIR"))
     index_constituents_file = _resolve_path(root_dir, os.getenv("INDEX_CONSTITUENTS_FILE"))
-    scanner_db_path_raw = _resolve_path(root_dir, os.getenv("SCANNER_DB_PATH"))
-    scanner_db_path = Path(scanner_db_path_raw) if scanner_db_path_raw else root_dir / "data" / DEFAULT_SCANNER_DB_NAME
 
     return Config(
         root_dir=root_dir,
@@ -511,9 +486,7 @@ def load_config() -> Config:
         table_dir=root_dir / "output" / "tables",
         plot_dir=root_dir / "output" / "plots",
         price_chart_dir=root_dir / "output" / "price_charts",
-        scanner_output_dir=root_dir / "output" / "scanner",
         db_path=root_dir / "data" / "darkpool.duckdb",
-        scanner_db_path=scanner_db_path,
         tickers=tickers,
         finra_tickers=finra_tickers,
         min_lit_volume=float(os.getenv("MIN_LIT_VOLUME", str(DEFAULT_MIN_LIT_VOLUME))),
@@ -579,18 +552,6 @@ def load_config() -> Config:
         index_constituents_file=index_constituents_file,
         index_proxy_map=_parse_json_env("INDEX_PROXY_MAP") or DEFAULT_INDEX_PROXY_MAP,
         table_style=deepcopy(DEFAULT_TABLE_STYLE),
-        scanner_lookback_days=int(os.getenv("SCANNER_LOOKBACK_DAYS", str(DEFAULT_SCANNER_LOOKBACK_DAYS))),
-        scanner_trend_days=int(os.getenv("SCANNER_TREND_DAYS", str(DEFAULT_SCANNER_TREND_DAYS))),
-        scanner_top_n=int(os.getenv("SCANNER_TOP_N", str(DEFAULT_SCANNER_TOP_N))),
-        scanner_outlier_z=float(os.getenv("SCANNER_OUTLIER_Z", str(DEFAULT_SCANNER_OUTLIER_Z))),
-        scanner_volume_z=float(os.getenv("SCANNER_VOLUME_Z", str(DEFAULT_SCANNER_VOLUME_Z))),
-        scanner_ratio_z=float(os.getenv("SCANNER_RATIO_Z", str(DEFAULT_SCANNER_RATIO_Z))),
-        scanner_export_full=os.getenv(
-            "SCANNER_EXPORT_FULL", str(DEFAULT_SCANNER_EXPORT_FULL)
-        ).lower() in ("true", "1", "yes"),
-        scanner_inference_version=os.getenv(
-            "SCANNER_INFERENCE_VERSION", DEFAULT_SCANNER_INFERENCE_VERSION
-        ),
         composite_w_short=float(os.getenv("COMPOSITE_W_SHORT", str(DEFAULT_COMPOSITE_W_SHORT))),
         composite_w_lit=float(os.getenv("COMPOSITE_W_LIT", str(DEFAULT_COMPOSITE_W_LIT))),
         composite_w_price=float(os.getenv("COMPOSITE_W_PRICE", str(DEFAULT_COMPOSITE_W_PRICE))),
