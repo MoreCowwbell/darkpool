@@ -65,7 +65,7 @@ ACCUM_LOW_THRESHOLD = 30
 
 # Order flow color thresholds (using log ratio for symmetric coloring)
 # log(1.65) ≈ 0.5, log(0.61) ≈ -0.5
-LOG_FLOW_THRESHOLD = 0.5  # Symmetric threshold for log(ratio)
+LOG_FLOW_THRESHOLD = 0.75  # Symmetric threshold for log(ratio)
 
 # VWBR coloring mode: "mean_threshold" or "zscore"
 # - mean_threshold: compares value to 30-day mean ± k*std (computed at render time)
@@ -214,47 +214,54 @@ def _format_pct_avg(buy_vol: float, total_vol: float) -> str:
 
 
 def _get_buy_trim(
-    ratio: float,
-    volume: float,
-    avg_volume: float,
-    accum_score: float,
+    vwbr_z: Optional[float],
+    ratio: Optional[float],
+    accum_score: Optional[float],
 ) -> tuple[str, str]:
-    """Return (indicator_text, css_class) based on volume-weighted flow with Acc/Dist confirmation.
+    """Return (indicator_text, css_class) using VWBR-anchored signal logic.
 
-    Primary Signal (both required):
-    - Volume > Average volume for the ticker
-    - Flow: log(ratio) >= +LOG_FLOW_THRESHOLD or <= -LOG_FLOW_THRESHOLD
+    VWBR (Volume-Weighted Buy Ratio) is the anchor signal since it measures
+    actual institutional buying volume (more reliable than ratio-based Flow).
 
     Signal Strength:
-    - Soft Buy/Trim: Volume + Flow only (text color only)
-    - Strong Buy/Trim: Volume + Flow + Acc/Dist confirms (text + box)
+    - Strong: VWBR aligned + at least 1 other (Flow OR Acc)
+    - Soft: VWBR alone OR (Flow + Acc without VWBR)
+    - None: Only Flow or only Acc (insufficient confirmation)
+
+    Thresholds:
+    - VWBR bullish: z >= 1.1 | bearish: z <= -1.1
+    - Flow bullish: log(ratio) >= 0.5 | bearish: log(ratio) <= -0.5
+    - Acc bullish: score >= 60 | bearish: score <= 40
     """
-    # Check for valid inputs
-    if pd.isna(ratio) or ratio is None or ratio <= 0:
-        return ("", "indicator-neutral")
-    if pd.isna(volume) or pd.isna(avg_volume) or avg_volume <= 0:
-        return ("", "indicator-neutral")
+    # Determine signal direction for each component
+    vwbr_bull = not pd.isna(vwbr_z) and vwbr_z >= VWBR_Z_BUY
+    vwbr_bear = not pd.isna(vwbr_z) and vwbr_z <= VWBR_Z_SELL
 
-    # Primary signal: Volume must be above average
-    if volume <= avg_volume:
-        return ("", "indicator-neutral")
+    flow_bull = False
+    flow_bear = False
+    if not pd.isna(ratio) and ratio is not None and ratio > 0:
+        log_ratio = math.log(ratio)
+        flow_bull = log_ratio >= LOG_FLOW_THRESHOLD
+        flow_bear = log_ratio <= -LOG_FLOW_THRESHOLD
 
-    log_ratio = math.log(ratio)
+    acc_bull = not pd.isna(accum_score) and accum_score >= 60
+    acc_bear = not pd.isna(accum_score) and accum_score <= 40
 
-    # Check flow direction
-    if log_ratio >= LOG_FLOW_THRESHOLD:
-        # Bullish flow + high volume
-        # Check if Acc/Dist confirms (>= 60 for strong signal)
-        if not pd.isna(accum_score) and accum_score >= 60:
-            return ("Buy", "indicator-buy-strong")  # Strong: text + box
-        return ("Buy", "indicator-buy-soft")  # Soft: text only
+    # BULLISH signals
+    if vwbr_bull:
+        if flow_bull or acc_bull:
+            return ("Buy", "indicator-buy-strong")  # Strong: VWBR + confirmation
+        return ("Buy", "indicator-buy-soft")  # Soft: VWBR alone
+    elif flow_bull and acc_bull:
+        return ("Buy", "indicator-buy-soft")  # Soft: Flow + Acc (no VWBR)
 
-    if log_ratio <= -LOG_FLOW_THRESHOLD:
-        # Bearish flow + high volume
-        # Check if Acc/Dist confirms (<= 40 for strong signal)
-        if not pd.isna(accum_score) and accum_score <= 40:
-            return ("Trim", "indicator-trim-strong")  # Strong: text + box
-        return ("Trim", "indicator-trim-soft")  # Soft: text only
+    # BEARISH signals
+    if vwbr_bear:
+        if flow_bear or acc_bear:
+            return ("Trim", "indicator-trim-strong")  # Strong: VWBR + confirmation
+        return ("Trim", "indicator-trim-soft")  # Soft: VWBR alone
+    elif flow_bear and acc_bear:
+        return ("Trim", "indicator-trim-soft")  # Soft: Flow + Acc (no VWBR)
 
     return ("", "indicator-neutral")
 
@@ -374,9 +381,8 @@ def _build_sector_panel_html(
     """Build HTML for a single sector panel."""
     sector_name = SECTOR_NAMES.get(ticker, ticker)
 
-    # Calculate averages first (needed for signal logic)
+    # Calculate averages for summary box
     avg_bs_score = rows_df["order_flow"].mean() if not rows_df.empty else 0
-    avg_volume = rows_df["total_volume"].mean() if not rows_df.empty else 0
 
     # Get VWBR stats for mean_threshold mode (only used if VWBR_COLOR_MODE == "mean_threshold")
     # Fallback to current data if not in stats (Option A fallback)
@@ -421,9 +427,9 @@ def _build_sector_panel_html(
         if order_flow_border and order_flow_border != "transparent":
             order_flow_style += f" border: 1px solid {order_flow_border};"
 
-        volume_val = row.get("total_volume")
         accum_score = row.get("accum_score")
-        indicator_text, indicator_class = _get_buy_trim(order_flow_val, volume_val, avg_volume, accum_score)
+        # Use vwbr_z from earlier in the loop (already fetched for cell coloring)
+        indicator_text, indicator_class = _get_buy_trim(vwbr_z, order_flow_val, accum_score)
 
         accum_score_str = f"{accum_score:.0f}" if not pd.isna(accum_score) else "NA"
         accum_bg, accum_text, accum_border = _get_accum_color(accum_score)
@@ -445,12 +451,40 @@ def _build_sector_panel_html(
             </tr>
         """
 
+    # Calculate VWBR average (finra_buy_volume) and its z-score average
+    avg_vwbr = rows_df["finra_buy_volume"].mean() if not rows_df.empty and "finra_buy_volume" in rows_df.columns else 0
+    avg_vwbr_z = rows_df["finra_buy_volume_z"].mean() if not rows_df.empty and "finra_buy_volume_z" in rows_df.columns else 0
+    # Format VWBR Avg as plain number (no M suffix) - shows millions as decimal
+    if pd.isna(avg_vwbr):
+        avg_vwbr_str = "NA"
+    elif avg_vwbr >= 1_000_000:
+        avg_vwbr_str = f"{avg_vwbr / 1_000_000:.1f}"  # e.g., "2.5" for 2.5M
+    elif avg_vwbr >= 1_000:
+        avg_vwbr_str = f"{avg_vwbr / 1_000:.0f}K"
+    else:
+        avg_vwbr_str = f"{avg_vwbr:.0f}"
+
     # Format average B/S score for display (already calculated above)
     avg_bs_str = f"{avg_bs_score:.2f}" if not pd.isna(avg_bs_score) else "NA"
 
     # Calculate median accumulation score
     med_accum_score = rows_df["accum_score"].median() if not rows_df.empty and "accum_score" in rows_df.columns else 0
     med_accum_str = f"{med_accum_score:.0f}" if not pd.isna(med_accum_score) else "NA"
+
+    # Determine VWBR Avg box style using z-score (same as cell coloring)
+    if not pd.isna(avg_vwbr_z):
+        if avg_vwbr_z >= VWBR_Z_BUY:
+            avg_vwbr_border = BRIGHT_GREEN
+            avg_vwbr_text = BRIGHT_GREEN
+        elif avg_vwbr_z <= VWBR_Z_SELL:
+            avg_vwbr_border = BRIGHT_RED
+            avg_vwbr_text = BRIGHT_RED
+        else:
+            avg_vwbr_border = palette.get("text_muted", "#8b8b8b")
+            avg_vwbr_text = palette.get("text_muted", "#8b8b8b")
+    else:
+        avg_vwbr_border = palette.get("text_muted", "#8b8b8b")
+        avg_vwbr_text = palette.get("text_muted", "#8b8b8b")
 
     # Determine avg B/S score box style using log ratio (same as cell coloring)
     if not pd.isna(avg_bs_score) and avg_bs_score > 0:
@@ -499,10 +533,12 @@ def _build_sector_panel_html(
             </table>
             <div class="panel-footer">
                 <div class="footer-labels">
-                    <span class="avg-label">Avg B/S</span>
-                    <span class="avg-label">Med Acc</span>
+                    <span class="avg-label">VWBR Avg</span>
+                    <span class="avg-label">B/S Avg</span>
+                    <span class="avg-label">Acc/Dist Med</span>
                 </div>
                 <div class="footer-scores">
+                    <span class="avg-score" style="background-color: #000000; border: 2px solid {avg_vwbr_border}; color: {avg_vwbr_text};">{avg_vwbr_str}</span>
                     <span class="avg-score" style="background-color: #000000; border: 2px solid {avg_bs_border}; color: {avg_bs_text};">{avg_bs_str}</span>
                     <span class="avg-score" style="background-color: #000000; border: 2px solid {med_accum_border}; color: {med_accum_text};">{med_accum_str}</span>
                 </div>
@@ -529,12 +565,6 @@ def build_full_page_html(
     palette: dict,
 ) -> str:
     """Build complete HTML document with embedded CSS."""
-
-    # Dynamic VWBR legend text based on coloring mode
-    if VWBR_COLOR_MODE == "zscore":
-        vwbr_legend = f"VWBR = FINRA Buy Volume. Colored: z-score &ge; {VWBR_Z_BUY} / &le; {VWBR_Z_SELL} (20-day rolling)"
-    else:
-        vwbr_legend = f"VWBR = FINRA Buy Volume. Colored: mean &pm; {VWBR_K_BUY}&sigma; ({VWBR_LOOKBACK_DAYS}-day)"
 
     html = f"""
 <!DOCTYPE html>
@@ -831,32 +861,30 @@ def build_full_page_html(
 
         <div class="footer-row">
             <div class="footer-definitions">
-                <span>{vwbr_legend}</span>
-                <span>Order Flow = Buy/Sell Ratio. % = Buy Volume / Total Volume.</span>
-                <span>Flow coloring: log(ratio) thresholds &mdash; green &ge; +0.5, red &le; -0.5 (symmetric around 1.0)</span>
-                <span>Signal strength: Soft = Vol &gt; Avg + Flow | Strong = Vol &gt; Avg + Flow + Acc/Dist confirms</span>
+                <span>VWBR = FINRA Buy Volume (z-score colored). Flow = Buy/Sell Ratio.</span>
+                <span>Signal: Strong = VWBR + (Flow or Acc). Soft = VWBR alone or (Flow + Acc).</span>
             </div>
             <div class="footer-right">
                 <div class="legend">
                     <div class="legend-item">
                         <div class="legend-color" style="background-color: {BRIGHT_GREEN};"></div>
-                        <span>Buy (Vol &gt; Avg + Flow &ge; 1.65)</span>
+                        <span>Buy</span>
                     </div>
                     <div class="legend-item">
                         <div class="legend-color" style="background-color: {BRIGHT_RED};"></div>
-                        <span>Trim (Vol &gt; Avg + Flow &le; 0.61)</span>
+                        <span>Trim</span>
                     </div>
                     <div class="legend-item">
                         <div class="legend-color" style="background-color: {ACCUM_GREEN};"></div>
-                        <span>Accumulation (&ge; 70)</span>
+                        <span>Acc &ge; 70</span>
                     </div>
                     <div class="legend-item">
                         <div class="legend-color" style="background-color: {ACCUM_PURPLE};"></div>
-                        <span>Distribution (&le; 30)</span>
+                        <span>Dist &le; 30</span>
                     </div>
                 </div>
                 <div class="data-source">
-                    Data source: FINRA Reg SHO Daily Short Sale. FINRA Weekly OTC Transparency Report.
+                    Source: FINRA Reg SHO Daily Short Sale
                 </div>
             </div>
         </div>

@@ -139,12 +139,15 @@ DEFAULT_POLYGON_TRADES_MODE = "minute"
 # When True, check polygon_ingestion_state before fetching and skip symbols
 # that have already been fetched for a given date+source. No TTL (cache forever).
 DEFAULT_SKIP_CACHED = True
-DEFAULT_EXPORT_CSV = False  # Export tables to CSV files
-DEFAULT_RENDER_PRICE_CHARTS = True  # Render OHLC price charts
 DEFAULT_PRICE_BAR_TIMEFRAME = "daily"  # daily, weekly, monthly
-DEFAULT_COMBINATION_PLOT = True  # Render combined multi-ticker plot
-DEFAULT_PLOT_TRADING_GAPS = True  # Keep weekend/holiday gaps in plots
 DEFAULT_PANEL1_METRIC = "finra_buy_volume"  # "vw_flow", "combined_ratio", or "finra_buy_volume"
+DEFAULT_COMBINATION_PLOT = True  # Render combined multi-ticker plot
+DEFAULT_RENDER_PRICE_CHARTS = True  # Render OHLC price charts
+DEFAULT_RENDER_SUMMARY_DASHBOARD = True  # Render sector summary dashboard
+DEFAULT_RENDER_TABLES = True  # Render daily metrics tables (HTML/PNG)
+DEFAULT_PLOT_TRADING_GAPS = True  # Keep weekend/holiday gaps in plots
+DEFAULT_EXPORT_CSV = False  # Export tables to CSV files
+
 
 # -----------------------------------------------------------------------------
 # Provenance and scoring controls
@@ -342,7 +345,9 @@ class Config:
     polygon_trades_mode: str  # "tick", "minute", or "daily"
     skip_cached: bool  # Skip fetching if already in DB
     export_csv: bool
+    render_tables: bool
     render_price_charts: bool
+    render_summary_dashboard: bool
     price_bar_timeframe: str
     combination_plot: bool
     plot_trading_gaps: bool
@@ -501,8 +506,12 @@ def load_config() -> Config:
         polygon_trades_mode=os.getenv("POLYGON_TRADES_MODE", DEFAULT_POLYGON_TRADES_MODE).lower(),
         skip_cached=os.getenv("SKIP_CACHED", str(DEFAULT_SKIP_CACHED)).lower() in ("true", "1", "yes"),
         export_csv=os.getenv("EXPORT_CSV", str(DEFAULT_EXPORT_CSV)).lower() in ("true", "1", "yes"),
+        render_tables=os.getenv("RENDER_TABLES", str(DEFAULT_RENDER_TABLES)).lower() in ("true", "1", "yes"),
         render_price_charts=os.getenv(
             "RENDER_PRICE_CHARTS", str(DEFAULT_RENDER_PRICE_CHARTS)
+        ).lower() in ("true", "1", "yes"),
+        render_summary_dashboard=os.getenv(
+            "RENDER_SUMMARY_DASHBOARD", str(DEFAULT_RENDER_SUMMARY_DASHBOARD)
         ).lower() in ("true", "1", "yes"),
         price_bar_timeframe=os.getenv(
             "PRICE_BAR_TIMEFRAME", DEFAULT_PRICE_BAR_TIMEFRAME

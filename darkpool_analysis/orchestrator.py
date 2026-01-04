@@ -26,6 +26,7 @@ try:
     from .plotter_chart_ATMprem import render_price_charts
     from .table_renderer import render_daily_metrics_table
     from .combination_plotter import render_combination_plot
+    from .summary_dashboard import render_sector_summary
 except ImportError:
     from analytics import build_daily_metrics, build_index_constituent_short_agg
     from config import load_config
@@ -40,6 +41,7 @@ except ImportError:
     from plotter_chart_ATMprem import render_price_charts
     from table_renderer import render_daily_metrics_table
     from combination_plotter import render_combination_plot
+    from summary_dashboard import render_sector_summary
 
 
 def _ensure_dirs(config) -> None:
@@ -140,11 +142,13 @@ def main() -> None:
     logging.info("Fetch mode: %s, dates to process: %d", config.fetch_mode, len(config.target_dates))
     logging.info("Polygon trades mode: %s", config.polygon_trades_mode)
     logging.info("Cache enabled: %s", config.skip_cached)
+    logging.info("Render tables: %s", config.render_tables)
     logging.info(
         "Price charts: %s (timeframe=%s)",
         config.render_price_charts,
         config.price_bar_timeframe,
     )
+    logging.info("Render summary dashboard: %s", config.render_summary_dashboard)
     logging.info("Options premium fetch: %s", config.fetch_options_premium)
 
     max_date = max(config.target_dates)
@@ -344,30 +348,43 @@ def main() -> None:
     finally:
         conn.close()
 
-    try:
-        render_daily_metrics_table(
-            db_path=config.db_path,
-            output_dir=config.table_dir,
-            dates=config.target_dates,
-            tickers=config.tickers,
-            title="Institutional Pressure Metrics",
-            table_style=config.table_style,
-        )
-    except Exception as exc:
-        logging.error("Failed to render daily metrics table: %s", exc)
+    if config.render_tables:
+        try:
+            render_daily_metrics_table(
+                db_path=config.db_path,
+                output_dir=config.table_dir,
+                dates=config.target_dates,
+                tickers=config.tickers,
+                title="Institutional Pressure Metrics",
+                table_style=config.table_style,
+            )
+        except Exception as exc:
+            logging.error("Failed to render daily metrics table: %s", exc)
 
-    try:
-        recent_dates = sorted(config.target_dates)[-3:]
-        render_daily_metrics_table(
-            db_path=config.db_path,
-            output_dir=config.table_dir,
-            dates=recent_dates,
-            tickers=config.tickers,
-            title="Institutional Pressure Metrics (Last 3 Days)",
-            table_style=config.table_style,
-        )
-    except Exception as exc:
-        logging.error("Failed to render last-3-days metrics table: %s", exc)
+        try:
+            recent_dates = sorted(config.target_dates)[-3:]
+            render_daily_metrics_table(
+                db_path=config.db_path,
+                output_dir=config.table_dir,
+                dates=recent_dates,
+                tickers=config.tickers,
+                title="Institutional Pressure Metrics (Last 3 Days)",
+                table_style=config.table_style,
+            )
+        except Exception as exc:
+            logging.error("Failed to render last-3-days metrics table: %s", exc)
+
+    if config.render_summary_dashboard:
+        try:
+            render_sector_summary(
+                db_path=config.db_path,
+                output_dir=config.table_dir,
+                dates=config.target_dates,
+                tickers=config.tickers,
+                title="Sector Summary Dashboard",
+            )
+        except Exception as exc:
+            logging.error("Failed to render sector summary dashboard: %s", exc)
 
     try:
         render_metrics_plots(

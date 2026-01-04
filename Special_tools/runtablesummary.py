@@ -6,7 +6,7 @@ _parent_dir = Path(__file__).resolve().parent.parent
 if str(_parent_dir) not in sys.path:
     sys.path.insert(0, str(_parent_dir))
 
-from darkpool_analysis.table_renderer_summary import render_sector_summary
+from darkpool_analysis.summary_dashboard import render_sector_summary
 from darkpool_analysis.config import load_config
 
 config = load_config()
