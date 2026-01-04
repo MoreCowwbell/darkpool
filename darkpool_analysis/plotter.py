@@ -287,7 +287,7 @@ def _resolve_panel1_metric(value: str | None) -> str:
 
 
 def _compute_combined_ratio(df: pd.DataFrame) -> pd.Series:
-    short_buy = pd.to_numeric(df.get("short_buy_volume"), errors="coerce")
+    short_buy = pd.to_numeric(df.get("finra_buy_volume"), errors="coerce")
     short_sell = pd.to_numeric(df.get("short_sell_volume"), errors="coerce")
     lit_buy = pd.to_numeric(df.get("lit_buy_volume"), errors="coerce")
     lit_sell = pd.to_numeric(df.get("lit_sell_volume"), errors="coerce")
@@ -300,7 +300,7 @@ def _compute_combined_ratio(df: pd.DataFrame) -> pd.Series:
 
 
 def _compute_vw_flow(df: pd.DataFrame) -> pd.Series:
-    short_buy = pd.to_numeric(df.get("short_buy_volume"), errors="coerce")
+    short_buy = pd.to_numeric(df.get("finra_buy_volume"), errors="coerce")
     short_sell = pd.to_numeric(df.get("short_sell_volume"), errors="coerce")
     lit_buy = pd.to_numeric(df.get("lit_buy_volume"), errors="coerce")
     lit_sell = pd.to_numeric(df.get("lit_sell_volume"), errors="coerce")
@@ -330,12 +330,10 @@ def fetch_metrics_for_plot(
             short_buy_sell_ratio_z,
             combined_ratio,
             vw_flow,
+            vw_flow_z,
             finra_buy_volume,
-            vwbr,
-            vwbr_z,
             short_ratio_denominator_type,
             short_ratio_denominator_value,
-            short_buy_volume,
             short_sell_volume,
             log_buy_sell,
             lit_buy_ratio,
@@ -511,7 +509,7 @@ def plot_symbol_metrics(
     panel1_meta = PANEL1_METRICS[panel1_key]
 
     if panel1_key == "vw_flow":
-        panel1_series = df["vw_flow"] if "vw_flow" in df.columns else df["vwbr"]
+        panel1_series = df["vw_flow"] if "vw_flow" in df.columns else _compute_vw_flow(df)
         if panel1_series.isna().all():
             panel1_series = _compute_vw_flow(df)
     elif panel1_key == "combined_ratio":
@@ -519,9 +517,7 @@ def plot_symbol_metrics(
         if panel1_series.isna().all():
             panel1_series = _compute_combined_ratio(df)
     else:
-        panel1_series = df["finra_buy_volume"] if "finra_buy_volume" in df.columns else df["short_buy_volume"]
-        if panel1_series.isna().all():
-            panel1_series = df["short_buy_volume"]
+        panel1_series = df["finra_buy_volume"]
 
     panel1_series = pd.to_numeric(panel1_series, errors="coerce")
     valid_mask0 = ~panel1_series.isna()
@@ -1134,7 +1130,7 @@ def plot_symbol_metrics(
     # Table data with tighter column spacing
     score_inputs_table = [
         ("Input", "Weight", "Source", "What it measures"),  # Header
-        ("short_buy_sell_ratio_z / vwbr_z", "55%", "FINRA + Polygon", "Configurable short signal z-score (flow z-score)"),
+        ("short_buy_sell_ratio_z / vw_flow_z", "55%", "FINRA + Polygon", "Configurable short signal z-score (flow z-score)"),
         ("lit_flow_imbalance_z", "30%", "Polygon Trades", "Z-score of lit imbalance"),
         ("return_z", "15%", "Polygon Daily Agg", "Z-score of price momentum"),
         ("otc_participation_z", "Mult.", "FINRA OTC Weekly", "Modulates score intensity"),
@@ -1266,7 +1262,7 @@ def plot_short_only_metrics(
 
     # Panel 2: Short Sale Volume
     ax2 = axes[1]
-    short_vol = df["short_buy_volume"]
+    short_vol = df["finra_buy_volume"]
     valid_mask2 = ~short_vol.isna()
     if valid_mask2.any():
         ax2.bar(

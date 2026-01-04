@@ -370,7 +370,7 @@ def build_daily_metrics(
         merged["otc_weekly_buy_ratio"] = pd.NA
 
     # Short ratio denominator logic
-    merged["short_buy_volume"] = pd.to_numeric(merged["short_volume"], errors="coerce")
+    merged["finra_buy_volume"] = pd.to_numeric(merged["short_volume"], errors="coerce")
     merged["short_ratio_denominator_type"] = pd.NA
     merged["short_ratio_denominator_value"] = pd.NA
     merged["short_ratio"] = pd.NA
@@ -392,13 +392,13 @@ def build_daily_metrics(
     )
     denom_ready = merged["short_ratio_denominator_value"].notna()
     merged.loc[denom_ready, "short_ratio"] = (
-        merged.loc[denom_ready, "short_buy_volume"]
+        merged.loc[denom_ready, "finra_buy_volume"]
         / merged.loc[denom_ready, "short_ratio_denominator_value"]
     )
     merged["short_sell_volume"] = pd.NA
     merged.loc[denom_ready, "short_sell_volume"] = (
         merged.loc[denom_ready, "short_ratio_denominator_value"]
-        - merged.loc[denom_ready, "short_buy_volume"]
+        - merged.loc[denom_ready, "finra_buy_volume"]
     )
     merged["short_sell_volume"] = pd.to_numeric(merged["short_sell_volume"], errors="coerce")
     merged.loc[denom_ready, "short_sell_volume"] = merged.loc[
@@ -408,7 +408,7 @@ def build_daily_metrics(
     merged["short_buy_sell_ratio"] = pd.NA
     valid_sell = merged["short_sell_volume"].notna() & (merged["short_sell_volume"] > 0)
     merged.loc[valid_sell, "short_buy_sell_ratio"] = (
-        merged.loc[valid_sell, "short_buy_volume"] / merged.loc[valid_sell, "short_sell_volume"]
+        merged.loc[valid_sell, "finra_buy_volume"] / merged.loc[valid_sell, "short_sell_volume"]
     )
 
     # Ensure numeric dtype for rolling calculations (pd.NA -> np.nan)
@@ -434,7 +434,7 @@ def build_daily_metrics(
         .transform(lambda s: _rolling_zscore(s, config.short_z_window, config.zscore_min_periods))
     )
 
-    short_buy = pd.to_numeric(merged["short_buy_volume"], errors="coerce")
+    short_buy = pd.to_numeric(merged["finra_buy_volume"], errors="coerce")
     short_sell = pd.to_numeric(merged["short_sell_volume"], errors="coerce")
     lit_buy = pd.to_numeric(merged["lit_buy_volume"], errors="coerce")
     lit_sell = pd.to_numeric(merged["lit_sell_volume"], errors="coerce")
@@ -452,18 +452,16 @@ def build_daily_metrics(
     merged.loc[has_flow, "vw_flow"] = total_buy[has_flow] - total_sell[has_flow]
     merged["vw_flow"] = pd.to_numeric(merged["vw_flow"], errors="coerce")
 
-    merged["finra_buy_volume"] = pd.to_numeric(merged["short_buy_volume"], errors="coerce")
     merged["finra_buy_volume_z"] = (
         merged.sort_values(["symbol", "date"])
         .groupby("symbol")["finra_buy_volume"]
         .transform(lambda s: _rolling_zscore(s, config.short_z_window, config.zscore_min_periods))
     )
 
-    # Keep vwbr/vwbr_z for backward compatibility (vw_flow under legacy column name).
-    merged["vwbr"] = merged["vw_flow"]
-    merged["vwbr_z"] = (
+    # Z-score of vw_flow (volume-weighted directional flow).
+    merged["vw_flow_z"] = (
         merged.sort_values(["symbol", "date"])
-        .groupby("symbol")["vwbr"]
+        .groupby("symbol")["vw_flow"]
         .transform(lambda s: _rolling_zscore(s, config.short_z_window, config.zscore_min_periods))
     )
 
@@ -578,7 +576,7 @@ def build_daily_metrics(
 
     # Compute composite accumulation score and confidence
     short_z_source = config.accumulation_short_z_source
-    if short_z_source not in ("short_buy_sell_ratio_z", "vwbr_z", "finra_buy_volume_z"):
+    if short_z_source not in ("short_buy_sell_ratio_z", "vw_flow_z", "finra_buy_volume_z"):
         logger.warning(
             "Unknown accumulation_short_z_source '%s'; defaulting to short_buy_sell_ratio_z",
             short_z_source,
@@ -623,7 +621,6 @@ def build_daily_metrics(
             "short_volume",
             "short_exempt_volume",
             "short_total_volume",
-            "short_buy_volume",
             "short_sell_volume",
             "short_ratio",
             "short_ratio_z",
@@ -631,10 +628,9 @@ def build_daily_metrics(
             "short_buy_sell_ratio_z",
             "combined_ratio",
             "vw_flow",
+            "vw_flow_z",
             "finra_buy_volume",
             "finra_buy_volume_z",
-            "vwbr",
-            "vwbr_z",
             "short_ratio_denominator_type",
             "short_ratio_denominator_value",
             "short_ratio_source",
@@ -738,7 +734,7 @@ def build_index_constituent_short_agg(
         for trade_date in target_dates:
             subset = daily[(daily["symbol"].isin(members)) & (daily["date"] == trade_date)]
             coverage_count = int(subset["has_short"].sum()) if not subset.empty else 0
-            total_short = subset["short_buy_volume"].fillna(0).sum()
+            total_short = subset["finra_buy_volume"].fillna(0).sum()
             total_denom = subset["short_ratio_denominator_value"].sum(min_count=1)
 
             denom_types = subset["short_ratio_denominator_type"].dropna().unique().tolist()

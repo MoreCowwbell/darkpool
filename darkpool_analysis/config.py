@@ -152,7 +152,7 @@ DEFAULT_PANEL1_METRIC = "finra_buy_volume"  # "vw_flow", "combined_ratio", or "f
 # This string is stored in the database to track which algorithm version
 # produced the data. Useful for debugging and reproducibility.
 DEFAULT_INFERENCE_VERSION = "PhaseA_v1"
-DEFAULT_ACCUMULATION_SHORT_Z_SOURCE = "short_buy_sell_ratio_z"  # "short_buy_sell_ratio_z", "vwbr_z", or "finra_buy_volume_z"
+DEFAULT_ACCUMULATION_SHORT_Z_SOURCE = "short_buy_sell_ratio_z"  # "short_buy_sell_ratio_z", "vw_flow_z", or "finra_buy_volume_z"
 
 # Z-score windows and thresholds
 DEFAULT_SHORT_Z_WINDOW = 20

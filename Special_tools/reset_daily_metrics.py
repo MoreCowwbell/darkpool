@@ -6,7 +6,7 @@
 ## simple reset of all daily metrics
 
 # python reset_daily_metrics.py --mode reset-vwflow
-## Keeps all rows, but sets vwbr, vwbr_z, and accumulation_short_z_source to NULL in daily_metrics.
+## Keeps all rows, but sets vw_flow, vw_flow_z, and accumulation_short_z_source to NULL in daily_metrics.
 ## This forces a recompute of VW Flow without wiping other metrics.
 ## Prompts for DELETE to confirm.
 
@@ -199,7 +199,7 @@ def main() -> int:
                     conn.execute(f"DELETE FROM {table}")
             print("Non-lit tables cleared.")
         else:
-            action = "This will NULL vw flow fields in daily_metrics (vwbr, vwbr_z, accumulation_short_z_source)."
+            action = "This will NULL vw flow fields in daily_metrics (vw_flow, vw_flow_z, accumulation_short_z_source)."
             if not args.yes and not _confirm(action):
                 print("Aborted.")
                 return 1
@@ -207,8 +207,8 @@ def main() -> int:
                 conn.execute(
                     """
                     UPDATE daily_metrics
-                    SET vwbr = NULL,
-                        vwbr_z = NULL,
+                    SET vw_flow = NULL,
+                        vw_flow_z = NULL,
                         accumulation_short_z_source = NULL
                     WHERE date >= ? AND date <= ?
                     """,
@@ -218,8 +218,8 @@ def main() -> int:
                 conn.execute(
                     """
                     UPDATE daily_metrics
-                    SET vwbr = NULL,
-                        vwbr_z = NULL,
+                    SET vw_flow = NULL,
+                        vw_flow_z = NULL,
                         accumulation_short_z_source = NULL
                     """
                 )

@@ -33,7 +33,7 @@
 ## Ratio Formulas
 - lit_buy_ratio = buy_volume / (buy_volume + sell_volume)
 - log_buy_sell = ln(buy_volume / sell_volume) when both > 0, else NULL
-- short_buy_volume = short_volume (short-exempt excluded)
+- finra_buy_volume = short_volume (short-exempt excluded)
 - short_sell_volume = denominator_value - short_volume when denominator_value > 0
 - short_ratio = short_volume / denominator_value when denominator_value > 0
 - short_ratio_denominator_type = FINRA_TOTAL or POLYGON_TOTAL

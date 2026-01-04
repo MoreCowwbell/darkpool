@@ -67,6 +67,20 @@ ACCUM_LOW_THRESHOLD = 30
 # log(1.65) ≈ 0.5, log(0.61) ≈ -0.5
 LOG_FLOW_THRESHOLD = 0.5  # Symmetric threshold for log(ratio)
 
+# VWBR coloring mode: "mean_threshold" or "zscore"
+# - mean_threshold: compares value to 30-day mean ± k*std (computed at render time)
+# - zscore: uses pre-computed finra_buy_volume_z from database
+VWBR_COLOR_MODE = "mean_threshold"  # Options: "mean_threshold", "zscore"
+
+# VWBR mean_threshold mode settings (30-day mean +/- k*std)
+VWBR_LOOKBACK_DAYS = 30
+VWBR_K_BUY = 1.0   # mean + k*std = green (high buying)
+VWBR_K_SELL = 1.0  # mean - k*std = red (low buying)
+
+# VWBR zscore mode thresholds (uses finra_buy_volume_z from database)
+VWBR_Z_BUY = 1.0   # z >= 1.0 = green (high buying)
+VWBR_Z_SELL = -1.0  # z <= -1.0 = red (low buying)
+
 
 # =============================================================================
 # Data Functions
@@ -90,7 +104,8 @@ def fetch_summary_metrics(
             date,
             symbol,
             short_ratio_denominator_value AS total_volume,
-            short_buy_volume,
+            finra_buy_volume,
+            finra_buy_volume_z,
             short_buy_sell_ratio AS order_flow,
             accumulation_score_display AS accum_score
         FROM daily_metrics
@@ -100,6 +115,52 @@ def fetch_summary_metrics(
 
     params = list(dates) + list(tickers)
     return conn.execute(query, params).df()
+
+
+def fetch_vwbr_stats(
+    conn: duckdb.DuckDBPyConnection,
+    reference_date: date,
+    tickers: list[str],
+    lookback_days: int = VWBR_LOOKBACK_DAYS,
+) -> dict[str, tuple[float, float]]:
+    """Fetch 30-day rolling mean/std of finra_buy_volume (VWBR) per ticker.
+
+    Returns:
+        Dict mapping ticker -> (mean, std). Falls back to available data if < 20 days.
+    """
+    if not tickers:
+        return {}
+
+    ticker_placeholders = ", ".join(["?" for _ in tickers])
+
+    query = f"""
+        SELECT
+            symbol,
+            AVG(finra_buy_volume) AS vwbr_mean,
+            STDDEV_POP(finra_buy_volume) AS vwbr_std,
+            COUNT(*) AS day_count
+        FROM daily_metrics
+        WHERE symbol IN ({ticker_placeholders})
+          AND date <= ?
+          AND date >= ? - INTERVAL '{lookback_days}' DAY
+          AND finra_buy_volume IS NOT NULL
+        GROUP BY symbol
+    """
+
+    params = list(tickers) + [reference_date, reference_date]
+    df = conn.execute(query, params).df()
+
+    result = {}
+    for _, row in df.iterrows():
+        symbol = row["symbol"]
+        mean_val = row["vwbr_mean"]
+        std_val = row["vwbr_std"]
+        # Fallback: if std is 0 or NULL, set to 0 (no coloring)
+        if pd.isna(std_val) or std_val <= 0:
+            std_val = 0
+        result[symbol] = (mean_val, std_val)
+
+    return result
 
 
 # =============================================================================
@@ -256,6 +317,45 @@ def _get_order_flow_color(ratio) -> tuple[str, str, str]:
     return ("transparent", "", "transparent")  # Neutral
 
 
+def _get_vwbr_color(value: float, mean: float, std: float) -> tuple[str, str, str]:
+    """Return (background_color, text_color, border_color) for VWBR cell.
+
+    Uses 20-day mean threshold:
+    - Green: value >= mean + VWBR_K_BUY * std (high buying)
+    - Red: value <= mean - VWBR_K_SELL * std (low buying)
+    - Neutral: between thresholds
+    """
+    if pd.isna(value) or pd.isna(mean) or pd.isna(std) or std <= 0:
+        return ("transparent", "", "transparent")
+
+    upper_threshold = mean + VWBR_K_BUY * std
+    lower_threshold = mean - VWBR_K_SELL * std
+
+    if value >= upper_threshold:
+        return ("rgba(57, 255, 20, 0.2)", BRIGHT_GREEN, "#000000")  # High = green
+    if value <= lower_threshold:
+        return ("rgba(255, 68, 68, 0.2)", BRIGHT_RED, "#000000")    # Low = red
+    return ("transparent", "", "transparent")  # Neutral
+
+
+def _get_vwbr_color_zscore(z_value: float) -> tuple[str, str, str]:
+    """Return (background_color, text_color, border_color) for VWBR cell using z-score.
+
+    Uses pre-computed finra_buy_volume_z from database:
+    - Green: z >= VWBR_Z_BUY (high buying relative to rolling mean)
+    - Red: z <= VWBR_Z_SELL (low buying relative to rolling mean)
+    - Neutral: between thresholds
+    """
+    if pd.isna(z_value):
+        return ("transparent", "", "transparent")
+
+    if z_value >= VWBR_Z_BUY:
+        return ("rgba(57, 255, 20, 0.2)", BRIGHT_GREEN, "#000000")  # High = green
+    if z_value <= VWBR_Z_SELL:
+        return ("rgba(255, 68, 68, 0.2)", BRIGHT_RED, "#000000")    # Low = red
+    return ("transparent", "", "transparent")  # Neutral
+
+
 # =============================================================================
 # HTML Rendering Functions
 # =============================================================================
@@ -265,6 +365,7 @@ def _build_sector_panel_html(
     ticker: str,
     rows_df: pd.DataFrame,
     palette: dict,
+    vwbr_stats: dict[str, tuple[float, float]],
 ) -> str:
     """Build HTML for a single sector panel."""
     sector_name = SECTOR_NAMES.get(ticker, ticker)
@@ -273,13 +374,40 @@ def _build_sector_panel_html(
     avg_bs_score = rows_df["order_flow"].mean() if not rows_df.empty else 0
     avg_volume = rows_df["total_volume"].mean() if not rows_df.empty else 0
 
+    # Get VWBR stats for mean_threshold mode (only used if VWBR_COLOR_MODE == "mean_threshold")
+    # Fallback to current data if not in stats (Option A fallback)
+    vwbr_mean, vwbr_std = 0, 0
+    if VWBR_COLOR_MODE == "mean_threshold":
+        if ticker in vwbr_stats:
+            vwbr_mean, vwbr_std = vwbr_stats[ticker]
+        else:
+            # Fallback: use available data from current rows
+            vwbr_mean = rows_df["finra_buy_volume"].mean() if not rows_df.empty else 0
+            vwbr_std = rows_df["finra_buy_volume"].std() if not rows_df.empty else 0
+
     # Build data rows
     rows_html = ""
     for _, row in rows_df.iterrows():
         date_str = _format_date_short(row.get("date"))
         volume_str = _format_volume(row.get("total_volume"))
         order_flow_str = _format_order_flow(row.get("order_flow"))
-        pct_avg_str = _format_pct_avg(row.get("short_buy_volume"), row.get("total_volume"))
+        pct_avg_str = _format_pct_avg(row.get("finra_buy_volume"), row.get("total_volume"))
+
+        # VWBR cell coloring based on VWBR_COLOR_MODE
+        vwbr_val = row.get("finra_buy_volume")
+        vwbr_str = _format_volume(vwbr_val)
+        if VWBR_COLOR_MODE == "zscore":
+            # Use pre-computed z-score from database
+            vwbr_z = row.get("finra_buy_volume_z")
+            vwbr_bg, vwbr_text, vwbr_border = _get_vwbr_color_zscore(vwbr_z)
+        else:
+            # Default: mean_threshold mode (30-day mean ± k*std)
+            vwbr_bg, vwbr_text, vwbr_border = _get_vwbr_color(vwbr_val, vwbr_mean, vwbr_std)
+        vwbr_style = f"background-color: {vwbr_bg};"
+        if vwbr_text:
+            vwbr_style += f" color: {vwbr_text};"
+        if vwbr_border and vwbr_border != "transparent":
+            vwbr_style += f" border: 1px solid {vwbr_border};"
 
         order_flow_val = row.get("order_flow")
         order_flow_bg, order_flow_text, order_flow_border = _get_order_flow_color(order_flow_val)
@@ -305,6 +433,7 @@ def _build_sector_panel_html(
             <tr>
                 <td class="col-date">{date_str}</td>
                 <td class="col-volume">{volume_str}</td>
+                <td class="col-vwbr" style="{vwbr_style}">{vwbr_str}</td>
                 <td class="col-order-flow" style="{order_flow_style}">{order_flow_str}</td>
                 <td class="col-pct">{pct_avg_str}</td>
                 <td class="col-accum" style="{accum_style}">{accum_score_str}</td>
@@ -353,6 +482,7 @@ def _build_sector_panel_html(
                     <tr>
                         <th class="col-date">Date</th>
                         <th class="col-volume">Vol</th>
+                        <th class="col-vwbr">VWBR</th>
                         <th class="col-order-flow">Flow</th>
                         <th class="col-pct">%</th>
                         <th class="col-accum">Acc/Dist</th>
@@ -395,6 +525,12 @@ def build_full_page_html(
     palette: dict,
 ) -> str:
     """Build complete HTML document with embedded CSS."""
+
+    # Dynamic VWBR legend text based on coloring mode
+    if VWBR_COLOR_MODE == "zscore":
+        vwbr_legend = f"VWBR = FINRA Buy Volume. Colored: z-score &ge; {VWBR_Z_BUY} / &le; {VWBR_Z_SELL} (20-day rolling)"
+    else:
+        vwbr_legend = f"VWBR = FINRA Buy Volume. Colored: mean &pm; {VWBR_K_BUY}&sigma; ({VWBR_LOOKBACK_DAYS}-day)"
 
     html = f"""
 <!DOCTYPE html>
@@ -481,7 +617,7 @@ def build_full_page_html(
 
         .panel-table th,
         .panel-table td {{
-            width: 16.66%;
+            width: 14.28%;  /* 100/7 columns */
         }}
 
         .panel-table thead {{
@@ -514,6 +650,13 @@ def build_full_page_html(
             text-align: right;
             font-family: "Consolas", "Courier New", monospace;
             color: {palette.get('text', '#e6e6e6')};
+        }}
+
+        .col-vwbr {{
+            text-align: right;
+            font-family: "Consolas", "Courier New", monospace;
+            font-weight: 600;
+            border-radius: 6px;
         }}
 
         .col-order-flow {{
@@ -662,6 +805,7 @@ def build_full_page_html(
 
         /* Header column alignment */
         th.col-volume,
+        th.col-vwbr,
         th.col-order-flow,
         th.col-pct,
         th.col-accum {{
@@ -683,6 +827,7 @@ def build_full_page_html(
 
         <div class="footer-row">
             <div class="footer-definitions">
+                <span>{vwbr_legend}</span>
                 <span>Order Flow = Buy/Sell Ratio. % = Buy Volume / Total Volume.</span>
                 <span>Flow coloring: log(ratio) thresholds &mdash; green &ge; +0.5, red &le; -0.5 (symmetric around 1.0)</span>
                 <span>Signal strength: Soft = Vol &gt; Avg + Flow | Strong = Vol &gt; Avg + Flow + Acc/Dist confirms</span>
@@ -829,13 +974,19 @@ def render_sector_summary(
             df["date"] = pd.to_datetime(df["date"]).dt.date
             df = df[df["date"].apply(is_trading_day)]
 
+        # Fetch VWBR stats only if using mean_threshold mode
+        vwbr_stats = {}
+        if VWBR_COLOR_MODE == "mean_threshold":
+            reference_date = sorted_dates[0]  # Most recent date
+            vwbr_stats = fetch_vwbr_stats(conn, reference_date, tickers)
+
         # Build panels for each ticker
         panels_html = []
         for ticker in tickers:
             ticker_df = df[df["symbol"] == ticker].copy()
             # Limit to max_dates most recent dates per ticker
             ticker_df = ticker_df.head(max_dates)
-            panel_html = _build_sector_panel_html(ticker, ticker_df, palette)
+            panel_html = _build_sector_panel_html(ticker, ticker_df, palette, vwbr_stats)
             panels_html.append(panel_html)
 
         # Build grid and full page
