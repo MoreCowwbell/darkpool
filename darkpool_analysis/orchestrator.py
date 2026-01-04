@@ -143,6 +143,7 @@ def main() -> None:
     logging.info("Polygon trades mode: %s", config.polygon_trades_mode)
     logging.info("Cache enabled: %s", config.skip_cached)
     logging.info("Render tables: %s", config.render_tables)
+    logging.info("Render metrics plots: %s", config.render_metrics_plots)
     logging.info(
         "Price charts: %s (timeframe=%s)",
         config.render_price_charts,
@@ -386,18 +387,19 @@ def main() -> None:
         except Exception as exc:
             logging.error("Failed to render sector summary dashboard: %s", exc)
 
-    try:
-        render_metrics_plots(
-            db_path=config.db_path,
-            output_dir=config.plot_dir,
-            dates=config.target_dates,
-            tickers=config.tickers,
-            mode="layered",
-            plot_trading_gaps=config.plot_trading_gaps,
-            panel1_metric=config.panel1_metric,
-        )
-    except Exception as exc:
-        logging.error("Failed to render metrics plots: %s", exc)
+    if config.render_metrics_plots:
+        try:
+            render_metrics_plots(
+                db_path=config.db_path,
+                output_dir=config.plot_dir,
+                dates=config.target_dates,
+                tickers=config.tickers,
+                mode="layered",
+                plot_trading_gaps=config.plot_trading_gaps,
+                panel1_metric=config.panel1_metric,
+            )
+        except Exception as exc:
+            logging.error("Failed to render metrics plots: %s", exc)
 
     try:
         render_combination_plot(

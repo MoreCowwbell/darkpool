@@ -109,7 +109,7 @@ EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 # User-facing defaults (most commonly edited)
 # -----------------------------------------------------------------------------
 
-TICKERS_TYPE =  ["ALL"]  # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8", "SPECULATIVE"], ["SINGLE"], ["ALL"] 
+TICKERS_TYPE =  ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8"]  # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8", "SPECULATIVE"], ["SINGLE"], ["ALL"] 
 DEFAULT_TICKERS = ["XLE"]
 
 DEFAULT_TARGET_DATE = "2026-01-02"  # Last trading day (Monday)
@@ -141,10 +141,11 @@ DEFAULT_POLYGON_TRADES_MODE = "minute"
 DEFAULT_SKIP_CACHED = True
 DEFAULT_PRICE_BAR_TIMEFRAME = "daily"  # daily, weekly, monthly
 DEFAULT_PANEL1_METRIC = "finra_buy_volume"  # "vw_flow", "combined_ratio", or "finra_buy_volume"
-DEFAULT_COMBINATION_PLOT = True  # Render combined multi-ticker plot
-DEFAULT_RENDER_PRICE_CHARTS = True  # Render OHLC price charts
-DEFAULT_RENDER_SUMMARY_DASHBOARD = True  # Render sector summary dashboard
-DEFAULT_RENDER_TABLES = True  # Render daily metrics tables (HTML/PNG)
+DEFAULT_RENDER_METRICS_PLOTS = False  # Render metrics plots (plotter.py)
+DEFAULT_RENDER_PRICE_CHARTS = False # Render OHLC price charts
+DEFAULT_RENDER_SUMMARY_DASHBOARD = False  # Render sector summary dashboard
+DEFAULT_RENDER_TABLES = False  # Render daily metrics tables (HTML/PNG)
+DEFAULT_COMBINATION_PLOT = False  # Render combined multi-ticker plot
 DEFAULT_PLOT_TRADING_GAPS = True  # Keep weekend/holiday gaps in plots
 DEFAULT_EXPORT_CSV = False  # Export tables to CSV files
 
@@ -345,6 +346,7 @@ class Config:
     polygon_trades_mode: str  # "tick", "minute", or "daily"
     skip_cached: bool  # Skip fetching if already in DB
     export_csv: bool
+    render_metrics_plots: bool
     render_tables: bool
     render_price_charts: bool
     render_summary_dashboard: bool
@@ -506,6 +508,9 @@ def load_config() -> Config:
         polygon_trades_mode=os.getenv("POLYGON_TRADES_MODE", DEFAULT_POLYGON_TRADES_MODE).lower(),
         skip_cached=os.getenv("SKIP_CACHED", str(DEFAULT_SKIP_CACHED)).lower() in ("true", "1", "yes"),
         export_csv=os.getenv("EXPORT_CSV", str(DEFAULT_EXPORT_CSV)).lower() in ("true", "1", "yes"),
+        render_metrics_plots=os.getenv(
+            "RENDER_METRICS_PLOTS", str(DEFAULT_RENDER_METRICS_PLOTS)
+        ).lower() in ("true", "1", "yes"),
         render_tables=os.getenv("RENDER_TABLES", str(DEFAULT_RENDER_TABLES)).lower() in ("true", "1", "yes"),
         render_price_charts=os.getenv(
             "RENDER_PRICE_CHARTS", str(DEFAULT_RENDER_PRICE_CHARTS)
