@@ -91,16 +91,18 @@ MAG8_TICKERS = [
 ]
 
 SPECULATIVE_TICKERS = [
-    "ARKK",  # ARK Innovation ETF - disruptive tech basket
-    "COIN",  # Coinbase - crypto exchange beta
-    "PLTR",  # Palantir - high-beta AI/defense
-    "RIVN",  # Rivian - EV speculative
-    "LCID",  # Lucid - EV speculative
-    "SOFI",  # SoFi - fintech growth
-    "HOOD",  # Robinhood - retail trading proxy
-    "MSTR",  # MicroStrategy - leveraged Bitcoin play
-    "SMCI",  # Super Micro Computer - AI infrastructure
-    "ARM",   # ARM Holdings - semiconductor IP
+    "HOOD",
+    "HIMS",
+    "PLTR",
+    "BMNR",
+    "MSTR",
+    "SOFI",
+    "CRWV",
+    "ARM",
+    "SMCI",
+    "ARM",
+    "BE"
+    "NNE"
 ]
 
 EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
@@ -109,12 +111,12 @@ EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 # User-facing defaults (most commonly edited)
 # -----------------------------------------------------------------------------
 
-TICKERS_TYPE =  ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8"]  # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8", "SPECULATIVE"], ["SINGLE"], ["ALL"] 
+TICKERS_TYPE =  ["SPECULATIVE"]  # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8", "SPECULATIVE"], ["SINGLE"], ["ALL"] 
 DEFAULT_TICKERS = ["XLE"]
 
 DEFAULT_TARGET_DATE = "2026-01-02"  # Last trading day (Monday)
 DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
-DEFAULT_BACKFILL_COUNT = 60  # Number of periods to fetch (days for daily, weeks for weekly)
+DEFAULT_BACKFILL_COUNT = 30  # Number of periods to fetch (days for daily, weeks for weekly)
 
 DEFAULT_MARKET_TZ = "US/Eastern"
 DEFAULT_RTH_START = "09:30"
@@ -141,9 +143,9 @@ DEFAULT_POLYGON_TRADES_MODE = "minute"
 DEFAULT_SKIP_CACHED = True
 DEFAULT_PRICE_BAR_TIMEFRAME = "daily"  # daily, weekly, monthly
 DEFAULT_PANEL1_METRIC = "finra_buy_volume"  # "vw_flow", "combined_ratio", or "finra_buy_volume"
-DEFAULT_RENDER_METRICS_PLOTS = False  # Render metrics plots (plotter.py)
-DEFAULT_RENDER_PRICE_CHARTS = False # Render OHLC price charts
-DEFAULT_RENDER_SUMMARY_DASHBOARD = False  # Render sector summary dashboard
+DEFAULT_RENDER_METRICS_PLOTS = True  # Render metrics plots (plotter.py)
+DEFAULT_RENDER_PRICE_CHARTS = True # Render OHLC price charts
+DEFAULT_RENDER_SUMMARY_DASHBOARD = True  # Render sector summary dashboard
 DEFAULT_RENDER_TABLES = False  # Render daily metrics tables (HTML/PNG)
 DEFAULT_COMBINATION_PLOT = False  # Render combined multi-ticker plot
 DEFAULT_PLOT_TRADING_GAPS = True  # Keep weekend/holiday gaps in plots

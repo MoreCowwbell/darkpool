@@ -75,7 +75,7 @@ VWBR_COLOR_MODE = "zscore"  # Options: "mean_threshold", "zscore"
 # VWBR mean_threshold mode settings (30-day mean +/- k*std)
 VWBR_LOOKBACK_DAYS = 30
 VWBR_K_BUY = 1.0   # mean + k*std = green (high buying)
-VWBR_K_SELL = 1.0  # mean - k*std = red (low buying)
+VWBR_K_SELL = 1.0    # mean - k*std = red (low buying)
 
 # VWBR zscore mode thresholds (uses finra_buy_volume_z from database)
 VWBR_Z_BUY = 1.1   # z >= 1.0 = green (high buying) runner up 1.1
