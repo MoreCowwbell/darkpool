@@ -29,6 +29,36 @@ def _load_ticker_dictionary():
     spec.loader.exec_module(module)
     return module
 
+
+def _expand_with_constituents(tickers: list[str], sector_zoom_map: dict) -> list[str]:
+    """Expand tickers to include constituents from SECTOR_ZOOM_MAP.
+
+    Looks up each ticker in all category maps (SECTOR_CORE, SECTOR_SUMMARY,
+    GLOBAL_MACRO, COMMODITIES, MAG8) and adds any found constituents.
+    """
+    expanded = []
+    seen = set()
+
+    for ticker in tickers:
+        # Add the ticker itself
+        if ticker not in seen:
+            expanded.append(ticker)
+            seen.add(ticker)
+
+        # Look for constituents in all category maps
+        for category_map in sector_zoom_map.values():
+            if ticker in category_map:
+                constituents = category_map[ticker]
+                # Handle both list and dict formats
+                if isinstance(constituents, list):
+                    for constituent in constituents:
+                        if constituent not in seen:
+                            expanded.append(constituent)
+                            seen.add(constituent)
+
+    return expanded
+
+
 # =============================================================================
 # Default Configuration (can be overridden via .env)
 # =============================================================================
@@ -51,8 +81,9 @@ EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 # User-facing defaults (most commonly edited)
 # -----------------------------------------------------------------------------
 
-TICKERS_TYPE =  ["ALL"]  # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8", "SPECULATIVE"], ["SINGLE"], ["ALL"] 
+TICKERS_TYPE =  ["ALL"]  # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8", "SPECULATIVE"], ["SINGLE"], ["ALL"]
 DEFAULT_TICKERS = ["META"]
+FETCH_INDICES_CONSTITUENTS = False  # When True, also fetch constituents of index/ETF tickers
 
 DEFAULT_TARGET_DATE = "2026-01-05"  # Last trading day (Monday)
 DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
@@ -325,6 +356,7 @@ class Config:
     finra_volume_field: Optional[str]
     finra_trade_count_field: Optional[str]
     include_polygon_only_tickers: bool
+    fetch_indices_constituents: bool  # When True, expand index/ETF tickers to include constituents
     short_z_window: int
     return_z_window: int
     zscore_min_periods: int
@@ -415,6 +447,14 @@ def load_config() -> Config:
         selected_tickers = ticker_type_map[t_upper]
 
     tickers = _parse_csv_env("TICKERS") or selected_tickers
+
+    # Expand with constituents if enabled
+    fetch_indices_constituents = os.getenv(
+        "FETCH_INDICES_CONSTITUENTS", str(FETCH_INDICES_CONSTITUENTS)
+    ).lower() in ("true", "1", "yes")
+    if fetch_indices_constituents:
+        tickers = _expand_with_constituents(tickers, SECTOR_ZOOM_MAP)
+
     finra_tickers = [ticker for ticker in tickers if ticker not in EXCLUDED_FINRA_TICKERS]
 
     rth_start = _parse_time(os.getenv("RTH_START", DEFAULT_RTH_START), time(9, 30))
@@ -507,6 +547,7 @@ def load_config() -> Config:
         include_polygon_only_tickers=os.getenv(
             "INCLUDE_POLYGON_ONLY_TICKERS", str(DEFAULT_INCLUDE_POLYGON_ONLY_TICKERS)
         ).lower() in ("true", "1", "yes"),
+        fetch_indices_constituents=fetch_indices_constituents,
         short_z_window=int(os.getenv("SHORT_Z_WINDOW", str(DEFAULT_SHORT_Z_WINDOW))),
         return_z_window=int(os.getenv("RETURN_Z_WINDOW", str(DEFAULT_RETURN_Z_WINDOW))),
         zscore_min_periods=int(os.getenv("ZSCORE_MIN_PERIODS", str(DEFAULT_ZSCORE_MIN_PERIODS))),
