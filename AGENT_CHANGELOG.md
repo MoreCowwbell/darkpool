@@ -372,3 +372,7 @@ Format:
   - Root cause: Panel 5 used `dates` (datetime) for bar positioning instead of `x_values` (integer indices).
   - When `plot_trading_gaps=False`, bars were drawn at datetime positions on an integer-indexed x-axis (off-screen).
   - Fix: Changed loop variable from `dates` to `x_values` for bar/text positioning (lines 951, 969, 979, 985).
+
+## 2026-01-05 Session Summary (Codex)
+- [x] Refactored ticker group lists in `darkpool_analysis/config.py` to load from `Special_tools/ticker_dictionary.py`.
+- [x] Updated `Special_tools/finra_ticker_check.ipynb` and `Special_tools/circos.ipynb` to read ticker groups from the new dictionary.
