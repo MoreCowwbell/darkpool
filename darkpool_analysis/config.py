@@ -82,12 +82,12 @@ EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 # -----------------------------------------------------------------------------
 
 TICKERS_TYPE =  ["ALL"]  # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8", "SPECULATIVE"], ["SINGLE"], ["ALL"]
-DEFAULT_TICKERS = ["META"]
+DEFAULT_TICKERS = ["XLE"]
 FETCH_INDICES_CONSTITUENTS = False  # When True, also fetch constituents of index/ETF tickers
 
 DEFAULT_TARGET_DATE = "2026-01-05"  # Last trading day (Monday)
 DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
-DEFAULT_BACKFILL_COUNT = 260  # Number of periods to fetch (days for daily, weeks for weekly)
+DEFAULT_BACKFILL_COUNT = 1  # Number of periods to fetch (days for daily, weeks for weekly)
 
 DEFAULT_MARKET_TZ = "US/Eastern"
 DEFAULT_RTH_START = "09:30"
