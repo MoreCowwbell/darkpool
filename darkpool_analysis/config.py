@@ -45,19 +45,18 @@ GLOBAL_MACRO_TICKERS = list(SECTOR_ZOOM_MAP["GLOBAL_MACRO"].keys())
 COMMODITIES_TICKERS = list(SECTOR_ZOOM_MAP["COMMODITIES"].keys())
 MAG8_TICKERS = list(SECTOR_ZOOM_MAP["MAG8"]["MAG8"])
 SPECULATIVE_TICKERS = list(_TICKER_DICT.SPECULATIVE_TICKERS)
-
 EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 
 # -----------------------------------------------------------------------------
 # User-facing defaults (most commonly edited)
 # -----------------------------------------------------------------------------
 
-TICKERS_TYPE =  ["MAG8"]  # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8", "SPECULATIVE"], ["SINGLE"], ["ALL"] 
-DEFAULT_TICKERS = ["HOOD"]
+TICKERS_TYPE =  ["SUMMARY"]  # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8", "SPECULATIVE"], ["SINGLE"], ["ALL"] 
+DEFAULT_TICKERS = ["META"]
 
 DEFAULT_TARGET_DATE = "2026-01-05"  # Last trading day (Monday)
 DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
-DEFAULT_BACKFILL_COUNT = 60  # Number of periods to fetch (days for daily, weeks for weekly)
+DEFAULT_BACKFILL_COUNT = 30  # Number of periods to fetch (days for daily, weeks for weekly)
 
 DEFAULT_MARKET_TZ = "US/Eastern"
 DEFAULT_RTH_START = "09:30"
@@ -93,8 +92,8 @@ DEFAULT_RENDER_METRICS_PLOTS = True  # Render metrics plots (plotter.py)
 DEFAULT_RENDER_PRICE_CHARTS = True # Render OHLC price charts
 DEFAULT_RENDER_SUMMARY_DASHBOARD = True  # Render sector summary dashboard
 DEFAULT_RENDER_TABLES = False  # Render daily metrics tables (HTML/PNG)
-DEFAULT_COMBINATION_PLOT = True  # Render combined multi-ticker plot
-DEFAULT_PLOT_TRADING_GAPS = True  # Keep weekend/holiday gaps in plots
+DEFAULT_COMBINATION_PLOT = False  # Render combined multi-ticker plot
+DEFAULT_PLOT_TRADING_GAPS = False  # Keep weekend/holiday gaps in plots
 DEFAULT_EXPORT_CSV = False  # Export tables to CSV files
 
 
