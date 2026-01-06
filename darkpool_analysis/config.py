@@ -76,6 +76,9 @@ COMMODITIES_TICKERS = [
     "USO",  # Crude oil – global growth & inflation
     "UNG",  # Natural gas – high-volatility energy beta
     "URA",  # Uranium – structural / policy-driven energy theme
+    "BTC",
+    "IBIT",
+    "ETHA",
 ]
 
 
@@ -88,6 +91,7 @@ MAG8_TICKERS = [
     "AVGO",  # AI infrastructure + semis + enterprise software
     "META",  # Ads + engagement + AI leverage
     "TSLA",  # Highest beta: auto + AI + macro sensitivity
+    "VLO",
 ]
 
 SPECULATIVE_TICKERS = [
@@ -111,12 +115,12 @@ EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 # User-facing defaults (most commonly edited)
 # -----------------------------------------------------------------------------
 
-TICKERS_TYPE =  ["SPECULATIVE"]  # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8", "SPECULATIVE"], ["SINGLE"], ["ALL"] 
-DEFAULT_TICKERS = ["XLE"]
+TICKERS_TYPE =  ["MAG8"]  # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8", "SPECULATIVE"], ["SINGLE"], ["ALL"] 
+DEFAULT_TICKERS = ["HOOD"]
 
-DEFAULT_TARGET_DATE = "2026-01-02"  # Last trading day (Monday)
+DEFAULT_TARGET_DATE = "2026-01-05"  # Last trading day (Monday)
 DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
-DEFAULT_BACKFILL_COUNT = 30  # Number of periods to fetch (days for daily, weeks for weekly)
+DEFAULT_BACKFILL_COUNT = 60  # Number of periods to fetch (days for daily, weeks for weekly)
 
 DEFAULT_MARKET_TZ = "US/Eastern"
 DEFAULT_RTH_START = "09:30"
@@ -138,6 +142,11 @@ DEFAULT_POLYGON_TRADES_MODE = "minute"
 # -----------------------------------------------------------------------------
 # Caching and output behavior
 # -----------------------------------------------------------------------------
+# When True, bypass all output settings (no files saved to disk).
+# Overrides: RENDER_METRICS_PLOTS, RENDER_PRICE_CHARTS, RENDER_SUMMARY_DASHBOARD,
+#            RENDER_TABLES, COMBINATION_PLOT to False.
+BYPASS_OUTPUT_SETTING = False
+
 # When True, check polygon_ingestion_state before fetching and skip symbols
 # that have already been fetched for a given date+source. No TTL (cache forever).
 DEFAULT_SKIP_CACHED = True
@@ -147,7 +156,7 @@ DEFAULT_RENDER_METRICS_PLOTS = True  # Render metrics plots (plotter.py)
 DEFAULT_RENDER_PRICE_CHARTS = True # Render OHLC price charts
 DEFAULT_RENDER_SUMMARY_DASHBOARD = True  # Render sector summary dashboard
 DEFAULT_RENDER_TABLES = False  # Render daily metrics tables (HTML/PNG)
-DEFAULT_COMBINATION_PLOT = False  # Render combined multi-ticker plot
+DEFAULT_COMBINATION_PLOT = True  # Render combined multi-ticker plot
 DEFAULT_PLOT_TRADING_GAPS = True  # Keep weekend/holiday gaps in plots
 DEFAULT_EXPORT_CSV = False  # Export tables to CSV files
 
@@ -347,6 +356,7 @@ class Config:
     inference_version: str
     polygon_trades_mode: str  # "tick", "minute", or "daily"
     skip_cached: bool  # Skip fetching if already in DB
+    bypass_output_setting: bool  # When True, disable all output file generation
     export_csv: bool
     render_metrics_plots: bool
     render_tables: bool
@@ -488,6 +498,11 @@ def load_config() -> Config:
     finra_short_sale_dir = _resolve_path(root_dir, os.getenv("FINRA_SHORT_SALE_DIR"))
     index_constituents_file = _resolve_path(root_dir, os.getenv("INDEX_CONSTITUENTS_FILE"))
 
+    # Bypass output setting - when True, disables all file output generation
+    bypass_output_setting = os.getenv(
+        "BYPASS_OUTPUT_SETTING", str(BYPASS_OUTPUT_SETTING)
+    ).lower() in ("true", "1", "yes")
+
     return Config(
         root_dir=root_dir,
         data_dir=root_dir / "data",
@@ -509,21 +524,22 @@ def load_config() -> Config:
         inference_version=os.getenv("INFERENCE_VERSION", DEFAULT_INFERENCE_VERSION),
         polygon_trades_mode=os.getenv("POLYGON_TRADES_MODE", DEFAULT_POLYGON_TRADES_MODE).lower(),
         skip_cached=os.getenv("SKIP_CACHED", str(DEFAULT_SKIP_CACHED)).lower() in ("true", "1", "yes"),
+        bypass_output_setting=bypass_output_setting,
         export_csv=os.getenv("EXPORT_CSV", str(DEFAULT_EXPORT_CSV)).lower() in ("true", "1", "yes"),
-        render_metrics_plots=os.getenv(
+        render_metrics_plots=False if bypass_output_setting else os.getenv(
             "RENDER_METRICS_PLOTS", str(DEFAULT_RENDER_METRICS_PLOTS)
         ).lower() in ("true", "1", "yes"),
-        render_tables=os.getenv("RENDER_TABLES", str(DEFAULT_RENDER_TABLES)).lower() in ("true", "1", "yes"),
-        render_price_charts=os.getenv(
+        render_tables=False if bypass_output_setting else os.getenv("RENDER_TABLES", str(DEFAULT_RENDER_TABLES)).lower() in ("true", "1", "yes"),
+        render_price_charts=False if bypass_output_setting else os.getenv(
             "RENDER_PRICE_CHARTS", str(DEFAULT_RENDER_PRICE_CHARTS)
         ).lower() in ("true", "1", "yes"),
-        render_summary_dashboard=os.getenv(
+        render_summary_dashboard=False if bypass_output_setting else os.getenv(
             "RENDER_SUMMARY_DASHBOARD", str(DEFAULT_RENDER_SUMMARY_DASHBOARD)
         ).lower() in ("true", "1", "yes"),
         price_bar_timeframe=os.getenv(
             "PRICE_BAR_TIMEFRAME", DEFAULT_PRICE_BAR_TIMEFRAME
         ).lower(),
-        combination_plot=os.getenv(
+        combination_plot=False if bypass_output_setting else os.getenv(
             "COMBINATION_PLOT", str(DEFAULT_COMBINATION_PLOT)
         ).lower() in ("true", "1", "yes"),
         plot_trading_gaps=os.getenv(

@@ -1026,7 +1026,7 @@ def render_sector_summary(
         full_html = build_full_page_html(title, grid_html, palette)
 
         # Write output files
-        base_name = f"sector_summary_{date_label}"
+        base_name = f"Summary_Dashboard_{date_label}"
         html_path, png_path = _resolve_unique_output_paths(output_dir, base_name)
 
         html_path.write_text(full_html, encoding="utf-8")
