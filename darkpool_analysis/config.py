@@ -75,19 +75,20 @@ GLOBAL_MACRO_TICKERS = list(SECTOR_ZOOM_MAP["GLOBAL_MACRO"].keys())
 COMMODITIES_TICKERS = list(SECTOR_ZOOM_MAP["COMMODITIES"].keys())
 MAG8_TICKERS = list(SECTOR_ZOOM_MAP["MAG8"]["MAG8"])
 SPECULATIVE_TICKERS = list(_TICKER_DICT.SPECULATIVE_TICKERS)
+CRYPTO_TICKERS = list(_TICKER_DICT.CRYPTO_TICKERS)
 EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 
 # -----------------------------------------------------------------------------
 # User-facing defaults (most commonly edited)
 # -----------------------------------------------------------------------------
 
-TICKERS_TYPE =  ["ALL"]  # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8", "SPECULATIVE"], ["SINGLE"], ["ALL"]
-DEFAULT_TICKERS = ["XLE"]
+TICKERS_TYPE =  ["MAG8"]  # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8", "CRYPTO", "SPECULATIVE"], ["SINGLE"], ["ALL"]
+DEFAULT_TICKERS = ["TSLA", "AMZN", ]
 FETCH_INDICES_CONSTITUENTS = False  # When True, also fetch constituents of index/ETF tickers
 
-DEFAULT_TARGET_DATE = "2026-01-05"  # Last trading day (Monday)
+DEFAULT_TARGET_DATE = "2026-01-06"  # Last trading day (Monday)
 DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
-DEFAULT_BACKFILL_COUNT = 1  # Number of periods to fetch (days for daily, weeks for weekly)
+DEFAULT_BACKFILL_COUNT = 30  # Number of periods to fetch (days for daily, weeks for weekly)
 
 DEFAULT_MARKET_TZ = "US/Eastern"
 DEFAULT_RTH_START = "09:30"
@@ -412,12 +413,13 @@ def load_config() -> Config:
         "COMMODITIES": COMMODITIES_TICKERS,
         "MAG8": MAG8_TICKERS,
         "SPECULATIVE": SPECULATIVE_TICKERS,
+        "CRYPTO": CRYPTO_TICKERS,
     }
 
     # Compute ALL by combining all groups (excluding SINGLE), preserving order
     all_tickers = []
     seen_all = set()
-    for key in ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8", "SPECULATIVE"]:
+    for key in ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8", "SPECULATIVE", "CRYPTO"]:
         for ticker in ticker_type_map[key]:
             if ticker not in seen_all:
                 all_tickers.append(ticker)

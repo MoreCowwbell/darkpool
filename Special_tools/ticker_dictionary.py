@@ -54,6 +54,22 @@ SECTOR_ZOOM_MAP = {
     },
 }
 
+CRYPTO_TICKERS = [
+    "BTC",
+    "IBIT",
+    "ETHA",
+    "ETHU",
+    "MSTR",
+    "BMNR",
+    # "COIN",
+    # "MARA",
+    # "RIOT",
+    # "CLSK",
+    # "HUT",
+    # "GBTC",
+]
+
+
 SPECULATIVE_TICKERS = [
     "HOOD",
     "HIMS",
@@ -66,16 +82,3 @@ SPECULATIVE_TICKERS = [
     "NNE",
 ]
 
-CRYPTO_TICKERS = [
-    "BTC",
-    "IBIT",
-    "ETHA",
-    "COIN",
-    "MARA",
-    "RIOT",
-    "CLSK",
-    "HUT",
-    "GBTC",
-    "MSTR",
-    "BMNR",
-]

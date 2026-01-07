@@ -19,12 +19,46 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+import sys
+from pathlib import Path as _Path
+
+# Add Special_tools to path for ticker_dictionary import
+_special_tools_dir = _Path(__file__).resolve().parent.parent / "Special_tools"
+if str(_special_tools_dir) not in sys.path:
+    sys.path.insert(0, str(_special_tools_dir))
+
+from ticker_dictionary import SECTOR_ZOOM_MAP, CRYPTO_TICKERS, SPECULATIVE_TICKERS
+
 try:
-    from .config import DEFAULT_TABLE_STYLE, SECTOR_SUMMARY_TICKERS
+    from .config import DEFAULT_TABLE_STYLE
     from .market_calendar import is_trading_day
 except ImportError:
-    from config import DEFAULT_TABLE_STYLE, SECTOR_SUMMARY_TICKERS
+    from config import DEFAULT_TABLE_STYLE
     from market_calendar import is_trading_day
+
+# =============================================================================
+# User Settings - Ticker Selection
+# =============================================================================
+# Choose which ticker set to display in the summary dashboard
+# Options: "SUMMARY", "SECTOR", "GLOBAL", "COMMODITIES", "MAG8", "CRYPTO", "SPECULATIVE"
+TICKERS_TYPE = "SUMMARY"
+
+# Map TICKERS_TYPE to the appropriate ticker list from ticker_dictionary
+# For SUMMARY/SECTOR/GLOBAL/COMMODITIES: keys are the ETF tickers (XLE, XLF, SPY, etc.)
+# For MAG8: the key is just a label, so we use the values (actual stock tickers)
+# For CRYPTO/SPECULATIVE: flat lists of individual stock tickers
+_TICKERS_TYPE_MAP: dict[str, list[str]] = {
+    "SUMMARY": list(SECTOR_ZOOM_MAP.get("SECTOR_SUMMARY", {}).keys()),
+    "SECTOR": list(SECTOR_ZOOM_MAP.get("SECTOR_CORE", {}).keys()),
+    "GLOBAL": list(SECTOR_ZOOM_MAP.get("GLOBAL_MACRO", {}).keys()),
+    "COMMODITIES": list(SECTOR_ZOOM_MAP.get("COMMODITIES", {}).keys()),
+    "MAG8": SECTOR_ZOOM_MAP.get("MAG8", {}).get("MAG8", []),  # Use values (actual stocks)
+    "CRYPTO": list(CRYPTO_TICKERS),
+    "SPECULATIVE": list(SPECULATIVE_TICKERS),
+}
+
+# Get the ticker list based on TICKERS_TYPE setting
+SECTOR_SUMMARY_TICKERS: list[str] = _TICKERS_TYPE_MAP.get(TICKERS_TYPE, [])
 
 # =============================================================================
 # Constants
@@ -1026,7 +1060,7 @@ def render_sector_summary(
         full_html = build_full_page_html(title, grid_html, palette)
 
         # Write output files
-        base_name = f"Summary_Dashboard_{date_label}"
+        base_name = f"Summary_Dashboard_{TICKERS_TYPE}_{date_label}"
         html_path, png_path = _resolve_unique_output_paths(output_dir, base_name)
 
         html_path.write_text(full_html, encoding="utf-8")
