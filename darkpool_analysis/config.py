@@ -82,7 +82,7 @@ EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 # User-facing defaults (most commonly edited)
 # -----------------------------------------------------------------------------
 
-TICKERS_TYPE =  ["MAG8"]  # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8", "CRYPTO", "SPECULATIVE"], ["SINGLE"], ["ALL"]
+TICKERS_TYPE =  ["ALL"]  # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8", "CRYPTO", "SPECULATIVE"], ["SINGLE"], ["ALL"]
 DEFAULT_TICKERS = ["TSLA", "AMZN", ]
 FETCH_INDICES_CONSTITUENTS = False  # When True, also fetch constituents of index/ETF tickers
 
