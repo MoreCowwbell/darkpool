@@ -86,7 +86,7 @@ TICKERS_TYPE =  ["ALL"]  # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8"
 DEFAULT_TICKERS = ["TSLA", "AMZN", ]
 FETCH_INDICES_CONSTITUENTS = False  # When True, also fetch constituents of index/ETF tickers
 
-DEFAULT_TARGET_DATE = "2026-01-06"  # Last trading day (Monday)
+DEFAULT_TARGET_DATE = "2026-01-07"  # Last trading day (Monday)
 DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
 DEFAULT_BACKFILL_COUNT = 30  # Number of periods to fetch (days for daily, weeks for weekly)
 
