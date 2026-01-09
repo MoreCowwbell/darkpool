@@ -86,7 +86,7 @@ TICKERS_TYPE =  ["ALL"]  # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8"
 DEFAULT_TICKERS = ["TSLA", "AMZN", ]
 FETCH_INDICES_CONSTITUENTS = False  # When True, also fetch constituents of index/ETF tickers
 
-DEFAULT_TARGET_DATE = "2026-01-07"  # Last trading day (Monday)
+DEFAULT_TARGET_DATE = "TODAY"  # "TODAY" for current date, or specific date like "2026-01-08"
 DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
 DEFAULT_BACKFILL_COUNT = 30  # Number of periods to fetch (days for daily, weeks for weekly)
 
@@ -390,9 +390,15 @@ def load_config() -> Config:
 
     market_tz = os.getenv("MARKET_TZ", DEFAULT_MARKET_TZ)
     tz = pytz.timezone(market_tz)
-    target_date = _parse_date(os.getenv("TARGET_DATE")) or _parse_date(DEFAULT_TARGET_DATE)
-    if not target_date:
+
+    # Handle "TODAY" as a special value for target date
+    target_date_str = os.getenv("TARGET_DATE", DEFAULT_TARGET_DATE)
+    if target_date_str and target_date_str.upper() == "TODAY":
         target_date = datetime.now(tz).date()
+    else:
+        target_date = _parse_date(target_date_str)
+        if not target_date:
+            target_date = datetime.now(tz).date()
 
     fetch_mode = os.getenv("FETCH_MODE", DEFAULT_FETCH_MODE).lower()
     backfill_count = int(os.getenv("BACKFILL_COUNT", str(DEFAULT_BACKFILL_COUNT)))
