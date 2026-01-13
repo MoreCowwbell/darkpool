@@ -376,12 +376,29 @@ def main() -> None:
             logging.error("Failed to render last-3-days metrics table: %s", exc)
 
     if config.render_summary_dashboard:
+        # Summary table 1: All configured tickers
         try:
             render_sector_summary(
                 db_path=config.db_path,
                 output_dir=config.table_dir,
                 dates=config.target_dates,
                 tickers=config.tickers,
+                max_dates=10,
+                title="Summary Dashboard - All Tickers",
+            )
+        except Exception as exc:
+            logging.error("Failed to render all-tickers summary dashboard: %s", exc)
+
+        # Summary table 2: Sector ETFs only (same as runtablesummary.py)
+        try:
+            summary_output_dir = config.table_dir.parent / "tables_summary"
+            summary_output_dir.mkdir(parents=True, exist_ok=True)
+            render_sector_summary(
+                db_path=config.db_path,
+                output_dir=summary_output_dir,
+                dates=config.target_dates,
+                # tickers=None defaults to SECTOR_SUMMARY_TICKERS
+                max_dates=10,
                 title="Sector Summary Dashboard",
             )
         except Exception as exc:
