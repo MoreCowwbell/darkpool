@@ -376,3 +376,14 @@ Format:
 ## 2026-01-05 Session Summary (Codex)
 - [x] Refactored ticker group lists in `darkpool_analysis/config.py` to load from `Special_tools/ticker_dictionary.py`.
 - [x] Updated `Special_tools/finra_ticker_check.ipynb` and `Special_tools/circos.ipynb` to read ticker groups from the new dictionary.
+
+## 2026-01-13 Session Summary (Claude Code) - Z-Score / Accumulation Score Bug Fix
+- [x] Fixed `_metrics_are_complete` to check if the LATEST date has valid accumulation scores.
+  - Root cause: Function only checked if SOME rows had non-null values, not if the most recent dates were complete.
+  - Bug: Cached NaN z-scores for the latest date were considered "complete" and never recomputed.
+  - Fix: Added check that the most recent target date has at least one non-null accumulation score.
+- [x] Added `target_dates` parameter to `_metrics_are_complete` function for latest-date validation.
+- [x] Enhanced data loading to include historical buffer for z-score calculation.
+  - Added `zscore_lookback_days = short_z_window + 10` buffer before target date range.
+  - Ensures rolling z-score has sufficient historical context even with small backfill counts.
+  - Updated all data loading queries (short_all, agg_all, lit_all, finra_all_df) to use buffered date range.

@@ -93,8 +93,13 @@ def _metrics_are_complete(
     existing_metrics: pd.DataFrame,
     expected_rows: int,
     short_z_source: str | None = None,
+    target_dates: list | None = None,
 ) -> bool:
-    """Check if existing metrics have complete data (non-null key columns)."""
+    """Check if existing metrics have complete data (non-null key columns).
+
+    Also checks that the most recent dates have valid accumulation scores,
+    to avoid using cached NaN values from incomplete previous computations.
+    """
     if len(existing_metrics) != expected_rows:
         return False
 
@@ -112,6 +117,21 @@ def _metrics_are_complete(
         if col in existing_metrics.columns:
             # Check if column has at least some non-null values
             if existing_metrics[col].notna().sum() == 0:
+                return False
+
+    # CRITICAL: Check that the most recent dates have valid accumulation scores
+    # This prevents using cached NaN values from incomplete previous runs
+    if target_dates and "date" in existing_metrics.columns and "accumulation_score" in existing_metrics.columns:
+        # Get the most recent target date
+        max_target_date = max(target_dates)
+        df = existing_metrics.copy()
+        df["date"] = pd.to_datetime(df["date"]).dt.date
+
+        # Check if the most recent date has any valid accumulation scores
+        latest_rows = df[df["date"] == max_target_date]
+        if not latest_rows.empty:
+            # If all accumulation scores for the latest date are null, data is incomplete
+            if latest_rows["accumulation_score"].isna().all():
                 return False
 
     if short_z_source:
@@ -260,7 +280,11 @@ def main() -> None:
         date_end = max(config.target_dates)
 
         # Always load inputs from DB to avoid partial-frame recomputation when cache is enabled.
-        # This ensures metrics use the full 60-day window even if only some days were fetched.
+        # Load extra historical days (zscore window + buffer) for proper z-score calculation.
+        # This ensures the latest dates have enough historical context for rolling z-scores.
+        zscore_lookback_days = config.short_z_window + 10  # Extra buffer for weekends/holidays
+        date_start_with_buffer = date_start - timedelta(days=zscore_lookback_days)
+
         symbol_placeholders = ", ".join(["?" for _ in config.tickers])
         symbols_params = list(config.tickers)
 
@@ -271,7 +295,7 @@ def main() -> None:
             WHERE week_start_date >= ? AND week_start_date <= ?
             """,
             [
-                date_start - timedelta(days=date_start.weekday()),
+                date_start_with_buffer - timedelta(days=date_start_with_buffer.weekday()),
                 date_end - timedelta(days=date_end.weekday()),
             ],
         ).fetchdf()
@@ -283,7 +307,7 @@ def main() -> None:
             WHERE trade_date >= ? AND trade_date <= ?
               AND symbol IN ({symbol_placeholders})
             """,
-            [date_start, date_end] + symbols_params,
+            [date_start_with_buffer, date_end] + symbols_params,
         ).fetchdf()
 
         agg_all = conn.execute(
@@ -293,10 +317,11 @@ def main() -> None:
             WHERE trade_date >= ? AND trade_date <= ?
               AND symbol IN ({symbol_placeholders})
             """,
-            [date_start, date_end] + symbols_params,
+            [date_start_with_buffer, date_end] + symbols_params,
         ).fetchdf()
 
         # Read lit_direction_daily from DB (includes cached + newly computed)
+        # Use date_start_with_buffer to include historical context for z-score calculation
         lit_all = conn.execute(
             f"""
             SELECT symbol, date, lit_buy_volume, lit_sell_volume, lit_buy_ratio,
@@ -305,7 +330,7 @@ def main() -> None:
             WHERE date >= ? AND date <= ?
               AND symbol IN ({symbol_placeholders})
             """,
-            [date_start, date_end] + symbols_params,
+            [date_start_with_buffer, date_end] + symbols_params,
         ).fetchdf()
 
         # Check if metrics already exist in DB with complete data
@@ -317,6 +342,7 @@ def main() -> None:
             existing_metrics,
             expected_rows,
             short_z_source=config.accumulation_short_z_source,
+            target_dates=config.target_dates,
         ):
             logging.info("Using existing metrics from database (skipping recomputation)")
             daily_metrics_df = existing_metrics
