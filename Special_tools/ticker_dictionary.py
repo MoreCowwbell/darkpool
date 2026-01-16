@@ -76,8 +76,8 @@ SPECULATIVE_TICKERS = [
     "PLTR",
     "SOFI",
     "CRWV",
-    "ARM",
-    "SMCI",
+    "AMD",
+    "JPM",
     "BE",
     "NNE",
 ]

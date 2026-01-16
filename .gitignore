@@ -44,6 +44,7 @@ archives/
 data/
 logs/
 output/
+output*/
 output/plots/
 output/tables/
 spx_flow/archives/

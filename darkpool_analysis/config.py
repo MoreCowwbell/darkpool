@@ -82,8 +82,8 @@ EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 # User-facing defaults (most commonly edited)
 # -----------------------------------------------------------------------------
 
-TICKERS_TYPE =  ["SINGLE"]  # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8", "CRYPTO", "SPECULATIVE"], ["SINGLE"], ["ALL"]
-DEFAULT_TICKERS = ["JPM", "V", "MA", "AMD","JNJ" ]
+TICKERS_TYPE =  ["ALL"]  # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8", "CRYPTO", "SPECULATIVE"], ["SINGLE"], ["ALL"]
+DEFAULT_TICKERS = ["XLP" ]
 FETCH_INDICES_CONSTITUENTS = False  # When True, also fetch constituents of index/ETF tickers
 
 DEFAULT_TARGET_DATE = "TODAY"  # "TODAY" for current date, or specific date like "2026-01-08"
