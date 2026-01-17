@@ -33,8 +33,10 @@ try:
         COMMODITIES_TICKERS,
         GLOBAL_MACRO_TICKERS,
         MAG8_TICKERS,
+        RATES_CREDIT_TICKERS,
         SECTOR_CORE_TICKERS,
         SPECULATIVE_TICKERS,
+        THEMATIC_SECTORS_TICKERS,
         load_config,
     )
     from .plotter import (
@@ -56,8 +58,10 @@ except ImportError:
         COMMODITIES_TICKERS,
         GLOBAL_MACRO_TICKERS,
         MAG8_TICKERS,
+        RATES_CREDIT_TICKERS,
         SECTOR_CORE_TICKERS,
         SPECULATIVE_TICKERS,
+        THEMATIC_SECTORS_TICKERS,
         load_config,
     )
     from plotter import (
@@ -331,20 +335,26 @@ def _resolve_combination_title(tickers: list[str]) -> str:
     tickers_set = set(tickers)
     if tickers_set == set(SECTOR_CORE_TICKERS):
         return "Sector Core Overlay"
+    if tickers_set == set(THEMATIC_SECTORS_TICKERS):
+        return "Thematic Sectors Overlay"
     if tickers_set == set(GLOBAL_MACRO_TICKERS):
         return "Global Macro Overlay"
     if tickers_set == set(COMMODITIES_TICKERS):
         return "Commodities Overlay"
     if tickers_set == set(MAG8_TICKERS):
         return "Mag 8 Overlay"
+    if tickers_set == set(RATES_CREDIT_TICKERS):
+        return "Rates & Credit Overlay"
     if tickers_set == set(SPECULATIVE_TICKERS):
         return "Speculative / High-Beta Growth Overlay"
     # Check for ALL (superset of all groups)
     all_groups = (
         set(SECTOR_CORE_TICKERS)
+        | set(THEMATIC_SECTORS_TICKERS)
         | set(GLOBAL_MACRO_TICKERS)
         | set(COMMODITIES_TICKERS)
         | set(MAG8_TICKERS)
+        | set(RATES_CREDIT_TICKERS)
         | set(SPECULATIVE_TICKERS)
     )
     if tickers_set == all_groups:

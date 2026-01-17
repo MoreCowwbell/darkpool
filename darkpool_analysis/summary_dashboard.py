@@ -27,7 +27,16 @@ _special_tools_dir = _Path(__file__).resolve().parent.parent / "Special_tools"
 if str(_special_tools_dir) not in sys.path:
     sys.path.insert(0, str(_special_tools_dir))
 
-from ticker_dictionary import SECTOR_ZOOM_MAP, CRYPTO_TICKERS, SPECULATIVE_TICKERS
+from ticker_dictionary import (
+    SECTOR_CORE,
+    THEMATIC_SECTORS,
+    GLOBAL_MACRO,
+    COMMODITIES,
+    MAG8,
+    RATES_CREDIT,
+    CRYPTO_TICKERS,
+    SPECULATIVE_TICKERS,
+)
 
 try:
     from .config import DEFAULT_TABLE_STYLE
@@ -40,25 +49,26 @@ except ImportError:
 # User Settings - Ticker Selection
 # =============================================================================
 # Choose which ticker set to display in the summary dashboard
-# Options: "SUMMARY", "SECTOR", "GLOBAL", "COMMODITIES", "MAG8", "CRYPTO", "SPECULATIVE"
-TICKERS_TYPE = "SUMMARY"
+# Options: "SECTOR", "THEMATIC", "GLOBAL", "COMMODITIES", "MAG8", "RATES", "CRYPTO", "SPECULATIVE"
+TICKERS_TYPE = "SECTOR"
 
 # Map TICKERS_TYPE to the appropriate ticker list from ticker_dictionary
-# For SUMMARY/SECTOR/GLOBAL/COMMODITIES: keys are the ETF tickers (XLE, XLF, SPY, etc.)
+# For SECTOR/THEMATIC/GLOBAL/COMMODITIES/RATES: keys are the ETF tickers (XLE, XLF, SPY, etc.)
 # For MAG8: the key is just a label, so we use the values (actual stock tickers)
 # For CRYPTO/SPECULATIVE: flat lists of individual stock tickers
 _TICKERS_TYPE_MAP: dict[str, list[str]] = {
-    "SUMMARY": list(SECTOR_ZOOM_MAP.get("SECTOR_SUMMARY", {}).keys()),
-    "SECTOR": list(SECTOR_ZOOM_MAP.get("SECTOR_CORE", {}).keys()),
-    "GLOBAL": list(SECTOR_ZOOM_MAP.get("GLOBAL_MACRO", {}).keys()),
-    "COMMODITIES": list(SECTOR_ZOOM_MAP.get("COMMODITIES", {}).keys()),
-    "MAG8": SECTOR_ZOOM_MAP.get("MAG8", {}).get("MAG8", []),  # Use values (actual stocks)
+    "SECTOR": list(SECTOR_CORE.keys()),
+    "THEMATIC": list(THEMATIC_SECTORS.keys()),
+    "GLOBAL": list(GLOBAL_MACRO.keys()),
+    "COMMODITIES": list(COMMODITIES.keys()),
+    "MAG8": MAG8.get("MAG8", []),  # Use values (actual stocks)
+    "RATES": list(RATES_CREDIT.keys()),
     "CRYPTO": list(CRYPTO_TICKERS),
     "SPECULATIVE": list(SPECULATIVE_TICKERS),
 }
 
 # Get the ticker list based on TICKERS_TYPE setting
-SECTOR_SUMMARY_TICKERS: list[str] = _TICKERS_TYPE_MAP.get(TICKERS_TYPE, [])
+SELECTED_TICKERS: list[str] = _TICKERS_TYPE_MAP.get(TICKERS_TYPE, [])
 
 # =============================================================================
 # Constants
@@ -1013,7 +1023,7 @@ def render_sector_summary(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if tickers is None:
-        tickers = SECTOR_SUMMARY_TICKERS
+        tickers = SELECTED_TICKERS
 
     # Get palette from config
     palette = DEFAULT_TABLE_STYLE.get("palette", {})

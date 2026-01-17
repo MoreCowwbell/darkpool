@@ -19,9 +19,12 @@ except ImportError:
 
 
 def _load_ticker_dictionary():
-    ticker_path = Path(__file__).resolve().parent.parent / "Special_tools" / "ticker_dictionary.py"
+    # Try darkpool_analysis first, then Special_tools for backward compatibility
+    ticker_path = Path(__file__).resolve().parent / "ticker_dictionary.py"
     if not ticker_path.exists():
-        raise FileNotFoundError(f"ticker_dictionary.py not found at {ticker_path}")
+        ticker_path = Path(__file__).resolve().parent.parent / "Special_tools" / "ticker_dictionary.py"
+    if not ticker_path.exists():
+        raise FileNotFoundError(f"ticker_dictionary.py not found in darkpool_analysis/ or Special_tools/")
     spec = importlib.util.spec_from_file_location("ticker_dictionary", ticker_path)
     if spec is None or spec.loader is None:
         raise ImportError(f"Unable to load ticker_dictionary.py from {ticker_path}")
@@ -30,11 +33,11 @@ def _load_ticker_dictionary():
     return module
 
 
-def _expand_with_constituents(tickers: list[str], sector_zoom_map: dict) -> list[str]:
-    """Expand tickers to include constituents from SECTOR_ZOOM_MAP.
+def _expand_with_constituents(tickers: list[str], all_ticker_maps: list[dict]) -> list[str]:
+    """Expand tickers to include constituents from ticker dictionaries.
 
-    Looks up each ticker in all category maps (SECTOR_CORE, SECTOR_SUMMARY,
-    GLOBAL_MACRO, COMMODITIES, MAG8) and adds any found constituents.
+    Looks up each ticker in all category maps (SECTOR_CORE, THEMATIC_SECTORS,
+    GLOBAL_MACRO, COMMODITIES, MAG8, RATES_CREDIT) and adds any found constituents.
     """
     expanded = []
     seen = set()
@@ -46,9 +49,9 @@ def _expand_with_constituents(tickers: list[str], sector_zoom_map: dict) -> list
             seen.add(ticker)
 
         # Look for constituents in all category maps
-        for category_map in sector_zoom_map.values():
-            if ticker in category_map:
-                constituents = category_map[ticker]
+        for ticker_map in all_ticker_maps:
+            if ticker in ticker_map:
+                constituents = ticker_map[ticker]
                 # Handle both list and dict formats
                 if isinstance(constituents, list):
                     for constituent in constituents:
@@ -67,22 +70,35 @@ def _expand_with_constituents(tickers: list[str], sector_zoom_map: dict) -> list
 # Ticker groups (used when TICKERS_TYPE is set)
 # -----------------------------------------------------------------------------
 _TICKER_DICT = _load_ticker_dictionary()
-SECTOR_ZOOM_MAP = _TICKER_DICT.SECTOR_ZOOM_MAP
 
-SECTOR_CORE_TICKERS = list(SECTOR_ZOOM_MAP["SECTOR_CORE"].keys())
-SECTOR_SUMMARY_TICKERS = list(SECTOR_ZOOM_MAP["SECTOR_SUMMARY"].keys())
-GLOBAL_MACRO_TICKERS = list(SECTOR_ZOOM_MAP["GLOBAL_MACRO"].keys())
-COMMODITIES_TICKERS = list(SECTOR_ZOOM_MAP["COMMODITIES"].keys())
-MAG8_TICKERS = list(SECTOR_ZOOM_MAP["MAG8"]["MAG8"])
+# Load flat dictionaries directly (no SECTOR_ZOOM_MAP wrapper)
+SECTOR_CORE = _TICKER_DICT.SECTOR_CORE
+THEMATIC_SECTORS = _TICKER_DICT.THEMATIC_SECTORS
+GLOBAL_MACRO = _TICKER_DICT.GLOBAL_MACRO
+COMMODITIES = _TICKER_DICT.COMMODITIES
+MAG8 = _TICKER_DICT.MAG8
+RATES_CREDIT = _TICKER_DICT.RATES_CREDIT
+
+# Extract ticker lists from flat dictionaries
+SECTOR_CORE_TICKERS = list(SECTOR_CORE.keys())
+THEMATIC_SECTORS_TICKERS = list(THEMATIC_SECTORS.keys())
+GLOBAL_MACRO_TICKERS = list(GLOBAL_MACRO.keys())
+COMMODITIES_TICKERS = list(COMMODITIES.keys())
+MAG8_TICKERS = list(MAG8["MAG8"])
+RATES_CREDIT_TICKERS = list(RATES_CREDIT.keys())
 SPECULATIVE_TICKERS = list(_TICKER_DICT.SPECULATIVE_TICKERS)
 CRYPTO_TICKERS = list(_TICKER_DICT.CRYPTO_TICKERS)
+
+# Combined list for constituent expansion
+ALL_TICKER_MAPS = [SECTOR_CORE, THEMATIC_SECTORS, GLOBAL_MACRO, COMMODITIES, MAG8, RATES_CREDIT]
+
 EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 
 # -----------------------------------------------------------------------------
 # User-facing defaults (most commonly edited)
 # -----------------------------------------------------------------------------
 
-TICKERS_TYPE =  ["ALL"]  # ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8", "CRYPTO", "SPECULATIVE"], ["SINGLE"], ["ALL"]
+TICKERS_TYPE =  ["ALL"]  # ["SECTOR", "THEMATIC", "GLOBAL", "COMMODITIES", "MAG8", "RATES", "CRYPTO", "SPECULATIVE"], ["SINGLE"], ["ALL"]
 DEFAULT_TICKERS = ["XLP" ]
 FETCH_INDICES_CONSTITUENTS = False  # When True, also fetch constituents of index/ETF tickers
 
@@ -414,10 +430,11 @@ def load_config() -> Config:
     ticker_type_map = {
         "SINGLE": DEFAULT_TICKERS,
         "SECTOR": SECTOR_CORE_TICKERS,
-        "SUMMARY": SECTOR_SUMMARY_TICKERS,
+        "THEMATIC": THEMATIC_SECTORS_TICKERS,
         "GLOBAL": GLOBAL_MACRO_TICKERS,
         "COMMODITIES": COMMODITIES_TICKERS,
         "MAG8": MAG8_TICKERS,
+        "RATES": RATES_CREDIT_TICKERS,
         "SPECULATIVE": SPECULATIVE_TICKERS,
         "CRYPTO": CRYPTO_TICKERS,
     }
@@ -425,7 +442,7 @@ def load_config() -> Config:
     # Compute ALL by combining all groups (excluding SINGLE), preserving order
     all_tickers = []
     seen_all = set()
-    for key in ["SECTOR", "SUMMARY", "GLOBAL", "COMMODITIES", "MAG8", "SPECULATIVE", "CRYPTO"]:
+    for key in ["SECTOR", "THEMATIC", "GLOBAL", "COMMODITIES", "MAG8", "RATES", "SPECULATIVE", "CRYPTO"]:
         for ticker in ticker_type_map[key]:
             if ticker not in seen_all:
                 all_tickers.append(ticker)
@@ -461,7 +478,7 @@ def load_config() -> Config:
         "FETCH_INDICES_CONSTITUENTS", str(FETCH_INDICES_CONSTITUENTS)
     ).lower() in ("true", "1", "yes")
     if fetch_indices_constituents:
-        tickers = _expand_with_constituents(tickers, SECTOR_ZOOM_MAP)
+        tickers = _expand_with_constituents(tickers, ALL_TICKER_MAPS)
 
     finra_tickers = [ticker for ticker in tickers if ticker not in EXCLUDED_FINRA_TICKERS]
 
