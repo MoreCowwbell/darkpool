@@ -186,7 +186,7 @@ DEFAULT_FETCH_OPTIONS_PREMIUM = True  # Enable/disable options premium fetching
 # - "TOTAL": Current behavior - total call/put premium (backwards compatible)
 # - "WTD_STYLE": OTM focus with ITM call hedge warning (WTD's recommended approach)
 # - "FULL_BREAKDOWN": Show all 4 categories (OTM/ITM x Call/Put)
-DEFAULT_OPTIONS_PREMIUM_DISPLAY_MODE = "WTD_STYLE"
+DEFAULT_OPTIONS_PREMIUM_DISPLAY_MODE = "FULL_BREAKDONW"
 
 # Threshold for ITM call hedge warning (% of total call premium)
 # When ITM calls exceed this ratio, shows warning marker in WTD_STYLE mode

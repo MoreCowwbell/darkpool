@@ -291,6 +291,125 @@ def init_db(conn: duckdb.DuckDBPyConnection) -> None:
     for column_def in options_premium_columns:
         conn.execute(f"ALTER TABLE options_premium_summary ADD COLUMN IF NOT EXISTS {column_def}")
 
+    # =========================================================================
+    # Backtest tables (bt_ prefix) for accumulation signal optimization
+    # =========================================================================
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS bt_signal_events (
+            event_id INTEGER PRIMARY KEY,
+            date DATE NOT NULL,
+            symbol VARCHAR NOT NULL,
+            sector_etf VARCHAR,
+            score_variant VARCHAR NOT NULL,
+            score_value DOUBLE,
+            buy_threshold INTEGER,
+            sell_threshold INTEGER,
+            entry_price DOUBLE,
+            signal_close DOUBLE,
+            trend_state VARCHAR,
+            sma_20_slope DOUBLE,
+            price_vs_sma_20_pct DOUBLE,
+            rsi_14 DOUBLE,
+            opt_put_call_ratio DOUBLE,
+            opt_iv_percentile DOUBLE,
+            opt_put_call_ratio_5d_chg DOUBLE,
+            regime VARCHAR,
+            spy_vs_sma_50 DOUBLE,
+            vix_level DOUBLE,
+            fwd_return_1d DOUBLE,
+            fwd_return_3d DOUBLE,
+            fwd_return_5d DOUBLE,
+            fwd_return_10d DOUBLE,
+            fwd_return_20d DOUBLE,
+            days_to_first_dist INTEGER,
+            days_to_2x_consec_dist INTEGER,
+            return_at_first_dist DOUBLE,
+            return_at_2x_consec_dist DOUBLE,
+            max_drawdown_before_dist DOUBLE,
+            max_gain_before_dist DOUBLE,
+            hit_at_dist BOOLEAN,
+            hit_5d BOOLEAN,
+            hit_10d BOOLEAN,
+            parent_etf_aligned BOOLEAN,
+            signal_quality VARCHAR,
+            failure_mode VARCHAR,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (date, symbol, score_variant, buy_threshold, sell_threshold)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS bt_backtest_runs (
+            run_id INTEGER PRIMARY KEY,
+            run_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            score_variant VARCHAR NOT NULL,
+            short_z_source VARCHAR,
+            weight_short DOUBLE,
+            weight_lit DOUBLE,
+            weight_price DOUBLE,
+            z_window INTEGER,
+            buy_threshold INTEGER,
+            sell_threshold INTEGER,
+            exit_strategy VARCHAR,
+            ticker_universe VARCHAR,
+            regime_filter VARCHAR,
+            date_start DATE,
+            date_end DATE,
+            total_signals INTEGER,
+            total_trades INTEGER,
+            hit_rate DOUBLE,
+            avg_return DOUBLE,
+            median_return DOUBLE,
+            win_loss_ratio DOUBLE,
+            sharpe_ratio DOUBLE,
+            max_drawdown DOUBLE,
+            avg_hold_days DOUBLE,
+            signals_per_month DOUBLE,
+            false_positive_rate DOUBLE,
+            high_quality_hit_rate DOUBLE,
+            UNIQUE (score_variant, z_window, buy_threshold, sell_threshold,
+                    exit_strategy, ticker_universe, regime_filter, date_start, date_end)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS bt_frequency_baseline (
+            id INTEGER PRIMARY KEY,
+            symbol VARCHAR NOT NULL,
+            score_variant VARCHAR NOT NULL,
+            date_start DATE NOT NULL,
+            date_end DATE NOT NULL,
+            accum_signals_count INTEGER,
+            dist_signals_count INTEGER,
+            avg_gap_accum_to_dist DOUBLE,
+            median_gap_accum_to_dist DOUBLE,
+            avg_gap_dist_to_accum DOUBLE,
+            signals_per_month DOUBLE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (symbol, score_variant, date_start, date_end)
+        )
+        """
+    )
+    # Backtest table indexes
+    bt_indexes = [
+        "CREATE INDEX IF NOT EXISTS idx_bt_signal_events_date ON bt_signal_events(date)",
+        "CREATE INDEX IF NOT EXISTS idx_bt_signal_events_symbol ON bt_signal_events(symbol)",
+        "CREATE INDEX IF NOT EXISTS idx_bt_signal_events_variant ON bt_signal_events(score_variant)",
+        "CREATE INDEX IF NOT EXISTS idx_bt_signal_events_quality ON bt_signal_events(signal_quality)",
+        "CREATE INDEX IF NOT EXISTS idx_bt_signal_events_regime ON bt_signal_events(regime)",
+        "CREATE INDEX IF NOT EXISTS idx_bt_backtest_runs_variant ON bt_backtest_runs(score_variant)",
+        "CREATE INDEX IF NOT EXISTS idx_bt_backtest_runs_hit_rate ON bt_backtest_runs(hit_rate)",
+        "CREATE INDEX IF NOT EXISTS idx_bt_frequency_baseline_symbol ON bt_frequency_baseline(symbol)",
+    ]
+    for idx_sql in bt_indexes:
+        try:
+            conn.execute(idx_sql)
+        except Exception:
+            pass  # Index may already exist
+
 
 def upsert_dataframe(
     conn: duckdb.DuckDBPyConnection,
