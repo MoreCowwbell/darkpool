@@ -88,11 +88,12 @@ SPECULATIVE_TICKERS = [
     "CRWV",
     "HIMS",
     "HOOD",
-    "IREN",
-    "JPM",
+    "IREN", 
     "NNE",
     "PLTR",
-    "SOFI",
+    "SPOT"
+    "SHOP"
+    "RDDT",
 ]
 
 RATES_CREDIT = {
