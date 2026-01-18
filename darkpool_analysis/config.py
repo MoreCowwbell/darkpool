@@ -98,7 +98,7 @@ EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 # User-facing defaults (most commonly edited)
 # -----------------------------------------------------------------------------
 
-TICKERS_TYPE =  ["ALL"]  # ["SECTOR", "THEMATIC", "GLOBAL", "COMMODITIES", "MAG8", "RATES", "CRYPTO", "SPECULATIVE"], ["SINGLE"], ["ALL"]
+TICKERS_TYPE =  ["SECTOR", "THEMATIC", "GLOBAL", "COMMODITIES", "MAG8", "CRYPTO", "SPECULATIVE"]  # ["SECTOR", "THEMATIC", "GLOBAL", "COMMODITIES", "MAG8", "RATES", "CRYPTO", "SPECULATIVE"], ["SINGLE"], ["ALL"]
 DEFAULT_TICKERS = ["XLP" ]
 FETCH_INDICES_CONSTITUENTS = False  # When True, also fetch constituents of index/ETF tickers
 
@@ -121,7 +121,7 @@ DEFAULT_INCLUDE_POLYGON_ONLY_TICKERS = True  # Include tickers without FINRA cov
 #             Faster but less accurate (bid/ask approximated from bar range).
 # - "daily" : Skip lit inference entirely, use only short-sale ratio.
 #             Fastest option when you only need short pressure signals.
-DEFAULT_POLYGON_TRADES_MODE = "minute"
+DEFAULT_POLYGON_TRADES_MODE = "tick"
 
 # -----------------------------------------------------------------------------
 # Caching and output behavior
@@ -139,8 +139,8 @@ DEFAULT_PANEL1_METRIC = "finra_buy_volume"  # "vw_flow", "combined_ratio", or "f
 DEFAULT_RENDER_METRICS_PLOTS = True  # Render metrics plots (plotter.py)
 DEFAULT_RENDER_PRICE_CHARTS = True # Render OHLC price charts
 DEFAULT_RENDER_SUMMARY_DASHBOARD = True  # Render sector summary dashboard
-DEFAULT_RENDER_TABLES = False  # Render daily metrics tables (HTML/PNG)
-DEFAULT_COMBINATION_PLOT = False  # Render combined multi-ticker plot
+DEFAULT_RENDER_TABLES = True  # Render daily metrics tables (HTML/PNG)
+DEFAULT_COMBINATION_PLOT = True  # Render combined multi-ticker plot
 DEFAULT_PLOT_TRADING_GAPS = False  # Keep weekend/holiday gaps in plots
 DEFAULT_EXPORT_CSV = False  # Export tables to CSV files
 
