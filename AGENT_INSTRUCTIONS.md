@@ -74,8 +74,17 @@
 - Polygon daily aggregates failure: log warning and continue (price context becomes NULL).
 - Always persist coverage metadata when inference is limited.
 
+## Database Location Convention
+- **CRITICAL**: Never write databases inside Dropbox-synced directories.
+- Database paths are resolved via `darkpool_analysis/db_path.py` using `get_db_path()`.
+- `DATA_ROOT` env var controls storage location:
+  - **Windows**: `DATA_ROOT=D:\vscode\data` → `D:\vscode\data\darkpool\darkpool.duckdb`
+  - **Linux/AWS**: `DATA_ROOT=/data` → `/data/darkpool/darkpool.duckdb`
+  - **Fallback** (if unset): `{repo_root}/data/darkpool.duckdb`
+- See `AGENT_PROJECT_CONVENTION.md` for full details.
+
 ## Configuration Structure
-- .env (project root): only API secrets (POLYGON_API_KEY, FINRA_API_KEY, FINRA_API_SECRET).
+- .env (project root): API secrets AND `DATA_ROOT` path setting.
 - config.py: defaults for tickers, dates, URLs, and pipeline behavior.
 - Fetch modes (FETCH_MODE): "single", "daily", or "weekly".
 - Polygon trades modes (POLYGON_TRADES_MODE):
@@ -165,3 +174,5 @@ For symbol filtering, use `domainFilters`:
 - Always use relative paths whenever possible.
 - Use Path(__file__).resolve().parent for package-relative paths.
 - Project root .env is loaded via load_dotenv(project_root / ".env") in config.py.
+- **Database paths**: Always use `get_db_path()` from `darkpool_analysis/db_path.py` or `config.db_path`.
+- **Never hardcode absolute database paths** - the centralized helper handles DATA_ROOT resolution.

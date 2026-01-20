@@ -387,3 +387,24 @@ Format:
   - Added `zscore_lookback_days = short_z_window + 10` buffer before target date range.
   - Ensures rolling z-score has sufficient historical context even with small backfill counts.
   - Updated all data loading queries (short_all, agg_all, lit_all, finra_all_df) to use buffered date range.
+
+## 2026-01-20 Session Summary (Claude Code) - Portable Database Path Convention
+- [x] Created `darkpool_analysis/db_path.py` with centralized `get_db_path()` helper.
+  - Supports `DATA_ROOT` env var for external storage (outside Dropbox).
+  - Auto-detects repo root via `.git` directory, derives project name.
+  - Falls back to repo-relative `./data/` if `DATA_ROOT` not set.
+  - Creates directories automatically if missing.
+- [x] Updated `darkpool_analysis/config.py` to use `get_db_path()` instead of hardcoded path.
+- [x] Removed duplicate `_resolve_db_path()` functions:
+  - `darkpool_analysis/backfill_itm_otm.py` - now imports from `db_path`.
+  - `Special_tools/reset_daily_metrics.py` - now imports from `db_path`.
+- [x] Updated hardcoded paths:
+  - `Special_tools/close_db.py` - now uses `get_db_path()`.
+  - `Special_tools_Score_backtesting/config.py` - now uses `get_db_path()`.
+- [x] Updated `.env` with `DATA_ROOT=D:\vscode\data` and AWS/Linux example.
+- [x] Updated documentation:
+  - `AGENT_PROJECT_CONVENTION.md` - added implementation status section.
+  - `AGENT_CONTEXT.md` - updated DB location reference.
+- [x] Updated `Special_tools/circos_v2.ipynb`:
+  - Replaced custom `find_db_candidates()` discovery logic with `config.db_path`.
+  - Now properly uses centralized DATA_ROOT convention.

@@ -47,12 +47,9 @@ from pathlib import Path
 
 import duckdb
 
-
-def _resolve_db_path(raw: str | None) -> Path:
-    if raw:
-        return Path(raw).expanduser()
-    # Script is in Special_tools/, database is in darkpool_analysis/data/
-    return Path(__file__).resolve().parent.parent / "darkpool_analysis" / "data" / "darkpool.duckdb"
+# Add darkpool_analysis to path for db_path import
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "darkpool_analysis"))
+from db_path import get_db_path
 
 
 def _parse_date(value: str | None) -> date | None:
@@ -112,7 +109,7 @@ def main() -> int:
     parser.add_argument("--yes", action="store_true", help="Skip confirmation prompt.")
     args = parser.parse_args()
 
-    db_path = _resolve_db_path(args.db)
+    db_path = Path(args.db).expanduser() if args.db else get_db_path()
     if not db_path.exists():
         print(f"Database not found: {db_path}")
         return 1

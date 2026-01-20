@@ -15,6 +15,7 @@ PROJECT_ROOT = PACKAGE_DIR.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from darkpool_analysis.config import load_config as load_main_config
+from darkpool_analysis.db_path import get_db_path
 
 # =============================================================================
 # TICKER UNIVERSE DEFINITIONS
@@ -273,8 +274,8 @@ class MetricsTargets:
 class BacktestConfig:
     """Main configuration for backtesting."""
 
-    # Database path (use main darkpool database)
-    db_path: Path = field(default_factory=lambda: PROJECT_ROOT / "darkpool_analysis" / "data" / "darkpool.duckdb")
+    # Database path (use main darkpool database via centralized helper)
+    db_path: Path = field(default_factory=get_db_path)
 
     # Output directory
     output_dir: Path = field(default_factory=lambda: PACKAGE_DIR / "output")

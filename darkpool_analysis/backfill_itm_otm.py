@@ -19,14 +19,13 @@ from pathlib import Path
 import duckdb
 import pandas as pd
 
+try:
+    from .db_path import get_db_path
+except ImportError:
+    from db_path import get_db_path
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
-
-
-def _resolve_db_path(raw: str | None) -> Path:
-    if raw:
-        return Path(raw).expanduser()
-    return Path(__file__).resolve().parent / "data" / "darkpool.duckdb"
 
 
 def _ensure_columns_exist(conn: duckdb.DuckDBPyConnection) -> None:
@@ -226,7 +225,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    db_path = _resolve_db_path(args.db)
+    db_path = Path(args.db).expanduser() if args.db else get_db_path()
     if not db_path.exists():
         logger.error("Database not found: %s", db_path)
         return 1

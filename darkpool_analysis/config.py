@@ -14,8 +14,10 @@ from dotenv import load_dotenv
 
 try:
     from .market_calendar import get_past_trading_days
+    from .db_path import get_db_path
 except ImportError:
     from market_calendar import get_past_trading_days
+    from db_path import get_db_path
 
 
 def _load_ticker_dictionary():
@@ -104,7 +106,7 @@ FETCH_INDICES_CONSTITUENTS = False  # When True, also fetch constituents of inde
 
 DEFAULT_TARGET_DATE = "TODAY"  # "TODAY" for current date, or specific date like "2026-01-08"
 DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
-DEFAULT_BACKFILL_COUNT = 30  # Number of periods to fetch (days for daily, weeks for weekly)
+DEFAULT_BACKFILL_COUNT = 300  # Number of periods to fetch (days for daily, weeks for weekly)
 
 DEFAULT_MARKET_TZ = "US/Eastern"
 DEFAULT_RTH_START = "09:30"
@@ -129,7 +131,7 @@ DEFAULT_POLYGON_TRADES_MODE = "tick"
 # When True, bypass all output settings (no files saved to disk).
 # Overrides: RENDER_METRICS_PLOTS, RENDER_PRICE_CHARTS, RENDER_SUMMARY_DASHBOARD,
 #            RENDER_TABLES, COMBINATION_PLOT to False.
-BYPASS_OUTPUT_SETTING = False
+BYPASS_OUTPUT_SETTING = True
 
 # When True, check polygon_ingestion_state before fetching and skip symbols
 # that have already been fetched for a given date+source. No TTL (cache forever).
@@ -511,7 +513,7 @@ def load_config() -> Config:
         table_dir=root_dir / "output" / "tables",
         plot_dir=root_dir / "output" / "plots",
         price_chart_dir=root_dir / "output" / "price_charts",
-        db_path=root_dir / "data" / "darkpool.duckdb",
+        db_path=get_db_path(),
         tickers=tickers,
         finra_tickers=finra_tickers,
         min_lit_volume=float(os.getenv("MIN_LIT_VOLUME", str(DEFAULT_MIN_LIT_VOLUME))),

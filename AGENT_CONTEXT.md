@@ -40,7 +40,8 @@
 - darkpool_analysis/analytics.py - lit_direction_daily + daily_metrics + index aggregation
 - darkpool_analysis/table_renderer.py - daily table outputs (HTML/PNG)
 - darkpool_analysis/plotter.py - multi-panel metric plots (Phase C)
-- darkpool_analysis/data/darkpool.duckdb - persistent storage
+- darkpool_analysis/db_path.py - centralized DB path helper (uses DATA_ROOT env var)
+- Database location: via `get_db_path()` - see AGENT_PROJECT_CONVENTION.md for resolved paths
 - darkpool_analysis/data/constituents/spx_sample.csv - sample constituent list (replace with full coverage)
 - database_check.ipynb - validation notebook
 - darkpool_analysis/output/tables - table outputs
@@ -90,7 +91,8 @@
 - otc_status: Anchored, Staled, or None (table/plot display flag alongside data_quality).
 
 ## Configuration Notes
-- .env holds API secrets only (POLYGON_API_KEY, FINRA_API_KEY, FINRA_API_SECRET).
+- .env holds API secrets (POLYGON_API_KEY, FINRA_API_KEY, FINRA_API_SECRET) AND `DATA_ROOT` path.
+- `DATA_ROOT` controls database location (see AGENT_PROJECT_CONVENTION.md for details).
 - config.py defines defaults (tickers, dates, RTH window, fetch mode, API URLs).
 - POLYGON_TRADES_MODE controls data granularity for lit inference:
   - "tick": Fetch individual trades for NBBO classification (accurate, slow)

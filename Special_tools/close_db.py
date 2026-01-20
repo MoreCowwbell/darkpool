@@ -4,7 +4,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parent.parent / "darkpool_analysis" / "data" / "darkpool.duckdb"
+# Add darkpool_analysis to path for db_path import
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "darkpool_analysis"))
+from db_path import get_db_path
+
+DB_PATH = get_db_path()
 WAL_PATH = DB_PATH.with_suffix(".duckdb.wal")
 
 def delete_wal():
