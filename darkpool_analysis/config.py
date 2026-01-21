@@ -100,13 +100,13 @@ EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 # User-facing defaults (most commonly edited)
 # -----------------------------------------------------------------------------
 
-TICKERS_TYPE =  ["SECTOR", "THEMATIC", "GLOBAL", "COMMODITIES", "MAG8", "CRYPTO", "SPECULATIVE"]  # ["SECTOR", "THEMATIC", "GLOBAL", "COMMODITIES", "MAG8", "RATES", "CRYPTO", "SPECULATIVE"], ["SINGLE"], ["ALL"]
-DEFAULT_TICKERS = ["XLP" ]
+TICKERS_TYPE =  ["SINGLE"]  # ["SECTOR", "THEMATIC", "GLOBAL", "COMMODITIES", "MAG8", "RATES", "CRYPTO", "SPECULATIVE"], ["SINGLE"], ["ALL"]
+DEFAULT_TICKERS = ["NFLX" ]
 FETCH_INDICES_CONSTITUENTS = False  # When True, also fetch constituents of index/ETF tickers
 
 DEFAULT_TARGET_DATE = "TODAY"  # "TODAY" for current date, or specific date like "2026-01-08"
 DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
-DEFAULT_BACKFILL_COUNT = 300  # Number of periods to fetch (days for daily, weeks for weekly)
+DEFAULT_BACKFILL_COUNT = 30  # Number of periods to fetch (days for daily, weeks for weekly)
 
 DEFAULT_MARKET_TZ = "US/Eastern"
 DEFAULT_RTH_START = "09:30"
@@ -131,7 +131,7 @@ DEFAULT_POLYGON_TRADES_MODE = "tick"
 # When True, bypass all output settings (no files saved to disk).
 # Overrides: RENDER_METRICS_PLOTS, RENDER_PRICE_CHARTS, RENDER_SUMMARY_DASHBOARD,
 #            RENDER_TABLES, COMBINATION_PLOT to False.
-BYPASS_OUTPUT_SETTING = True
+BYPASS_OUTPUT_SETTING = False
 
 # When True, check polygon_ingestion_state before fetching and skip symbols
 # that have already been fetched for a given date+source. No TTL (cache forever).

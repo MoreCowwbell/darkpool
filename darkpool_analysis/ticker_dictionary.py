@@ -90,6 +90,7 @@ SPECULATIVE_TICKERS = [
     "HOOD",
     "IREN", 
     "NNE",
+    "NFLX",
     "PLTR",
     "SPOT"
     "SHOP"
