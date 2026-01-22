@@ -44,8 +44,10 @@
 - Database location: via `get_db_path()` - see AGENT_PROJECT_CONVENTION.md for resolved paths
 - darkpool_analysis/data/constituents/spx_sample.csv - sample constituent list (replace with full coverage)
 - database_check.ipynb - validation notebook
-- darkpool_analysis/output/tables - table outputs
-- darkpool_analysis/output/plots - plots (Phase C)
+- darkpool_analysis/output/tables/{YYYY-MM-DD}/ - table outputs (date-based subfolders)
+- darkpool_analysis/output/plots/{YYYY-MM-DD}/ - plots (date-based subfolders)
+- darkpool_analysis/output/price_charts/{YYYY-MM-DD}/ - price charts (date-based subfolders)
+- darkpool_analysis/output/tables_summary/{YYYY-MM-DD}/ - sector summary dashboards
 
 ## Execution Flow (per target date)
 1. Load config and env vars.

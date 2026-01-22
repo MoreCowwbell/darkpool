@@ -92,8 +92,8 @@ SPECULATIVE_TICKERS = [
     "NNE",
     "NFLX",
     "PLTR",
-    "SPOT"
-    "SHOP"
+    "SPOT",
+    "SHOP",
     "RDDT",
 ]
 

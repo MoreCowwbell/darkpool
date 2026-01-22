@@ -20,6 +20,20 @@ except ImportError:
     from db_path import get_db_path
 
 
+def get_output_date_subfolder(target_dates: list) -> str:
+    """Return date string (YYYY-MM-DD) for output subfolder based on target dates.
+
+    For single date runs, uses that date.
+    For multi-date runs, uses the latest (most recent) date.
+    """
+    if not target_dates:
+        return datetime.now().strftime("%Y-%m-%d")
+    latest_date = max(target_dates)
+    if hasattr(latest_date, "strftime"):
+        return latest_date.strftime("%Y-%m-%d")
+    return str(latest_date)
+
+
 def _load_ticker_dictionary():
     # Try darkpool_analysis first, then Special_tools for backward compatibility
     ticker_path = Path(__file__).resolve().parent / "ticker_dictionary.py"
@@ -100,7 +114,7 @@ EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 # User-facing defaults (most commonly edited)
 # -----------------------------------------------------------------------------
 
-TICKERS_TYPE =  ["SINGLE"]  # ["SECTOR", "THEMATIC", "GLOBAL", "COMMODITIES", "MAG8", "RATES", "CRYPTO", "SPECULATIVE"], ["SINGLE"], ["ALL"]
+TICKERS_TYPE =  ["ALL"]  # ["SECTOR", "THEMATIC", "GLOBAL", "COMMODITIES", "MAG8", "RATES", "CRYPTO", "SPECULATIVE"], ["SINGLE"], ["ALL"]
 DEFAULT_TICKERS = ["NFLX" ]
 FETCH_INDICES_CONSTITUENTS = False  # When True, also fetch constituents of index/ETF tickers
 

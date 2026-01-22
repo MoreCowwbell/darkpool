@@ -408,3 +408,20 @@ Format:
 - [x] Updated `Special_tools/circos_v2.ipynb`:
   - Replaced custom `find_db_candidates()` discovery logic with `config.db_path`.
   - Now properly uses centralized DATA_ROOT convention.
+
+## 2026-01-21 Session Summary (Claude Code) - Date-Based Output Subfolders
+- [x] Added `get_output_date_subfolder()` helper function to `darkpool_analysis/config.py`.
+  - Returns date string (YYYY-MM-DD) based on target dates.
+  - Uses latest date for multi-date runs.
+- [x] Updated `darkpool_analysis/orchestrator.py` to use date-based output subfolders:
+  - Computes date subfolder from target dates at pipeline start.
+  - Creates `{output_dir}/{YYYY-MM-DD}/` structure for all outputs.
+  - Updated all render calls to use date-specific directories.
+- [x] Output structure now organizes files by date:
+  - `output/tables/{YYYY-MM-DD}/` - daily metrics tables
+  - `output/plots/{YYYY-MM-DD}/` - metrics plots and combination plots
+  - `output/price_charts/{YYYY-MM-DD}/` - price charts
+  - `output/tables_summary/{YYYY-MM-DD}/` - sector summary dashboards
+- [x] Updated documentation:
+  - `AGENT_CONTEXT.md` - updated "Where Things Live" section.
+  - `AGENT_INSTRUCTIONS.md` - updated "Outputs" section.

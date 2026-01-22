@@ -55,8 +55,11 @@
 - composite_signal (Phase C only)
 
 ## Outputs
-- Save tables to darkpool_analysis/output/tables/ (CSV if EXPORT_CSV=True, HTML/PNG always).
-- Save plots to darkpool_analysis/output/plots/ (multi-panel PNG per ticker).
+- All outputs are organized into date-based subfolders using the latest target date (YYYY-MM-DD format).
+- Save tables to darkpool_analysis/output/tables/{YYYY-MM-DD}/ (CSV if EXPORT_CSV=True, HTML/PNG always).
+- Save plots to darkpool_analysis/output/plots/{YYYY-MM-DD}/ (multi-panel PNG per ticker).
+- Save price charts to darkpool_analysis/output/price_charts/{YYYY-MM-DD}/.
+- Save sector summaries to darkpool_analysis/output/tables_summary/{YYYY-MM-DD}/.
 - Tables and plots read from DuckDB only.
 
 ## Data Quality and Provenance

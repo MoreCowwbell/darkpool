@@ -14,7 +14,7 @@ import pandas as pd
 
 try:
     from .analytics import build_daily_metrics, build_index_constituent_short_agg
-    from .config import load_config
+    from .config import load_config, get_output_date_subfolder
     from .db import get_connection, init_db, upsert_dataframe
     from .fetch_finra_otc import fetch_finra_otc_weekly
     from .fetch_finra_short import fetch_finra_short_daily
@@ -29,7 +29,7 @@ try:
     from .summary_dashboard import render_sector_summary
 except ImportError:
     from analytics import build_daily_metrics, build_index_constituent_short_agg
-    from config import load_config
+    from config import load_config, get_output_date_subfolder
     from db import get_connection, init_db, upsert_dataframe
     from fetch_finra_otc import fetch_finra_otc_weekly
     from fetch_finra_short import fetch_finra_short_daily
@@ -174,6 +174,18 @@ def main() -> None:
 
     max_date = max(config.target_dates)
     min_date = min(config.target_dates)
+
+    # Compute date-based output subdirectories
+    date_subfolder = get_output_date_subfolder(config.target_dates)
+    table_output_dir = config.table_dir / date_subfolder
+    plot_output_dir = config.plot_dir / date_subfolder
+    price_chart_output_dir = config.price_chart_dir / date_subfolder
+    summary_output_dir = config.table_dir.parent / "tables_summary" / date_subfolder
+
+    # Create date-specific directories
+    for d in [table_output_dir, plot_output_dir, price_chart_output_dir, summary_output_dir]:
+        d.mkdir(parents=True, exist_ok=True)
+
     conn = get_connection(config.db_path)
     short_frames = []
     lit_frames = []
@@ -369,8 +381,8 @@ def main() -> None:
 
         if config.export_csv:
             date_tag = max_date.strftime("%Y%m%d")
-            _export_table(daily_metrics_df, config.table_dir / f"daily_metrics_{date_tag}.csv")
-            _export_table(index_agg_df, config.table_dir / f"index_agg_{date_tag}.csv")
+            _export_table(daily_metrics_df, table_output_dir / f"daily_metrics_{date_tag}.csv")
+            _export_table(index_agg_df, table_output_dir / f"index_agg_{date_tag}.csv")
 
     finally:
         conn.close()
@@ -379,7 +391,7 @@ def main() -> None:
         try:
             render_daily_metrics_table(
                 db_path=config.db_path,
-                output_dir=config.table_dir,
+                output_dir=table_output_dir,
                 dates=config.target_dates,
                 tickers=config.tickers,
                 title="Institutional Pressure Metrics",
@@ -392,7 +404,7 @@ def main() -> None:
             recent_dates = sorted(config.target_dates)[-3:]
             render_daily_metrics_table(
                 db_path=config.db_path,
-                output_dir=config.table_dir,
+                output_dir=table_output_dir,
                 dates=recent_dates,
                 tickers=config.tickers,
                 title="Institutional Pressure Metrics (Last 3 Days)",
@@ -406,7 +418,7 @@ def main() -> None:
         try:
             render_sector_summary(
                 db_path=config.db_path,
-                output_dir=config.table_dir,
+                output_dir=table_output_dir,
                 dates=config.target_dates,
                 tickers=config.tickers,
                 max_dates=10,
@@ -417,8 +429,6 @@ def main() -> None:
 
         # Summary table 2: Sector ETFs only (same as runtablesummary.py)
         try:
-            summary_output_dir = config.table_dir.parent / "tables_summary"
-            summary_output_dir.mkdir(parents=True, exist_ok=True)
             render_sector_summary(
                 db_path=config.db_path,
                 output_dir=summary_output_dir,
@@ -434,7 +444,7 @@ def main() -> None:
         try:
             render_metrics_plots(
                 db_path=config.db_path,
-                output_dir=config.plot_dir,
+                output_dir=plot_output_dir,
                 dates=config.target_dates,
                 tickers=config.tickers,
                 mode="layered",
@@ -447,7 +457,7 @@ def main() -> None:
     try:
         render_combination_plot(
             db_path=config.db_path,
-            output_dir=config.plot_dir,
+            output_dir=plot_output_dir,
             dates=config.target_dates,
             tickers=config.tickers,
             combination_plot=config.combination_plot,
@@ -459,7 +469,7 @@ def main() -> None:
         try:
             render_price_charts(
                 db_path=config.db_path,
-                output_dir=config.price_chart_dir,
+                output_dir=price_chart_output_dir,
                 dates=config.target_dates,
                 tickers=config.tickers,
                 timeframe=config.price_bar_timeframe,
