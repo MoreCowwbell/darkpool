@@ -87,6 +87,8 @@ class CircosConfig:
     ribbon_centered: bool = True
     ribbon_converge_to_point: bool = False
     ribbon_anchor_to_center: bool = True
+    ribbon_min_width_rad: Optional[Dict[str, float]] = None
+    ribbon_center_offset: Optional[Dict[str, float]] = None
 
     # Render quality
     render_mode: str = "balanced"  # "fast", "balanced", "quality"
@@ -170,14 +172,16 @@ class CircosConfig:
             self.max_edges_per_metric = self.max_edges_per_metric // 2
 
         # Per-metric ribbon min widths
-        self.ribbon_min_width_rad = {
-            'accum': 0.001, 'short': 0.001, 'lit': 0.001,
-            'finra_buy': 0.001, 'vwbr_z': 0.001,
-        }
-        self.ribbon_center_offset = {
-            'accum': 0.0, 'short': 0.0, 'lit': 0.0,
-            'finra_buy': 0.0, 'vwbr_z': 0.0,
-        }
+        if self.ribbon_min_width_rad is None:
+            self.ribbon_min_width_rad = {
+                'accum': 0.001, 'short': 0.001, 'lit': 0.001,
+                'finra_buy': 0.001, 'vwbr_z': 0.001,
+            }
+        if self.ribbon_center_offset is None:
+            self.ribbon_center_offset = {
+                'accum': 0.0, 'short': 0.0, 'lit': 0.0,
+                'finra_buy': 0.0, 'vwbr_z': 0.0,
+            }
 
 
 # ---------------------------------------------------------------------------
@@ -282,6 +286,32 @@ def quote_ident(name: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Column name candidates (auto-detection)
+# ---------------------------------------------------------------------------
+
+TABLE_CANDIDATES = ['daily_metrics', 'scanner_daily_metrics', 'darkpool_metrics', 'metrics', 'darkpool', 'accumulation']
+TICKER_COL_CANDIDATES = ['ticker', 'symbol', 'stock', 'name']
+DATE_COL_CANDIDATES = ['date', 'trade_date', 'dt', 'timestamp']
+ACCUM_COL_CANDIDATES = [
+    'accumulation_score_display', 'accum_score_display',
+    'accumulation_score', 'accum_score', 'accumulation', 'accum'
+]
+
+SHORT_BUY_CANDIDATES = ['finra_buy_volume', 'short_buy_volume', 'short_buy', 'short_buy_vol']
+SHORT_SELL_CANDIDATES = ['short_sell_volume', 'short_sell', 'short_sell_vol']
+LIT_BUY_CANDIDATES = ['lit_buy_volume', 'lit_buy', 'lit_buy_vol']
+LIT_SELL_CANDIDATES = ['lit_sell_volume', 'lit_sell', 'lit_sell_vol']
+LIT_BUY_RATIO_CANDIDATES = ['lit_buy_ratio', 'lit_buy_ratio_pct']
+OTC_VOLUME_CANDIDATES = ['otc_off_exchange_volume', 'otc_volume', 'dark_volume']
+LIT_TOTAL_CANDIDATES = ['lit_total_volume', 'lit_volume', 'lit_total']
+FINRA_BUY_CANDIDATES = ['finra_buy_volume', 'finra_buy', 'finra_buy_vol']
+FINRA_BUY_Z_CANDIDATES = ['finra_buy_volume_z', 'finra_buy_z', 'finra_buy_vol_z']
+SHORT_RATIO_CANDIDATES = ['short_ratio']
+SHORT_BUY_SELL_RATIO_CANDIDATES = ['short_buy_sell_ratio', 'sbsr', 'short_bs_ratio']
+VWBR_CANDIDATES = ['vw_flow', 'vwbr', 'vw_buy_ratio', 'vw_buy_sell_ratio']
+VWBR_Z_CANDIDATES = ['vw_flow_z', 'vwbr_z', 'vw_buy_ratio_z', 'finra_buy_volume_z']
+
+# ---------------------------------------------------------------------------
 # Ticker universe functions
 # ---------------------------------------------------------------------------
 
@@ -314,6 +344,19 @@ def _normalize_ticker_types(value: Optional[Union[str, List[str]]]) -> List[str]
     return [str(value).upper()]
 
 
+def _extract_group_tickers(value: Any, prefer_mag8: bool = False) -> List[str]:
+    """Extract ticker list from list-like or dict-like group definitions."""
+    if value is None:
+        return []
+    if isinstance(value, dict):
+        if prefer_mag8 and "MAG8" in value and isinstance(value.get("MAG8"), (list, tuple, set)):
+            return list(value["MAG8"])
+        return list(value.keys())
+    if isinstance(value, (list, tuple, set)):
+        return list(value)
+    return []
+
+
 def build_ticker_universe(ticker_types: List[str]) -> Tuple[List[str], Dict[str, str]]:
     """
     Build ordered ticker universe from ticker_dictionary.py.
@@ -323,43 +366,37 @@ def build_ticker_universe(ticker_types: List[str]) -> Tuple[List[str], Dict[str,
     """
     ticker_dict = _load_ticker_dictionary()
 
-    # Map ticker types to dictionary attribute names
-    type_to_attr = {
-        "GLOBAL": "GLOBAL_MACRO_TICKERS",
-        "MAG8": "MAG8_TICKERS",
-        "THEMATIC": "THEMATIC_SECTORS_TICKERS",
-        "SECTOR": "SECTOR_CORE_TICKERS",
-        "COMMODITIES": "COMMODITIES_TICKERS",
-        "RATES": "RATES_CREDIT_TICKERS",
-        "SPECULATIVE": "SPECULATIVE_TICKERS",
-        "CRYPTO": "CRYPTO_TICKERS",
-    }
-
-    type_to_category = {
-        "GLOBAL": "GLOBAL_MACRO",
-        "MAG8": "MAG8",
-        "THEMATIC": "THEMATIC_SECTORS",
-        "SECTOR": "SECTOR_CORE",
-        "COMMODITIES": "COMMODITIES",
-        "RATES": "RATES_CREDIT",
-        "SPECULATIVE": "SPECULATIVE",
-        "CRYPTO": "CRYPTO",
+    type_to_group = {
+        "GLOBAL": ("GLOBAL_MACRO", ["GLOBAL_MACRO_TICKERS", "GLOBAL_MACRO"]),
+        "MAG8": ("MAG8", ["MAG8_TICKERS", "MAG8"]),
+        "THEMATIC": ("THEMATIC_SECTORS", ["THEMATIC_SECTORS_TICKERS", "THEMATIC_SECTORS"]),
+        "SECTOR": ("SECTOR_CORE", ["SECTOR_CORE_TICKERS", "SECTOR_CORE"]),
+        "COMMODITIES": ("COMMODITIES", ["COMMODITIES_TICKERS", "COMMODITIES"]),
+        "RATES": ("RATES_CREDIT", ["RATES_CREDIT_TICKERS", "RATES_CREDIT"]),
+        "SPECULATIVE": ("SPECULATIVE", ["SPECULATIVE_TICKERS"]),
+        "CRYPTO": ("CRYPTO", ["CRYPTO_TICKERS"]),
     }
 
     normalized_types = _normalize_ticker_types(ticker_types)
     if "ALL" in normalized_types:
-        normalized_types = list(type_to_attr.keys())
+        normalized_types = list(type_to_group.keys())
 
     seen = set()
     ordered = []
     categories = {}
 
     for ticker_type in normalized_types:
-        attr_name = type_to_attr.get(ticker_type)
-        if not attr_name:
+        group_info = type_to_group.get(ticker_type)
+        if not group_info:
             continue
-        tickers = getattr(ticker_dict, attr_name, [])
-        category = type_to_category.get(ticker_type, "UNKNOWN")
+        category, attr_candidates = group_info
+        tickers: List[str] = []
+        for attr_name in attr_candidates:
+            if hasattr(ticker_dict, attr_name):
+                value = getattr(ticker_dict, attr_name)
+                tickers = _extract_group_tickers(value, prefer_mag8=(attr_name == "MAG8"))
+                if tickers:
+                    break
         for t in tickers:
             if t not in seen:
                 seen.add(t)
@@ -484,6 +521,51 @@ def draw_ribbon(
 # Data loading functions
 # ---------------------------------------------------------------------------
 
+def detect_table_and_columns(conn, db_type: str) -> Dict[str, Optional[str]]:
+    """Detect table and key column names from available tables."""
+    tables = get_tables(conn, db_type)
+    select_table = None
+    for cand in TABLE_CANDIDATES:
+        matching = [t for t in tables if t.lower() == cand.lower()]
+        if matching:
+            select_table = matching[0]
+            break
+    if not select_table and tables:
+        select_table = tables[0]
+    if not select_table:
+        raise ValueError("No suitable table found in database.")
+
+    columns = get_columns(conn, db_type, select_table)
+    ticker_col = pick_column(columns, TICKER_COL_CANDIDATES)
+    date_col = pick_column(columns, DATE_COL_CANDIDATES)
+    accum_col = pick_column(columns, ACCUM_COL_CANDIDATES)
+
+    if not ticker_col or not date_col:
+        raise ValueError(f"Missing required ticker/date columns in {select_table}")
+
+    volume_info = {
+        "table": select_table,
+        "ticker_col": ticker_col,
+        "date_col": date_col,
+        "accum_col": accum_col,
+        "lit_buy_col": pick_column(columns, LIT_BUY_CANDIDATES),
+        "lit_sell_col": pick_column(columns, LIT_SELL_CANDIDATES),
+        "lit_buy_ratio_col": pick_column(columns, LIT_BUY_RATIO_CANDIDATES),
+        "short_buy_col": pick_column(columns, SHORT_BUY_CANDIDATES),
+        "short_sell_col": pick_column(columns, SHORT_SELL_CANDIDATES),
+        "otc_vol_col": pick_column(columns, OTC_VOLUME_CANDIDATES),
+        "lit_total_col": pick_column(columns, LIT_TOTAL_CANDIDATES),
+        "finra_buy_col": pick_column(columns, FINRA_BUY_CANDIDATES),
+        "finra_buy_z_col": pick_column(columns, FINRA_BUY_Z_CANDIDATES),
+        "short_ratio_col": pick_column(columns, SHORT_RATIO_CANDIDATES),
+        "short_buy_sell_ratio_col": pick_column(columns, SHORT_BUY_SELL_RATIO_CANDIDATES),
+        "vwbr_col": pick_column(columns, VWBR_CANDIDATES),
+        "vwbr_z_col": pick_column(columns, VWBR_Z_CANDIDATES),
+    }
+
+    return volume_info
+
+
 def parse_accum(value: Any) -> float:
     """Parse accumulation score value to float."""
     if value is None:
@@ -503,47 +585,97 @@ def parse_accum(value: Any) -> float:
 def load_daily_metrics(
     conn,
     db_type: str,
+    volume_info: Dict[str, Optional[str]],
     ticker_list: List[str],
+    start_date: datetime,
     end_date: datetime,
-    lookback_days: int,
 ) -> pd.DataFrame:
-    """Load daily_metrics data for given tickers and date range."""
-    start_date = end_date - timedelta(days=lookback_days + 30)
+    """Load daily metrics data for given tickers and date range with auto-detected columns."""
+    table = volume_info["table"]
+    ticker_col = volume_info["ticker_col"]
+    date_col = volume_info["date_col"]
+    accum_col = volume_info.get("accum_col")
 
-    placeholders = ','.join(['?'] * len(ticker_list))
+    num_cast = "TRY_CAST" if db_type == "duckdb" else "CAST"
+    date_expr = f"CAST({quote_ident(date_col)} AS DATE)" if db_type == "duckdb" else f"DATE({quote_ident(date_col)})"
+
+    select_cols = [
+        f"UPPER({quote_ident(ticker_col)}) AS ticker",
+        f"{date_expr} AS date",
+    ]
+    if accum_col:
+        select_cols.append(f"{num_cast}({quote_ident(accum_col)} AS DOUBLE) AS accumulation_score")
+    else:
+        select_cols.append("NULL AS accumulation_score")
+
+    def _add(col_key: str, alias: str):
+        col_name = volume_info.get(col_key)
+        if col_name:
+            select_cols.append(f"{num_cast}({quote_ident(col_name)} AS DOUBLE) AS {alias}")
+
+    _add("lit_buy_col", "lit_buy")
+    _add("lit_sell_col", "lit_sell")
+    _add("lit_buy_ratio_col", "lit_buy_ratio")
+    _add("short_buy_col", "short_buy")
+    _add("short_sell_col", "short_sell")
+    _add("finra_buy_col", "finra_buy")
+    _add("finra_buy_z_col", "finra_buy_z")
+    _add("vwbr_col", "vwbr")
+    _add("vwbr_z_col", "vwbr_z")
+    _add("short_ratio_col", "short_ratio")
+    _add("short_buy_sell_ratio_col", "short_buy_sell_ratio")
+    _add("otc_vol_col", "otc_volume")
+    _add("lit_total_col", "lit_total")
+
+    placeholders = ",".join(["?"] * len(ticker_list))
     query = f"""
-        SELECT
-            UPPER(symbol) AS ticker,
-            CAST(date AS DATE) AS date,
-            accumulation_score,
-            lit_buy_volume,
-            lit_sell_volume,
-            finra_buy_volume,
-            short_ratio,
-            vw_flow,
-            vw_flow_z,
-            lit_buy_ratio
-        FROM daily_metrics
-        WHERE UPPER(symbol) IN ({placeholders})
-          AND date >= ?
-          AND date <= ?
+        SELECT {', '.join(select_cols)}
+        FROM {quote_ident(table)}
+        WHERE UPPER({quote_ident(ticker_col)}) IN ({placeholders})
+          AND {date_expr} >= ?
+          AND {date_expr} <= ?
         ORDER BY date
     """
     params = ticker_list + [start_date.date(), end_date.date()]
 
-    if db_type == 'duckdb':
+    if db_type == "duckdb":
         df = conn.execute(query, params).df()
     else:
         df = pd.read_sql_query(query, conn, params=params)
 
-    df['date'] = pd.to_datetime(df['date'], errors='coerce').dt.date
-    df['accumulation_score'] = df['accumulation_score'].apply(parse_accum)
+    df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.date
+    df["accumulation_score"] = df["accumulation_score"].apply(parse_accum)
 
-    # Compute lit_total
-    if 'lit_buy_volume' in df.columns and 'lit_sell_volume' in df.columns:
-        df['lit_total'] = df['lit_buy_volume'].fillna(0) + df['lit_sell_volume'].fillna(0)
-    else:
-        df['lit_total'] = 0
+    # Standardize missing columns
+    for col in [
+        "lit_buy", "lit_sell", "short_buy", "short_sell",
+        "finra_buy", "finra_buy_z", "vwbr", "vwbr_z",
+        "short_ratio", "short_buy_sell_ratio", "otc_volume", "lit_total",
+        "lit_buy_ratio",
+    ]:
+        if col not in df.columns:
+            df[col] = np.nan
+
+    # Derive lit_total if not provided
+    if df["lit_total"].isna().all():
+        if df["lit_buy"].notna().any() or df["lit_sell"].notna().any():
+            df["lit_total"] = df["lit_buy"].fillna(0) + df["lit_sell"].fillna(0)
+        else:
+            df["lit_total"] = 0.0
+
+    # Derive lit_buy_ratio if missing
+    if df["lit_buy_ratio"].isna().all():
+        total = df["lit_buy"].fillna(0) + df["lit_sell"].fillna(0)
+        df["lit_buy_ratio"] = (df["lit_buy"] / total.replace(0, np.nan)).fillna(0.5)
+
+    # Prefer finra_buy_z as vwbr_z when vwbr_z missing
+    if df["vwbr_z"].isna().all() and df["finra_buy_z"].notna().any():
+        df["vwbr_z"] = df["finra_buy_z"]
+
+    # Derive short_buy_sell_ratio if possible
+    if df["short_buy_sell_ratio"].isna().all():
+        denom = df["short_sell"].replace(0, np.nan)
+        df["short_buy_sell_ratio"] = (df["short_buy"] / denom).replace([np.inf, -np.inf], np.nan)
 
     return df
 
@@ -671,6 +803,41 @@ def build_edges_from_positive_value(
     return edges_df, high_tickers, low_tickers, total_high, total_low
 
 
+def build_edges_by_date(
+    df: pd.DataFrame,
+    date_col: str,
+    value_col: str,
+    top_k_winners: int,
+    top_k_losers: int,
+    distribution_mode: str,
+    min_edge_flow: float,
+    positive_only: bool = False,
+) -> pd.DataFrame:
+    """Build edges per day and return concatenated edges with date column."""
+    if df is None or df.empty:
+        return pd.DataFrame()
+
+    edges_all = []
+    for date_val, group in df.groupby(date_col):
+        if positive_only:
+            edges_df, _, _, _, _ = build_edges_from_positive_value(
+                group, value_col, top_k_winners, top_k_losers, min_edge_flow
+            )
+        else:
+            edges_df, _, _, _, _ = build_edges_from_value(
+                group, value_col, top_k_winners, top_k_losers, distribution_mode, min_edge_flow
+            )
+        if edges_df is None or edges_df.empty:
+            continue
+        edges_df = edges_df.copy()
+        edges_df["date"] = date_val
+        edges_all.append(edges_df)
+
+    if not edges_all:
+        return pd.DataFrame()
+    return pd.concat(edges_all, ignore_index=True)
+
+
 def filter_edges(edges_df: pd.DataFrame, max_edges: int) -> pd.DataFrame:
     """Filter to top N edges by flow."""
     if edges_df is None or edges_df.empty:
@@ -721,12 +888,12 @@ def compute_ticker_angles(
     categories: Dict[str, str],
     category_gap_deg: float,
     chord_arc_fraction: float,
-) -> Tuple[Dict[str, Tuple[float, float]], Dict[str, List[str]]]:
+) -> Tuple[Dict[str, float], Dict[str, Tuple[float, float]], Dict[str, List[str]]]:
     """
     Compute angular positions for each ticker around the circle.
 
     Returns:
-        Tuple of (spans dict {ticker: (start, end)}, grouped dict {category: [tickers]})
+        Tuple of (angles dict {ticker: angle}, spans dict {ticker: (start, end)}, grouped dict {category: [tickers]})
     """
     # Group tickers by category
     grouped = {}
@@ -736,32 +903,226 @@ def compute_ticker_angles(
             grouped[cat] = []
         grouped[cat].append(t)
 
-    n_categories = len(grouped)
     n_tickers = len(ticker_order)
 
     if n_tickers == 0:
-        return {}, grouped
+        return {}, {}, grouped
 
-    # Total arc available
-    total_arc = 2 * math.pi * chord_arc_fraction
+    gap = math.radians(category_gap_deg)
+    total_gap = gap * len([g for g in grouped.values() if g])
+    usable = 2 * math.pi - total_gap
+    if usable <= 0:
+        usable = 2 * math.pi
 
-    # Subtract category gaps
-    total_gap = n_categories * math.radians(category_gap_deg)
-    available_arc = total_arc - total_gap
+    step = usable / n_tickers if n_tickers > 0 else 0.0
+    arc_span = step * 0.85
 
-    # Arc per ticker
-    arc_per_ticker = available_arc / n_tickers if n_tickers > 0 else 0
+    angles: Dict[str, float] = {}
+    spans: Dict[str, Tuple[float, float]] = {}
+    angle = 0.0
 
-    spans = {}
-    current_angle = 0
-
-    for cat in grouped:
+    ordered_categories = [
+        'GLOBAL_MACRO', 'MAG8', 'THEMATIC_SECTORS', 'SECTOR_CORE',
+        'COMMODITIES', 'RATES_CREDIT', 'SPECULATIVE', 'CRYPTO', 'UNKNOWN',
+    ]
+    for cat in ordered_categories:
+        if not grouped.get(cat):
+            continue
+        angle += gap / 2
         for t in grouped[cat]:
-            spans[t] = (current_angle, current_angle + arc_per_ticker)
-            current_angle += arc_per_ticker
-        current_angle += math.radians(category_gap_deg)
+            angles[t] = angle
+            spans[t] = (angle - arc_span / 2, angle + arc_span / 2)
+            angle += step
+        angle += gap / 2
 
-    return spans, grouped
+    return angles, spans, grouped
+
+
+def allocate_intervals(
+    edges_df: pd.DataFrame,
+    band_map: Dict[str, Dict[str, Dict[str, Tuple[float, float]]]],
+    metric_key: str,
+    ticker_order: List[str],
+    config: CircosConfig,
+    centered: bool = True,
+    center_offset: float = 0.0,
+) -> List[Dict[str, Any]]:
+    """Allocate chord ribbon intervals within each ticker band."""
+    if edges_df is None or edges_df.empty:
+        return []
+
+    min_width_rad = config.ribbon_min_width_rad.get(metric_key, 0.003)
+    out_counts = edges_df.groupby('source').size().to_dict()
+    in_counts = edges_df.groupby('dest').size().to_dict()
+    max_flow = edges_df['flow'].max() if not edges_df.empty else 1.0
+
+    out_flow_totals = edges_df.groupby('source')['flow'].apply(lambda s: s.abs().sum()).to_dict()
+    in_flow_totals = edges_df.groupby('dest')['flow'].apply(lambda s: s.abs().sum()).to_dict()
+    total_flow_by_ticker = {t: out_flow_totals.get(t, 0.0) + in_flow_totals.get(t, 0.0) for t in ticker_order}
+    max_total_flow = max(total_flow_by_ticker.values()) if total_flow_by_ticker else 0.0
+
+    use_time_order = config.show_time_fade_chords and config.time_fade_use_daily_edges and 'date' in edges_df.columns
+    out_order: Dict[int, int] = {}
+    in_order: Dict[int, int] = {}
+    edges_with_id = edges_df
+    if use_time_order:
+        edges_with_id = edges_df.copy()
+        edges_with_id['_row_id'] = range(len(edges_with_id))
+        for src, group in edges_with_id.groupby('source'):
+            group_sorted = group.sort_values(['date', 'flow'], ascending=[False, False], na_position='first')
+            for idx, row_id in enumerate(group_sorted['_row_id'].tolist()):
+                out_order[row_id] = idx
+        for dst, group in edges_with_id.groupby('dest'):
+            group_sorted = group.sort_values(['date', 'flow'], ascending=[False, False], na_position='first')
+            for idx, row_id in enumerate(group_sorted['_row_id'].tolist()):
+                in_order[row_id] = idx
+
+    out_slot_info: Dict[str, Dict[str, Any]] = {}
+    in_slot_info: Dict[str, Dict[str, Any]] = {}
+
+    def build_slot_info(range_start, range_end, n, anchor=None, flow_scale=None):
+        arc = range_end - range_start
+        if n <= 0 or arc <= 0:
+            return None
+        anchor_mode = centered and config.ribbon_anchor_to_center and anchor is not None
+        effective_arc = arc
+        if anchor_mode:
+            left_cap = max(0.0, anchor - range_start)
+            right_cap = max(0.0, range_end - anchor)
+            effective_arc = 2 * min(left_cap, right_cap)
+        if flow_scale is not None:
+            flow_scale = max(0.0, min(1.0, flow_scale))
+            effective_arc = effective_arc * flow_scale
+        if effective_arc <= 0:
+            return None
+
+        total_gap = config.ribbon_gap_rad * (n - 1)
+        usable = max(0.0, effective_arc - total_gap)
+        slot_width = usable / n if n > 0 else 0.0
+        if slot_width < min_width_rad and n > 1:
+            slot_width = min_width_rad
+            total_gap = max(0.0, effective_arc - n * slot_width)
+        if n > 0 and slot_width * n > effective_arc:
+            slot_width = effective_arc / n if n else 0.0
+            total_gap = 0.0
+
+        actual_gap = total_gap / max(1, n - 1) if n > 1 else 0.0
+        total_width = n * slot_width + (n - 1) * actual_gap
+
+        if centered:
+            if anchor_mode:
+                start_pos = anchor - total_width / 2
+            else:
+                arc_center = (range_start + range_end) / 2 + center_offset
+                start_pos = arc_center - total_width / 2
+        else:
+            start_pos = range_start
+
+        if not anchor_mode:
+            start_pos = max(range_start, min(start_pos, range_end - total_width))
+
+        return {
+            'slot_width': slot_width,
+            'cursor': start_pos,
+            'gap': actual_gap,
+            'anchor': anchor if anchor_mode else None,
+            'range': (range_start, range_end),
+        }
+
+    for ticker in ticker_order:
+        spans = band_map.get(ticker, {}).get(metric_key)
+        if not spans:
+            continue
+
+        out_range = spans['out']
+        in_range = spans['in']
+        band_center = spans.get('center')
+        if band_center is None:
+            band_center = (out_range[0] + in_range[1]) / 2
+        band_center = band_center + center_offset
+
+        n_out = out_counts.get(ticker, 0)
+        n_in = in_counts.get(ticker, 0)
+        total_flow = total_flow_by_ticker.get(ticker, 0.0)
+        flow_scale = (total_flow / max_total_flow) if max_total_flow > 0 else 0.0
+
+        if centered and config.ribbon_anchor_to_center:
+            full_start = out_range[0]
+            full_end = in_range[1]
+            anchor = max(full_start, min(band_center, full_end))
+            out_info = build_slot_info(full_start, full_end, n_out, anchor, flow_scale)
+            in_info = build_slot_info(full_start, full_end, n_in, anchor, flow_scale)
+        else:
+            out_info = build_slot_info(out_range[0], out_range[1], n_out, None, flow_scale)
+            in_info = build_slot_info(in_range[0], in_range[1], n_in, None, flow_scale)
+
+        if out_info:
+            out_slot_info[ticker] = out_info
+        if in_info:
+            in_slot_info[ticker] = in_info
+
+    intervals: List[Dict[str, Any]] = []
+    edge_iter = edges_with_id.itertuples() if use_time_order else edges_df.sort_values('flow', ascending=False).itertuples()
+    for row in edge_iter:
+        date_val = getattr(row, 'date', None)
+        row_id = getattr(row, '_row_id', None)
+        src, dst, flow = row.source, row.dest, row.flow
+        if src not in out_slot_info or dst not in in_slot_info:
+            continue
+
+        out_info = out_slot_info[src]
+        in_info = in_slot_info[dst]
+
+        if config.ribbon_width_scale_by_flow:
+            flow_scale = (flow / max_flow) ** 0.5 if max_flow > 0 else 1.0
+            out_width = max(min_width_rad * 0.5, out_info['slot_width'] * flow_scale)
+            in_width = max(min_width_rad * 0.5, in_info['slot_width'] * flow_scale)
+        else:
+            out_width = out_info['slot_width']
+            in_width = in_info['slot_width']
+
+        out_width = min(out_width, out_info['slot_width'])
+        in_width = min(in_width, in_info['slot_width'])
+
+        if config.ribbon_converge_to_point:
+            if out_info.get('anchor') is not None:
+                a0 = out_info['anchor'] - out_width / 2
+                a1 = out_info['anchor'] + out_width / 2
+            else:
+                a0 = out_info['cursor']
+                a1 = a0 + out_width
+            if in_info.get('anchor') is not None:
+                b0 = in_info['anchor'] - in_width / 2
+                b1 = in_info['anchor'] + in_width / 2
+            else:
+                b0 = in_info['cursor']
+                b1 = b0 + in_width
+        else:
+            if use_time_order and row_id is not None:
+                out_idx = out_order.get(row_id, 0)
+                in_idx = in_order.get(row_id, 0)
+                out_step = out_info['slot_width'] + out_info['gap']
+                in_step = in_info['slot_width'] + in_info['gap']
+                a0 = out_info['cursor'] + out_idx * out_step
+                a1 = a0 + out_width
+                b0 = in_info['cursor'] + in_idx * in_step
+                b1 = b0 + in_width
+            else:
+                a0 = out_info['cursor']
+                a1 = a0 + out_width
+                b0 = in_info['cursor']
+                b1 = b0 + in_width
+                out_info['cursor'] = a0 + out_info['slot_width'] + out_info['gap']
+                in_info['cursor'] = b0 + in_info['slot_width'] + in_info['gap']
+
+        if a1 > a0 and b1 > b0:
+            intervals.append({
+                'source': src, 'dest': dst, 'flow': flow,
+                'a0': a0, 'a1': a1, 'b0': b0, 'b1': b1,
+                'date': date_val,
+            })
+
+    return intervals
 
 
 def metric_visible(metric_key: str, config: CircosConfig) -> bool:
@@ -816,6 +1177,67 @@ def compute_score_maps(
         else:
             sell_scores[ticker] = base + max(-trend_norm, 0.0)
     return buy_scores, sell_scores
+
+
+def compute_trend_map(df_daily: pd.DataFrame, value_col: str, dates: List[datetime.date]) -> Dict[str, float]:
+    """Compute trend map between early/late windows."""
+    if df_daily is None or df_daily.empty or not dates:
+        return {}
+    df = df_daily[["ticker", "date", value_col]].dropna()
+    if df.empty:
+        return {}
+    df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.date
+    df = df[df["date"].isin(dates)]
+    if df.empty:
+        return {}
+    dates_sorted = sorted(set(dates))
+    split = max(1, len(dates_sorted) // 2)
+    early_dates = set(dates_sorted[:split])
+    late_dates = set(dates_sorted[split:])
+    early = df[df["date"].isin(early_dates)].groupby("ticker")[value_col].mean()
+    late = df[df["date"].isin(late_dates)].groupby("ticker")[value_col].mean()
+    trend = (late - early).dropna()
+    return trend.to_dict()
+
+
+def compute_anomaly_map_from_stats(
+    df_daily: pd.DataFrame,
+    value_col: str,
+    stats_df: pd.DataFrame,
+    mean_col: str,
+    std_col: str,
+    latest_date: Optional[datetime.date],
+) -> Dict[str, float]:
+    """Compute anomaly map from per-ticker stats."""
+    if df_daily is None or df_daily.empty or stats_df is None or stats_df.empty or latest_date is None:
+        return {}
+    df = df_daily[df_daily["date"] == latest_date][["ticker", value_col]].dropna()
+    if df.empty:
+        return {}
+    stats = stats_df.set_index("ticker")
+    anomaly = {}
+    for row in df.itertuples():
+        if row.ticker not in stats.index:
+            continue
+        mean_val = stats.loc[row.ticker, mean_col]
+        std_val = stats.loc[row.ticker, std_col]
+        if std_val and std_val > 0:
+            anomaly[row.ticker] = abs((getattr(row, value_col) - mean_val) / std_val)
+    return anomaly
+
+
+def compute_abs_latest_map(
+    df_daily: pd.DataFrame,
+    value_col: str,
+    latest_date: Optional[datetime.date],
+) -> Dict[str, float]:
+    """Compute absolute latest value map."""
+    if df_daily is None or df_daily.empty or latest_date is None:
+        return {}
+    df = df_daily[df_daily["date"] == latest_date][["ticker", value_col]].dropna()
+    if df.empty:
+        return {}
+    return df.set_index("ticker")[value_col].abs().to_dict()
 
 
 def top_tickers_from_scores(score_map: Dict[str, float], k: int = 3) -> str:
@@ -912,46 +1334,59 @@ def render_circos(
         return None
 
     try:
+        volume_info = detect_table_and_columns(conn, db_type)
+        if not volume_info.get("accum_col"):
+            logger.error("Could not detect accumulation column in %s", volume_info.get("table"))
+            return None
+
         # Determine end date
         if config.end_date:
             end_date = datetime.strptime(config.end_date, "%Y-%m-%d")
         else:
-            result = conn.execute("SELECT MAX(date) FROM daily_metrics").fetchone()
+            date_col = volume_info["date_col"]
+            date_expr = f"CAST({quote_ident(date_col)} AS DATE)" if db_type == "duckdb" else f"DATE({quote_ident(date_col)})"
+            result = conn.execute(
+                f"SELECT MAX({date_expr}) FROM {quote_ident(volume_info['table'])}"
+            ).fetchone()
             if result and result[0]:
                 end_date = pd.to_datetime(result[0])
             else:
                 end_date = datetime.now()
 
         end_date_dt = end_date if isinstance(end_date, datetime) else datetime.combine(end_date, datetime.min.time())
-        start_date = end_date_dt - timedelta(days=config.flow_period_days + 10)
-        lookback_start = end_date_dt - timedelta(days=config.lookback_days + 30)
+        start_date = end_date_dt - timedelta(days=config.flow_period_days + config.lookback_days + 10)
 
         logger.info("Date range: %s to %s", start_date.date(), end_date_dt.date())
 
         # Load daily metrics
-        df = load_daily_metrics(conn, db_type, ticker_order, end_date_dt, config.flow_period_days + config.lookback_days)
+        df = load_daily_metrics(conn, db_type, volume_info, ticker_order, start_date, end_date_dt)
 
         if df.empty:
             logger.warning("No data found for tickers in date range")
             return None
 
+        df["ticker"] = df["ticker"].str.upper()
+        df = df[df["ticker"].isin([t.upper() for t in ticker_order])]
+        if df.empty:
+            logger.warning("No matching tickers found in data")
+            return None
+
         # Get window dates (last N trading days)
-        all_dates = sorted(df['date'].unique())
-        window_dates = [d for d in all_dates if d >= start_date.date() and d <= end_date_dt.date()]
+        all_dates = sorted(df["date"].dropna().unique())
+        window_dates = [d for d in all_dates if d <= end_date_dt.date()]
         window_dates = sorted(window_dates)[-config.flow_period_days:]
 
         if not window_dates:
             logger.warning("No window dates found")
             return None
 
-        # Create time bins for rings
-        time_bins = make_time_bins(window_dates, config.time_slice_bins)
-        time_bins = list(reversed(time_bins))  # Most recent first
+        window_dates_sorted = sorted(window_dates)
+        df_window = df[df["date"].isin(window_dates_sorted)].copy()
 
         # Compute 20-day statistics for ring sizing
         accum_stats = compute_stats(df, ticker_order, 'accumulation_score', 'accum')
         lit_stats = compute_stats(df, ticker_order, 'lit_total', 'lit_vol')
-        finra_stats = compute_stats(df, ticker_order, 'finra_buy_volume', 'finra_buy')
+        finra_stats = compute_stats(df, ticker_order, 'finra_buy', 'finra_buy')
 
         # Compute accumulation delta for each ticker over the period
         accum_delta = {}
@@ -959,7 +1394,7 @@ def render_circos(
         vwbr_z_map = {}
 
         for ticker in ticker_order:
-            df_t = tail_n_days(df, ticker, config.flow_period_days, end_date_dt.date())
+            df_t = tail_n_days(df_window, ticker, config.flow_period_days, end_date_dt.date())
             if len(df_t) >= 2:
                 accum_delta[ticker] = df_t['accumulation_score'].iloc[-1] - df_t['accumulation_score'].iloc[0]
                 if 'lit_buy_ratio' in df_t.columns:
@@ -969,14 +1404,14 @@ def render_circos(
                 if 'lit_buy_ratio' in df_t.columns:
                     lit_delta[ticker] = (df_t['lit_buy_ratio'].iloc[0] - 0.5) * 100
 
-            # Get latest vw_flow_z
-            if 'vw_flow_z' in df_t.columns and len(df_t) > 0:
-                vwbr_z_map[ticker] = df_t['vw_flow_z'].iloc[-1]
+            # Get latest VWBR Z (finra_buy_volume_z preferred)
+            if 'vwbr_z' in df_t.columns and len(df_t) > 0:
+                vwbr_z_map[ticker] = df_t['vwbr_z'].iloc[-1]
 
         # Build delta dataframes
         delta_df = pd.DataFrame([
             {'ticker': t, 'accum_delta': v}
-            for t, v in accum_delta.items() if not np.isnan(v)
+            for t, v in accum_delta.items() if v is not None and np.isfinite(v)
         ])
 
         vwbr_z_df = pd.DataFrame([
@@ -984,53 +1419,377 @@ def render_circos(
             for t, v in vwbr_z_map.items() if v is not None and np.isfinite(v)
         ])
 
-        if delta_df.empty and vwbr_z_df.empty:
-            logger.warning("No valid data for edge computation")
-            return None
+        # ------------------------------------------------------------------
+        # Volume aggregation for lit/short/finra edges
+        # ------------------------------------------------------------------
+        df_volume = pd.DataFrame()
+        df_lit_daily = pd.DataFrame()
+        df_short_daily = pd.DataFrame()
+        df_finra_daily = pd.DataFrame()
 
-        # Build edges for visible metrics
-        all_edges = {}
+        if not df_window.empty:
+            df_vol_raw = df_window.copy()
+            for col in ["lit_buy", "lit_sell", "short_buy", "short_sell", "finra_buy"]:
+                if col in df_vol_raw.columns:
+                    df_vol_raw[col] = df_vol_raw[col].fillna(0)
 
-        # VWBR Z edges (primary visible metric)
-        if config.show_vwbr_z and not vwbr_z_df.empty:
-            edges_df, _, _, _, _ = build_edges_from_value(
-                vwbr_z_df, 'vwbr_z',
+            agg_dict: Dict[str, str] = {}
+            if df_vol_raw["lit_buy"].notna().any():
+                agg_dict["lit_buy"] = "sum"
+            if df_vol_raw["lit_sell"].notna().any():
+                agg_dict["lit_sell"] = "sum"
+            if df_vol_raw["short_buy"].notna().any():
+                agg_dict["short_buy"] = "sum"
+            if df_vol_raw["short_sell"].notna().any():
+                agg_dict["short_sell"] = "sum"
+            if df_vol_raw["finra_buy"].notna().any():
+                agg_dict["finra_buy"] = "sum"
+            if df_vol_raw["finra_buy_z"].notna().any():
+                agg_dict["finra_buy_z"] = "mean"
+            elif df_vol_raw["vwbr_z"].notna().any():
+                agg_dict["vwbr_z"] = "mean"
+            if df_vol_raw["vwbr"].notna().any():
+                agg_dict["vwbr"] = "mean"
+            if df_vol_raw["short_ratio"].notna().any():
+                agg_dict["short_ratio"] = "mean"
+            if df_vol_raw["short_buy_sell_ratio"].notna().any():
+                agg_dict["short_buy_sell_ratio"] = "mean"
+
+            if agg_dict:
+                df_volume = df_vol_raw.groupby("ticker", as_index=False).agg(agg_dict)
+                rename_map = {}
+                if "lit_buy" in df_volume.columns:
+                    rename_map["lit_buy"] = "lit_buy_sum"
+                if "lit_sell" in df_volume.columns:
+                    rename_map["lit_sell"] = "lit_sell_sum"
+                if "short_buy" in df_volume.columns:
+                    rename_map["short_buy"] = "short_buy_sum"
+                if "short_sell" in df_volume.columns:
+                    rename_map["short_sell"] = "short_sell_sum"
+                if "finra_buy" in df_volume.columns:
+                    rename_map["finra_buy"] = "finra_buy_sum"
+                if "finra_buy_z" in df_volume.columns:
+                    rename_map["finra_buy_z"] = "finra_buy_z_mean"
+                if "vwbr_z" in df_volume.columns and "finra_buy_z_mean" not in rename_map.values():
+                    rename_map["vwbr_z"] = "finra_buy_z_mean"
+                if "vwbr" in df_volume.columns:
+                    rename_map["vwbr"] = "vwbr_mean"
+                if "short_ratio" in df_volume.columns:
+                    rename_map["short_ratio"] = "short_ratio_mean"
+                if "short_buy_sell_ratio" in df_volume.columns:
+                    rename_map["short_buy_sell_ratio"] = "short_buy_sell_ratio_mean"
+                if rename_map:
+                    df_volume = df_volume.rename(columns=rename_map)
+
+            if df_vol_raw["lit_buy"].notna().any() or df_vol_raw["lit_sell"].notna().any():
+                df_lit_daily = (
+                    df_vol_raw.groupby(["ticker", "date"], as_index=False)
+                    .agg({"lit_buy": "sum", "lit_sell": "sum"})
+                )
+                df_lit_daily["lit_net"] = df_lit_daily["lit_buy"] - df_lit_daily["lit_sell"]
+                df_lit_daily["lit_total"] = df_lit_daily["lit_buy"] + df_lit_daily["lit_sell"]
+                df_lit_daily["lit_buy_ratio"] = (
+                    df_lit_daily["lit_buy"] / df_lit_daily["lit_total"].replace(0, np.nan)
+                ).fillna(0.5)
+
+            if df_vol_raw["short_buy"].notna().any() or df_vol_raw["short_sell"].notna().any():
+                df_short_daily = (
+                    df_vol_raw.groupby(["ticker", "date"], as_index=False)
+                    .agg({"short_buy": "sum", "short_sell": "sum"})
+                )
+                df_short_daily["short_net"] = df_short_daily["short_buy"] - df_short_daily["short_sell"]
+
+            if df_vol_raw["finra_buy"].notna().any():
+                df_finra_daily = (
+                    df_vol_raw.groupby(["ticker", "date"], as_index=False)
+                    .agg({"finra_buy": "sum"})
+                )
+                if df_vol_raw["finra_buy_z"].notna().any():
+                    df_vwbr_z_daily = (
+                        df_vol_raw.groupby(["ticker", "date"], as_index=False)
+                        .agg({"finra_buy_z": "mean"})
+                        .rename(columns={"finra_buy_z": "vwbr_z"})
+                    )
+                    df_finra_daily = df_finra_daily.merge(df_vwbr_z_daily, on=["ticker", "date"], how="left")
+                elif df_vol_raw["vwbr_z"].notna().any():
+                    df_vwbr_z_daily = (
+                        df_vol_raw.groupby(["ticker", "date"], as_index=False)
+                        .agg({"vwbr_z": "mean"})
+                    )
+                    df_finra_daily = df_finra_daily.merge(df_vwbr_z_daily, on=["ticker", "date"], how="left")
+                if df_vol_raw["vwbr"].notna().any():
+                    df_vwbr_daily = (
+                        df_vol_raw.groupby(["ticker", "date"], as_index=False)
+                        .agg({"vwbr": "mean"})
+                    )
+                    df_finra_daily = df_finra_daily.merge(df_vwbr_daily, on=["ticker", "date"], how="left")
+                if df_vol_raw["short_ratio"].notna().any():
+                    df_short_ratio_daily = (
+                        df_vol_raw.groupby(["ticker", "date"], as_index=False)
+                        .agg({"short_ratio": "mean"})
+                    )
+                    df_finra_daily = df_finra_daily.merge(df_short_ratio_daily, on=["ticker", "date"], how="left")
+                if df_vol_raw["short_buy"].notna().any() and df_vol_raw["short_sell"].notna().any():
+                    df_short_bs = (
+                        df_vol_raw.groupby(["ticker", "date"], as_index=False)
+                        .agg({"short_buy": "sum", "short_sell": "sum"})
+                    )
+                    denom = df_short_bs["short_sell"].replace(0, np.nan)
+                    df_short_bs["short_buy_sell_ratio"] = (df_short_bs["short_buy"] / denom).replace(
+                        [np.inf, -np.inf], np.nan
+                    )
+                    df_short_bs = df_short_bs[["ticker", "date", "short_buy_sell_ratio"]]
+                    df_finra_daily = df_finra_daily.merge(df_short_bs, on=["ticker", "date"], how="left")
+
+        # Accumulation level data (for time fade and summary)
+        df_accum_level = df_window[["ticker", "date", "accumulation_score"]].copy()
+        if not df_accum_level.empty:
+            df_accum_level = df_accum_level.rename(columns={"accumulation_score": "value"})
+
+        # Build edges
+        accum_edges_plot = pd.DataFrame()
+        lit_edges_plot = pd.DataFrame()
+        short_edges_plot = pd.DataFrame()
+        finra_edges_plot = pd.DataFrame()
+        vwbr_z_edges_plot = pd.DataFrame()
+
+        if not delta_df.empty:
+            accum_edges_plot, _, _, _, _ = build_edges_from_value(
+                delta_df, "accum_delta",
                 config.top_k_winners, config.top_k_losers,
                 config.distribution_mode, config.min_edge_flow
             )
-            all_edges['vwbr_z'] = filter_edges(edges_df, config.max_edges_per_metric)
+            accum_edges_plot = filter_edges(accum_edges_plot, config.max_edges_per_metric)
 
-        # Accumulation edges
-        if config.show_accum_flow and not delta_df.empty:
-            edges_df, _, _, _, _ = build_edges_from_value(
-                delta_df, 'accum_delta',
+        if not df_volume.empty:
+            if "lit_buy_sum" in df_volume.columns and "lit_sell_sum" in df_volume.columns:
+                df_volume["lit_net"] = df_volume["lit_buy_sum"] - df_volume["lit_sell_sum"]
+                lit_edges_plot, _, _, _, _ = build_edges_from_value(
+                    df_volume, "lit_net",
+                    config.top_k_winners, config.top_k_losers,
+                    config.distribution_mode, config.min_edge_flow
+                )
+                lit_edges_plot = filter_edges(lit_edges_plot, config.max_edges_per_metric)
+            if "short_buy_sum" in df_volume.columns and "short_sell_sum" in df_volume.columns:
+                df_volume["short_net"] = df_volume["short_buy_sum"] - df_volume["short_sell_sum"]
+                short_edges_plot, _, _, _, _ = build_edges_from_value(
+                    df_volume, "short_net",
+                    config.top_k_winners, config.top_k_losers,
+                    config.distribution_mode, config.min_edge_flow
+                )
+                short_edges_plot = filter_edges(short_edges_plot, config.max_edges_per_metric)
+            if "finra_buy_sum" in df_volume.columns:
+                finra_edges_plot, _, _, _, _ = build_edges_from_positive_value(
+                    df_volume, "finra_buy_sum",
+                    config.top_k_winners, config.top_k_losers,
+                    config.min_edge_flow
+                )
+                finra_edges_plot = filter_edges(finra_edges_plot, config.max_edges_per_metric)
+            if "finra_buy_z_mean" in df_volume.columns:
+                vwbr_z_edges_plot, _, _, _, _ = build_edges_from_value(
+                    df_volume, "finra_buy_z_mean",
+                    config.top_k_winners, config.top_k_losers,
+                    config.distribution_mode, config.min_edge_flow
+                )
+                vwbr_z_edges_plot = filter_edges(vwbr_z_edges_plot, config.max_edges_per_metric)
+
+        if vwbr_z_edges_plot.empty and not vwbr_z_df.empty:
+            vwbr_z_edges_plot, _, _, _, _ = build_edges_from_value(
+                vwbr_z_df, "vwbr_z",
                 config.top_k_winners, config.top_k_losers,
                 config.distribution_mode, config.min_edge_flow
             )
-            all_edges['accum'] = filter_edges(edges_df, config.max_edges_per_metric)
+            vwbr_z_edges_plot = filter_edges(vwbr_z_edges_plot, config.max_edges_per_metric)
 
-        # Check if we have any edges
-        has_edges = any(e is not None and not e.empty for e in all_edges.values())
-        if not has_edges:
-            logger.warning("No edges computed from data")
-            return None
+        # Time-faded edges per day (optional)
+        accum_time_edges_df = pd.DataFrame()
+        lit_time_edges_df = pd.DataFrame()
+        short_time_edges_df = pd.DataFrame()
+        finra_time_edges_df = pd.DataFrame()
+        vwbr_z_time_edges_df = pd.DataFrame()
 
-        logger.info("Computed edges for metrics: %s", list(all_edges.keys()))
+        if config.show_time_fade_chords and config.time_fade_use_daily_edges:
+            if not df_accum_level.empty:
+                df_accum_daily_centered = df_accum_level.copy()
+                df_accum_daily_centered["date"] = pd.to_datetime(
+                    df_accum_daily_centered["date"], errors="coerce"
+                ).dt.date
+                daily_means = df_accum_daily_centered.groupby("date")["value"].mean()
+                df_accum_daily_centered["accum_centered"] = df_accum_daily_centered["value"] - df_accum_daily_centered["date"].map(daily_means)
+                accum_time_edges_df = build_edges_by_date(
+                    df_accum_daily_centered, "date", "accum_centered",
+                    config.top_k_winners, config.top_k_losers,
+                    config.distribution_mode, config.min_edge_flow
+                )
+            if not df_lit_daily.empty:
+                lit_time_edges_df = build_edges_by_date(
+                    df_lit_daily, "date", "lit_net",
+                    config.top_k_winners, config.top_k_losers,
+                    config.distribution_mode, config.min_edge_flow
+                )
+            if not df_short_daily.empty:
+                short_time_edges_df = build_edges_by_date(
+                    df_short_daily, "date", "short_net",
+                    config.top_k_winners, config.top_k_losers,
+                    config.distribution_mode, config.min_edge_flow
+                )
+            if not df_finra_daily.empty and "finra_buy" in df_finra_daily.columns:
+                finra_time_edges_df = build_edges_by_date(
+                    df_finra_daily, "date", "finra_buy",
+                    config.top_k_winners, config.top_k_losers,
+                    config.distribution_mode, config.min_edge_flow,
+                    positive_only=True
+                )
+            if not df_window.empty and df_window["finra_buy_z"].notna().any():
+                df_vwbr_z_daily = df_window.groupby(["ticker", "date"], as_index=False).agg({"finra_buy_z": "mean"})
+                vwbr_z_time_edges_df = build_edges_by_date(
+                    df_vwbr_z_daily, "date", "finra_buy_z",
+                    config.top_k_winners, config.top_k_losers,
+                    config.distribution_mode, config.min_edge_flow
+                )
+            elif not df_window.empty and df_window["vwbr_z"].notna().any():
+                df_vwbr_z_daily = df_window.groupby(["ticker", "date"], as_index=False).agg({"vwbr_z": "mean"})
+                vwbr_z_time_edges_df = build_edges_by_date(
+                    df_vwbr_z_daily, "date", "vwbr_z",
+                    config.top_k_winners, config.top_k_losers,
+                    config.distribution_mode, config.min_edge_flow
+                )
+
+        def choose_time_edges(time_df: pd.DataFrame, base_df: pd.DataFrame) -> pd.DataFrame:
+            if config.show_time_fade_chords and config.time_fade_use_daily_edges and time_df is not None and not time_df.empty:
+                return time_df
+            return base_df
+
+        metric_edges = {
+            "accum": choose_time_edges(accum_time_edges_df, accum_edges_plot),
+            "short": choose_time_edges(short_time_edges_df, short_edges_plot),
+            "lit": choose_time_edges(lit_time_edges_df, lit_edges_plot),
+            "finra_buy": choose_time_edges(finra_time_edges_df, finra_edges_plot),
+            "vwbr_z": choose_time_edges(vwbr_z_time_edges_df, vwbr_z_edges_plot),
+        }
+
+        metric_edges_draw = {m: expand_edges(metric_edges.get(m), config.edge_ribbon_splits, config.edge_ribbon_max) for m in CHORD_METRIC_ORDER}
+        metric_totals = {m: compute_metric_totals(metric_edges.get(m)) for m in CHORD_METRIC_ORDER}
+        metric_nets = {
+            "accum": accum_delta,
+            "short": df_volume.set_index("ticker")["short_net"].to_dict() if not df_volume.empty and "short_net" in df_volume.columns else {},
+            "lit": df_volume.set_index("ticker")["lit_net"].to_dict() if not df_volume.empty and "lit_net" in df_volume.columns else {},
+            "finra_buy": df_volume.set_index("ticker")["finra_buy_sum"].to_dict() if not df_volume.empty and "finra_buy_sum" in df_volume.columns else {},
+            "vwbr_z": df_volume.set_index("ticker")["finra_buy_z_mean"].to_dict() if not df_volume.empty and "finra_buy_z_mean" in df_volume.columns else vwbr_z_map,
+            "vwbr": df_volume.set_index("ticker")["vwbr_mean"].to_dict() if not df_volume.empty and "vwbr_mean" in df_volume.columns else {},
+        }
 
         # Compute layout
-        spans, grouped = compute_ticker_angles(
+        angles, spans, grouped = compute_ticker_angles(
             ticker_order, categories,
             config.category_gap_deg, config.chord_arc_fraction
         )
 
+        visible_band_order = [m for m in BAND_ORDER if metric_visible(m, config)]
+        if not visible_band_order:
+            visible_band_order = BAND_ORDER
+
+        # Metric bands per ticker (for chords)
+        band_map: Dict[str, Dict[str, Dict[str, Tuple[float, float]]]] = {}
+        for t, (a0, a1) in spans.items():
+            max_span = (a1 - a0)
+            chord_span = min(max_span, max_span * config.chord_arc_fraction)
+            chord_center = (a0 + a1) / 2
+            band_gap = chord_span * config.band_gap_frac
+
+            if config.metric_band_mode == "proportional":
+                weights = {m: metric_totals.get(m, {}).get(t, 0.0) for m in visible_band_order}
+                if sum(weights.values()) <= 0:
+                    weights = {m: 1.0 for m in visible_band_order}
+            else:
+                weights = {m: 1.0 for m in visible_band_order}
+
+            total_w = sum(weights.values())
+            if total_w <= 0:
+                weights = {m: 1.0 for m in visible_band_order}
+                total_w = sum(weights.values())
+
+            available = chord_span - band_gap * max(len(visible_band_order) - 1, 0)
+            if available <= 0:
+                band_gap = 0.0
+                available = chord_span
+
+            lengths = {m: max(0.0, available * (weights[m] / total_w)) for m in visible_band_order}
+
+            total_len = sum(lengths.values()) + band_gap * max(len(visible_band_order) - 1, 0)
+            start = chord_center - total_len / 2
+
+            metric_spans: Dict[str, Tuple[float, float]] = {}
+            cursor = start
+            for idx, m in enumerate(visible_band_order):
+                m_len = lengths.get(m, 0.0)
+                m_start = cursor
+                m_end = m_start + m_len
+                metric_spans[m] = (m_start, m_end)
+                if idx < len(visible_band_order) - 1:
+                    cursor = m_end + band_gap
+                else:
+                    cursor = m_end
+
+            def band_slices(start_angle, end_angle):
+                span = end_angle - start_angle
+                dir_gap = span * config.dir_gap_frac
+                if config.ribbon_anchor_to_center:
+                    dir_gap = 0.0
+                dir_gap = min(dir_gap, span * 0.5)
+                if dir_gap < 0:
+                    dir_gap = 0.0
+                mid = (start_angle + end_angle) / 2
+                out_span = (start_angle, mid - dir_gap / 2)
+                in_span = (mid + dir_gap / 2, end_angle)
+                return {"out": out_span, "in": in_span, "center": mid}
+
+            band_map[t] = {m: band_slices(*metric_spans[m]) for m in visible_band_order}
+
+        # Prepare intervals per metric with per-metric center offset
+        metric_intervals: Dict[str, List[Dict[str, Any]]] = {}
+        for m in CHORD_METRIC_ORDER:
+            if not metric_visible(m, config):
+                metric_intervals[m] = []
+                continue
+            offset = config.ribbon_center_offset.get(m, 0.0)
+            metric_intervals[m] = allocate_intervals(
+                metric_edges_draw.get(m), band_map, m,
+                ticker_order, config,
+                centered=config.ribbon_centered,
+                center_offset=offset,
+            )
+
+        # Time bins for outer ring
+        time_bins = make_time_bins(window_dates_sorted, config.time_slice_bins)
+        time_bins = list(reversed(time_bins))
+
+        time_fade_alpha: Dict[datetime.date, float] = {}
+        vwbr_z_brightness: Dict[Tuple[str, datetime.date], float] = {}
+        if config.show_time_fade_chords and config.time_fade_use_daily_edges and config.show_vwbr_z:
+            if not df_finra_daily.empty and "vwbr_z" in df_finra_daily.columns:
+                df_vwbr_z_bright = df_finra_daily[["ticker", "date", "vwbr_z"]].dropna()
+                df_vwbr_z_bright["date"] = pd.to_datetime(df_vwbr_z_bright["date"], errors="coerce").dt.date
+                for row in df_vwbr_z_bright.itertuples():
+                    z_val = getattr(row, "vwbr_z", None)
+                    if z_val is None or not np.isfinite(z_val):
+                        continue
+                    normalized = 0.5 + (z_val / config.ring3_zscore_span)
+                    normalized = max(0.0, min(1.0, normalized))
+                    vwbr_z_brightness[(row.ticker, row.date)] = normalized
+
+        if config.show_time_fade_chords and config.time_fade_use_daily_edges and window_dates_sorted:
+            count = len(window_dates_sorted)
+            for idx, dt in enumerate(window_dates_sorted):
+                t = idx / max(1, count - 1)
+                t = t ** config.time_fade_power
+                time_fade_alpha[dt] = config.time_fade_min_alpha + t * (config.time_fade_max_alpha - config.time_fade_min_alpha)
+
         # Create figure
         fig = plt.figure(figsize=config.figure_size, facecolor=BG_COLOR)
-        ax = fig.add_axes([
-            (1 - config.main_ax_size) / 2,
-            (1 - config.main_ax_size) / 2,
-            config.main_ax_size,
-            config.main_ax_size
-        ])
+        ax_left = config.plot_center_x - config.main_ax_size / 2
+        ax_bottom = config.plot_center_y - config.main_ax_size / 2
+        ax = fig.add_axes([ax_left, ax_bottom, config.main_ax_size, config.main_ax_size])
         ax.set_facecolor(BG_COLOR)
         ax.set_xlim(-1.45, 1.45)
         ax.set_ylim(-1.45, 1.45)
@@ -1041,18 +1800,16 @@ def render_circos(
         theta = np.linspace(0, 2 * np.pi, 200)
         ax.plot(np.cos(theta), np.sin(theta), color='#39424e', linewidth=1.0, alpha=0.6)
 
-        # Draw ticker labels (inside the rings, at ~0.876)
-        label_r = config.chord_radius + (config.ticker_outer - config.chord_radius) * 0.4
-        for ticker in ticker_order:
-            a0, a1 = spans.get(ticker, (0, 0))
-            mid_angle = (a0 + a1) / 2
-            x = label_r * math.cos(mid_angle)
-            y = label_r * math.sin(mid_angle)
-            rotation = math.degrees(mid_angle)
-            if 90 < rotation < 270:
-                rotation += 180
-            ax.text(x, y, ticker, fontsize=config.ticker_fontsize, color='white', ha='center', va='center',
-                    rotation=rotation, rotation_mode='anchor')
+        # Ticker labels
+        ticker_outer = config.ticker_outer
+        for t, ang in angles.items():
+            x, y = math.cos(ang), math.sin(ang)
+            r = config.chord_radius + (ticker_outer - config.chord_radius) * 0.4
+            rot = math.degrees(ang)
+            if math.pi / 2 < ang < 3 * math.pi / 2:
+                rot += 180
+            ax.text(r * x, r * y, t, color='#FFFFFF', fontsize=config.ticker_fontsize, fontweight='bold',
+                    ha='center', va='center', rotation=rot, rotation_mode='anchor')
 
         # Draw rings (time-series bars)
         if config.show_volume_ring:
@@ -1065,21 +1822,31 @@ def render_circos(
                 for t in ticker_order:
                     data_by_bin = []
                     for bin_dates in time_bins:
-                        mask = (df['ticker'] == t) & (df['date'].isin(bin_dates))
+                        mask = (df_window['ticker'] == t) & (df_window['date'].isin(bin_dates))
 
                         if m == 'accum':
-                            val = float(df.loc[mask, 'accumulation_score'].mean()) if mask.any() else 50.0
+                            val = float(df_window.loc[mask, 'accumulation_score'].mean()) if mask.any() else 50.0
                             data_by_bin.append({'value': val, 'extra': 0.0})
                             max_val = max(max_val, abs(val - 50))
                         elif m == 'dark_lit':
-                            lit_vol = float(df.loc[mask, 'lit_total'].sum()) if mask.any() else 0.0
-                            lit_ratio = float(df.loc[mask, 'lit_buy_ratio'].mean()) if mask.any() and 'lit_buy_ratio' in df.columns else 0.5
+                            lit_vol = float(df_window.loc[mask, 'lit_total'].sum()) if mask.any() else 0.0
+                            lit_ratio = float(df_window.loc[mask, 'lit_buy_ratio'].mean()) if mask.any() else 0.5
+                            if not np.isfinite(lit_ratio):
+                                lit_ratio = 0.5
                             data_by_bin.append({'value': lit_vol, 'extra': lit_ratio})
                             max_val = max(max_val, lit_vol)
                         elif m == 'finra_buy':
-                            val = float(df.loc[mask, 'finra_buy_volume'].sum()) if mask.any() else 0.0
-                            vwbr_z_val = float(df.loc[mask, 'vw_flow_z'].mean()) if mask.any() and 'vw_flow_z' in df.columns else 0.0
-                            data_by_bin.append({'value': val, 'extra': {'vwbr_z': vwbr_z_val}})
+                            val = float(df_window.loc[mask, 'finra_buy'].sum()) if mask.any() else 0.0
+                            vwbr_z_val = float(df_window.loc[mask, 'vwbr_z'].mean()) if mask.any() else 0.0
+                            vwbr_val = float(df_window.loc[mask, 'vwbr'].mean()) if mask.any() else None
+                            short_ratio_val = float(df_window.loc[mask, 'short_ratio'].mean()) if mask.any() else None
+                            short_bs_val = float(df_window.loc[mask, 'short_buy_sell_ratio'].mean()) if mask.any() else None
+                            data_by_bin.append({'value': val, 'extra': {
+                                'vwbr_z': vwbr_z_val,
+                                'vwbr': vwbr_val,
+                                'short_ratio': short_ratio_val,
+                                'short_buy_sell_ratio': short_bs_val,
+                            }})
                             max_val = max(max_val, val)
                         else:
                             data_by_bin.append({'value': 0.0, 'extra': 0.0})
@@ -1090,7 +1857,7 @@ def render_circos(
             # Draw rings
             track_span = config.ring_base_thickness + config.ring_thickness_scale + config.ring_gap
             for idx, m in enumerate(RING_METRIC_ORDER):
-                inner_base = config.ticker_outer + 0.02 + idx * track_span
+                inner_base = ticker_outer + 0.02 + idx * track_span
                 max_mag = ring_max_mag.get(m, 1.0)
 
                 # Get stats for z-score sizing
@@ -1158,6 +1925,8 @@ def render_circos(
                                 color = blend_color(RING_COLORS['accum']['negative'], RING_COLORS['accum']['positive'], t_blend)
                         elif m == 'dark_lit':
                             lit_ratio = extra if isinstance(extra, (int, float)) else 0.5
+                            if not np.isfinite(lit_ratio):
+                                lit_ratio = 0.5
                             normalized = (lit_ratio - 0.4) / 0.2
                             normalized = max(0.0, min(1.0, normalized))
                             if normalized < 0.5:
@@ -1166,11 +1935,28 @@ def render_circos(
                                 color = blend_color('#888888', '#66FF66', (normalized - 0.5) * 2)
                         else:  # finra_buy
                             extra_vals = extra if isinstance(extra, dict) else {}
-                            vwbr_z_val = extra_vals.get('vwbr_z', 0.0)
-                            if vwbr_z_val is None or not np.isfinite(vwbr_z_val):
-                                vwbr_z_val = 0.0
-                            normalized = 0.5 + (vwbr_z_val / config.ring3_zscore_span)
-                            normalized = max(0.0, min(1.0, normalized))
+                            color_mode = str(config.ring3_color_mode).upper()
+                            if color_mode == 'VWBR_Z':
+                                vwbr_z_val = extra_vals.get('vwbr_z', 0.0)
+                                if vwbr_z_val is None or not np.isfinite(vwbr_z_val):
+                                    vwbr_z_val = 0.0
+                                normalized = 0.5 + (vwbr_z_val / config.ring3_zscore_span)
+                                normalized = max(0.0, min(1.0, normalized))
+                            elif color_mode == 'VWBR':
+                                vwbr_val = extra_vals.get('vwbr', None)
+                                if vwbr_val is None or not np.isfinite(vwbr_val):
+                                    vwbr_val = 0.5
+                                normalized = 0.5 + ((vwbr_val - 0.5) / config.ring3_vwbr_span)
+                                normalized = max(0.0, min(1.0, normalized))
+                            else:
+                                short_bs = extra_vals.get('short_buy_sell_ratio', None)
+                                if short_bs and short_bs > 0:
+                                    log_ratio = np.log(short_bs)
+                                    normalized = 0.5 + (log_ratio / 1.0)
+                                    normalized = max(0.0, min(1.0, normalized))
+                                else:
+                                    normalized = 0.5
+
                             cat_color = CATEGORY_PALETTE.get(categories.get(t, 'UNKNOWN'), '#A0A0A0')
                             brightness = config.ring3_brightness_min + (config.ring3_brightness_max - config.ring3_brightness_min) * normalized
                             color = darken_color(cat_color, brightness)
@@ -1183,49 +1969,83 @@ def render_circos(
                         ax.add_patch(wedge)
                         cursor += slice_len + slice_gap
 
-        # Draw chord ribbons
-        chord_r = config.chord_radius
-        for metric_key, edges_df in all_edges.items():
-            if edges_df is None or edges_df.empty:
+        # Draw chords per metric
+        for m in CHORD_METRIC_ORDER:
+            if not metric_visible(m, config):
+                continue
+            intervals = metric_intervals.get(m, [])
+            if not intervals:
                 continue
 
-            metric_colors = METRIC_COLORS.get(metric_key, {'sell': '#888', 'buy': '#888'})
-            color_sell = metric_colors.get('sell', metric_colors.get('low', '#888'))
-            color_buy = metric_colors.get('buy', metric_colors.get('high', '#888'))
+            if m == 'finra_buy':
+                raw_start = METRIC_COLORS[m]['low']
+                raw_end = METRIC_COLORS[m]['high']
+            else:
+                raw_start = METRIC_COLORS[m]['sell']
+                raw_end = METRIC_COLORS[m]['buy']
 
-            for _, row in edges_df.iterrows():
-                src, dst = row['source'], row['dest']
-                if src not in spans or dst not in spans:
-                    continue
+            edges_df = metric_edges.get(m)
+            max_flow = edges_df['flow'].max() if edges_df is not None and not edges_df.empty else 1.0
+            intervals_to_draw = intervals
+            if config.show_time_fade_chords and config.time_fade_use_daily_edges and time_fade_alpha:
+                if m == 'vwbr_z' and vwbr_z_brightness:
+                    def _draw_key(edge):
+                        edge_date = edge.get('date')
+                        src_val = vwbr_z_brightness.get((edge['source'], edge_date))
+                        dst_val = vwbr_z_brightness.get((edge['dest'], edge_date))
+                        vals = [v for v in (src_val, dst_val) if v is not None]
+                        if vals:
+                            return sum(vals) / len(vals)
+                        return time_fade_alpha.get(edge_date, config.time_fade_min_alpha)
+                    intervals_to_draw = sorted(intervals, key=_draw_key)
+                else:
+                    intervals_to_draw = sorted(intervals, key=lambda e: time_fade_alpha.get(e.get('date'), config.time_fade_min_alpha))
 
-                src_a0, src_a1 = spans[src]
-                dst_a0, dst_a1 = spans[dst]
+            for edge in intervals_to_draw:
+                flow = edge['flow']
+                lw = 0.6 + 2.2 * ((flow / max_flow) ** 0.6) if max_flow > 0 else 1.0
+                edge_date = edge.get('date')
+                alpha_factor = 1.0
+                start_brightness = 1.0
+                end_brightness = 1.0
 
-                a0 = src_a0 + (src_a1 - src_a0) * 0.3
-                a1 = src_a0 + (src_a1 - src_a0) * 0.7
-                b0 = dst_a0 + (dst_a1 - dst_a0) * 0.3
-                b1 = dst_a0 + (dst_a1 - dst_a0) * 0.7
+                if config.show_time_fade_chords and config.time_fade_use_daily_edges and time_fade_alpha:
+                    if edge_date in time_fade_alpha:
+                        alpha_factor = time_fade_alpha[edge_date]
+                        start_brightness = alpha_factor
+                        end_brightness = alpha_factor
 
-                color_start = soften_color(color_sell, config.chord_color_soften)
-                color_end = soften_color(color_buy, config.chord_color_soften)
+                if m == 'vwbr_z' and vwbr_z_brightness and edge_date is not None:
+                    src_val = vwbr_z_brightness.get((edge['source'], edge_date))
+                    dst_val = vwbr_z_brightness.get((edge['dest'], edge_date))
+                    if src_val is not None:
+                        start_brightness = src_val
+                    if dst_val is not None:
+                        end_brightness = dst_val
+
+                start_brightness = max(0.0, min(1.0, start_brightness))
+                end_brightness = max(0.0, min(1.0, end_brightness))
+                start_soften = min(1.0, config.chord_color_soften + (1.0 - start_brightness) * 0.6)
+                end_soften = min(1.0, config.chord_color_soften + (1.0 - end_brightness) * 0.6)
+                edge_color_start = soften_color(raw_start, start_soften)
+                edge_color_end = soften_color(raw_end, end_soften)
 
                 draw_ribbon(
-                    ax, a0, a1, b0, b1, chord_r,
-                    color_start, color_end,
-                    config.chord_fill_alpha, config.chord_line_alpha,
-                    lw=1.0,
+                    ax, edge['a0'], edge['a1'], edge['b0'], edge['b1'], config.chord_radius,
+                    edge_color_start, edge_color_end,
+                    config.chord_fill_alpha * alpha_factor,
+                    config.chord_line_alpha * alpha_factor,
+                    lw=lw,
                     use_gradient_fill=config.use_gradient_fill,
                     gradient_steps=config.chord_gradient_steps,
                 )
 
-        # Draw title
-        title_text = "Institutional Money Flow Tracker"
-        ax.text(0.5, 1.02, title_text, fontsize=config.title_fontsize, color='white', ha='center', va='bottom',
-                transform=ax.transAxes, fontweight='bold')
-
-        date_text = f"Date Range: {window_dates[0].strftime('%Y-%m-%d')} -> {window_dates[-1].strftime('%Y-%m-%d')}"
-        ax.text(0.5, 0.98, date_text, fontsize=config.subtitle_fontsize, color='#888888', ha='center', va='bottom',
-                transform=ax.transAxes)
+        # Title and subtitle
+        date_range = f"{window_dates_sorted[0]} -> {window_dates_sorted[-1]}" if window_dates_sorted else 'n/a'
+        fig.text(0.55, 0.97, 'Institutional Money Flow Tracker', ha='center', va='top',
+                 color='white', fontsize=config.title_fontsize, fontweight='bold')
+        fig.text(0.55, 0.945, f'Date Range: {date_range}', ha='center', va='top',
+                 color='#C9D1D9', fontsize=config.subtitle_fontsize)
 
         # Draw chords legend (upper-left)
         leg = fig.add_axes([0.08, 0.75, 0.30, 0.18])
@@ -1239,7 +2059,11 @@ def render_circos(
         y -= 0.15
 
         chord_items = [
-            ('vwbr_z', METRIC_LABELS.get('vwbr_z', 'VWBR Z'), METRIC_COLORS['vwbr_z']['sell'], METRIC_COLORS['vwbr_z']['buy']),
+            ('accum', 'Accumulation', METRIC_COLORS['accum']['sell'], METRIC_COLORS['accum']['buy']),
+            ('short', 'Short', METRIC_COLORS['short']['sell'], METRIC_COLORS['short']['buy']),
+            ('lit', 'Lit', METRIC_COLORS['lit']['sell'], METRIC_COLORS['lit']['buy']),
+            ('finra_buy', 'Finra Buy', METRIC_COLORS['finra_buy']['low'], METRIC_COLORS['finra_buy']['high']),
+            ('vwbr_z', 'VWBR Z', METRIC_COLORS['vwbr_z']['sell'], METRIC_COLORS['vwbr_z']['buy']),
         ]
         for key, label, c_start, c_end in chord_items:
             if not metric_visible(key, config):
@@ -1252,7 +2076,7 @@ def render_circos(
             t_arr = np.linspace(0, 1, len(segments))[:, None]
             colors = c0 * (1 - t_arr) + c1 * t_arr
             leg.add_collection(LineCollection(segments, colors=colors, linewidths=config.legend_linewidth))
-            leg.text(0.24, y, label, color='white', fontsize=config.legend_label_fontsize, va='center')
+            leg.text(0.24, y, METRIC_LABELS.get(key, label), color='white', fontsize=config.legend_label_fontsize, va='center')
             y -= 0.15
 
         # Draw category legend (upper-right)
@@ -1305,15 +2129,24 @@ def render_circos(
             y -= 0.09
 
         ring_leg.text(0.02, y, 'Each bar = 1 day', color='#C9D1D9', fontsize=config.ring_label_fontsize, va='center')
-        y -= 0.13
+        y -= 0.09
 
+        y -= 0.04
         ring_leg.text(0.0, y, 'Ring Coloring - what is the direction of the flow today', color='white', fontsize=config.ring_title_fontsize, fontweight='bold', va='top')
         y -= 0.12
+
+        ring3_mode = str(config.ring3_color_mode).upper()
+        if ring3_mode == 'VWBR_Z':
+            ring3_desc = 'VWBR Z (category tint bright->dark)'
+        elif ring3_mode == 'VWBR':
+            ring3_desc = 'VWBR buy ratio (category tint bright->dark)'
+        else:
+            ring3_desc = 'FINRA short buy/sell ratio (category tint bright->dark)'
 
         coloring_items = [
             ('Ring 1', 'Acc score 70 -> 30', RING_COLORS['accum']['positive'], RING_COLORS['accum']['negative']),
             ('Ring 2', 'Lit buy ratio (buy -> sell)', '#66FF66', '#FF6666'),
-            ('Ring 3', 'VWBR Z (category tint bright->dark)', '#E6E6E6', '#444444'),
+            ('Ring 3', ring3_desc, '#E6E6E6', '#444444'),
         ]
         for ring, desc, c_start, c_end in coloring_items:
             xs = np.linspace(0.0, 0.10, 30)
@@ -1328,9 +2161,27 @@ def render_circos(
             y -= 0.09
 
         # Draw summary table (bottom-right)
-        accum_buy_scores, accum_sell_scores = compute_score_maps(accum_delta, {}, {}, ticker_order)
-        lit_buy_scores, lit_sell_scores = compute_score_maps(lit_delta, {}, {}, ticker_order)
-        vwbr_z_buy_scores, vwbr_z_sell_scores = compute_score_maps(vwbr_z_map, {}, {}, ticker_order)
+        latest_date = max(window_dates_sorted) if window_dates_sorted else None
+
+        accum_trend_map = {}
+        accum_anomaly_map = {}
+        if not df_accum_level.empty:
+            df_accum_daily_centered = df_accum_level.copy()
+            df_accum_daily_centered['date'] = pd.to_datetime(df_accum_daily_centered['date'], errors='coerce').dt.date
+            daily_means = df_accum_daily_centered.groupby('date')['value'].mean()
+            df_accum_daily_centered['accum_centered'] = df_accum_daily_centered['value'] - df_accum_daily_centered['date'].map(daily_means)
+            accum_trend_map = compute_trend_map(df_accum_daily_centered, 'accum_centered', window_dates_sorted)
+            accum_anomaly_map = compute_anomaly_map_from_stats(df_accum_daily_centered, 'value', accum_stats, 'accum_mean', 'accum_std', latest_date)
+
+        accum_buy_scores, accum_sell_scores = compute_score_maps(metric_nets.get('accum', {}), accum_trend_map, accum_anomaly_map, ticker_order)
+
+        lit_trend_map = compute_trend_map(df_lit_daily, 'lit_net', window_dates_sorted) if not df_lit_daily.empty else {}
+        lit_anomaly_map = compute_anomaly_map_from_stats(df_lit_daily, 'lit_total', lit_stats, 'lit_vol_mean', 'lit_vol_std', latest_date) if not df_lit_daily.empty else {}
+        lit_buy_scores, lit_sell_scores = compute_score_maps(metric_nets.get('lit', {}), lit_trend_map, lit_anomaly_map, ticker_order)
+
+        vwbr_z_trend_map = compute_trend_map(df_finra_daily, 'vwbr_z', window_dates_sorted) if not df_finra_daily.empty and 'vwbr_z' in df_finra_daily.columns else {}
+        vwbr_z_anomaly_map = compute_abs_latest_map(df_finra_daily, 'vwbr_z', latest_date) if not df_finra_daily.empty and 'vwbr_z' in df_finra_daily.columns else {}
+        vwbr_z_buy_scores, vwbr_z_sell_scores = compute_score_maps(metric_nets.get('vwbr_z', {}), vwbr_z_trend_map, vwbr_z_anomaly_map, ticker_order)
 
         table_rows = [
             ('Accumulation Score', top_tickers_from_scores(accum_buy_scores), top_tickers_from_scores(accum_sell_scores)),
@@ -1344,25 +2195,37 @@ def render_circos(
         fig.text(0.55, 0.05, '\n'.join(table_lines), ha='left', va='bottom', color='#C9D1D9',
                  fontsize=config.table_fontsize, fontfamily='monospace', linespacing=1.2)
 
-        # Optional watermark
+        # Watermark
+        if config.watermark_path is None:
+            candidate = Path(__file__).resolve().parent.parent / "cowwbell_waterrmark.png"
+            if candidate.exists():
+                config.watermark_path = str(candidate)
         if config.watermark_path:
             try:
-                wm_img = plt.imread(config.watermark_path)
-                fig_w, fig_h = fig.get_size_inches()
-                wm_w = config.watermark_width
-                # Calculate aspect ratio from image shape
-                wm_h = wm_w * wm_img.shape[0] / wm_img.shape[1]
-                wm_left = 0.85 - wm_w / 2
-                wm_bottom = 0.05
-                wm_ax = fig.add_axes([wm_left, wm_bottom, wm_w, wm_h / (fig_h / fig_w)])
-                wm_ax.imshow(wm_img, alpha=config.watermark_alpha)
+                watermark_img = plt.imread(config.watermark_path)
+                wm_h, wm_w = watermark_img.shape[:2]
+                wm_aspect = (wm_h / wm_w) if wm_w else 1.0
+                wm_w_frac = config.watermark_width
+                wm_h_frac = wm_w_frac * wm_aspect
+                wm_left = 1 - wm_w_frac - 0.03
+                wm_bottom = 0.13
+                wm_ax = fig.add_axes([wm_left, wm_bottom, wm_w_frac, wm_h_frac])
                 wm_ax.axis('off')
+                wm_ax.imshow(watermark_img, alpha=config.watermark_alpha)
             except Exception as e:
                 logger.warning("Could not load watermark: %s", e)
 
         # Save figure
         date_tag = end_date_dt.strftime("%Y-%m-%d")
-        output_path = output_dir / f"circos_{date_tag}.png"
+        dated_output_dir = output_dir / date_tag
+        dated_output_dir.mkdir(parents=True, exist_ok=True)
+        if window_dates_sorted:
+            start_dt = str(window_dates_sorted[0]).replace('-', '')
+            end_dt = str(window_dates_sorted[-1]).replace('-', '')
+            filename = f"circos_{start_dt}_to_{end_dt}.png"
+        else:
+            filename = "circos_plot.png"
+        output_path = dated_output_dir / filename
         fig.savefig(output_path, dpi=150, facecolor=fig.get_facecolor(), edgecolor='none', bbox_inches='tight')
         plt.close(fig)
 
