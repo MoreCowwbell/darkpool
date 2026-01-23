@@ -115,7 +115,7 @@ EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 # -----------------------------------------------------------------------------
 
 TICKERS_TYPE =  ["ALL"]  # ["SECTOR", "THEMATIC", "GLOBAL", "COMMODITIES", "MAG8", "RATES", "CRYPTO", "SPECULATIVE"], ["SINGLE"], ["ALL"]
-DEFAULT_TICKERS = ["NFLX" ]
+DEFAULT_TICKERS = ["AMD" ]
 FETCH_INDICES_CONSTITUENTS = False  # When True, also fetch constituents of index/ETF tickers
 
 DEFAULT_TARGET_DATE = "TODAY"  # "TODAY" for current date, or specific date like "2026-01-08"
@@ -159,6 +159,7 @@ DEFAULT_RENDER_TABLES = True  # Render daily metrics tables (HTML/PNG)
 DEFAULT_RENDER_ALL_TICKERS_DASHBOARD = True  # Render all-tickers dashboard in tables/
 DEFAULT_COMBINATION_PLOT = True  # Render combined multi-ticker plot
 DEFAULT_RENDER_CIRCOS = True  # Render circos chord diagram
+DEFAULT_RENDER_WTD_VWBR = True  # Render WTD VWBR plots
 DEFAULT_PLOT_TRADING_GAPS = False  # Keep weekend/holiday gaps in plots
 DEFAULT_EXPORT_CSV = False  # Export tables to CSV files
 
@@ -176,6 +177,7 @@ POST_DISCORD_PRICE_CHARTS = False        # Post OHLC price charts
 POST_DISCORD_SUMMARY_DASHBOARD = True   # Post sector summary dashboard
 POST_DISCORD_COMBINATION_PLOT = False    # Post combined multi-ticker plot
 POST_DISCORD_CIRCOS = True              # Post circos chord diagram
+POST_DISCORD_WTD_VWBR = True            # Post WTD VWBR plots
 
 
 # -----------------------------------------------------------------------------
@@ -383,6 +385,8 @@ class Config:
     price_bar_timeframe: str
     combination_plot: bool
     render_circos: bool
+    render_wtd_vwbr: bool
+    wtd_vwbr_dir: Path
     plot_trading_gaps: bool
     panel1_metric: str
     polygon_api_key: Optional[str]
@@ -442,6 +446,7 @@ class Config:
     post_discord_summary_dashboard: bool
     post_discord_combination_plot: bool
     post_discord_circos: bool
+    post_discord_wtd_vwbr: bool
 
 
 def load_config() -> Config:
@@ -594,6 +599,10 @@ def load_config() -> Config:
         render_circos=False if bypass_output_setting else os.getenv(
             "RENDER_CIRCOS", str(DEFAULT_RENDER_CIRCOS)
         ).lower() in ("true", "1", "yes"),
+        render_wtd_vwbr=False if bypass_output_setting else os.getenv(
+            "RENDER_WTD_VWBR", str(DEFAULT_RENDER_WTD_VWBR)
+        ).lower() in ("true", "1", "yes"),
+        wtd_vwbr_dir=root_dir / "output" / "wtd_vwbr",
         plot_trading_gaps=os.getenv(
             "PLOT_TRADING_GAPS", str(DEFAULT_PLOT_TRADING_GAPS)
         ).lower() in ("true", "1", "yes"),
@@ -661,4 +670,5 @@ def load_config() -> Config:
         post_discord_summary_dashboard=os.getenv("POST_DISCORD_SUMMARY_DASHBOARD", str(POST_DISCORD_SUMMARY_DASHBOARD)).lower() in ("true", "1", "yes"),
         post_discord_combination_plot=os.getenv("POST_DISCORD_COMBINATION_PLOT", str(POST_DISCORD_COMBINATION_PLOT)).lower() in ("true", "1", "yes"),
         post_discord_circos=os.getenv("POST_DISCORD_CIRCOS", str(POST_DISCORD_CIRCOS)).lower() in ("true", "1", "yes"),
+        post_discord_wtd_vwbr=os.getenv("POST_DISCORD_WTD_VWBR", str(POST_DISCORD_WTD_VWBR)).lower() in ("true", "1", "yes"),
     )

@@ -20,7 +20,9 @@ try:
         post_metrics_table, post_metrics_plot, post_price_chart,
         post_summary_dashboard, post_all_tickers_dashboard,
         post_combination_plot, post_circos_plot, post_images_batch,
+        post_wtd_vwbr_plot,
     )
+    from .WTD_VWBR_plot import run_wtd_vwbr
     from .fetch_finra_otc import fetch_finra_otc_weekly
     from .fetch_finra_short import fetch_finra_short_daily
     from .fetch_polygon_agg import fetch_polygon_daily_agg
@@ -40,7 +42,9 @@ except ImportError:
         post_metrics_table, post_metrics_plot, post_price_chart,
         post_summary_dashboard, post_all_tickers_dashboard,
         post_combination_plot, post_circos_plot, post_images_batch,
+        post_wtd_vwbr_plot,
     )
+    from WTD_VWBR_plot import run_wtd_vwbr
     from fetch_finra_otc import fetch_finra_otc_weekly
     from fetch_finra_short import fetch_finra_short_daily
     from fetch_polygon_agg import fetch_polygon_daily_agg
@@ -193,9 +197,10 @@ def main() -> None:
     plot_output_dir = config.plot_dir / date_subfolder
     price_chart_output_dir = config.price_chart_dir / date_subfolder
     summary_output_dir = config.table_dir.parent / "tables_summary" / date_subfolder
+    wtd_vwbr_output_dir = config.wtd_vwbr_dir / date_subfolder
 
     # Create date-specific directories
-    for d in [table_output_dir, plot_output_dir, price_chart_output_dir, summary_output_dir]:
+    for d in [table_output_dir, plot_output_dir, price_chart_output_dir, summary_output_dir, wtd_vwbr_output_dir]:
         d.mkdir(parents=True, exist_ok=True)
 
     conn = get_connection(config.db_path)
@@ -504,6 +509,21 @@ def main() -> None:
         except Exception as exc:
             logging.error("Failed to render circos plot: %s", exc)
 
+    if config.render_wtd_vwbr:
+        try:
+            successful, failed, report = run_wtd_vwbr(
+                tickers=config.tickers,
+                start_date=str(min(config.target_dates)),
+                end_date=str(max(config.target_dates)),
+                output_base_dir=config.wtd_vwbr_dir,
+                db_path=config.db_path,
+                show_plots=False,
+            )
+            if successful:
+                logging.info("WTD VWBR rendered for %d tickers", len(successful))
+        except Exception as exc:
+            logging.error("Failed to render WTD VWBR: %s", exc)
+
     # ---------------------------------------------------------------------------
     # Discord Webhook Posting
     # ---------------------------------------------------------------------------
@@ -581,6 +601,17 @@ def main() -> None:
                     post_circos_plot(config.discord_webhook_url, circos_pngs[0], date_str)
             except Exception as exc:
                 logging.error("Failed to post circos plot to Discord: %s", exc)
+
+        # Post WTD VWBR plots
+        if config.post_discord_wtd_vwbr and config.render_wtd_vwbr:
+            try:
+                wtd_vwbr_pngs = list(wtd_vwbr_output_dir.glob("*_wtd_vwbr_*.png"))
+                if wtd_vwbr_pngs:
+                    for png in wtd_vwbr_pngs[:10]:  # Post up to 10 WTD VWBR plots
+                        ticker = png.name.split("_")[0].upper()
+                        post_wtd_vwbr_plot(config.discord_webhook_url, png, ticker)
+            except Exception as exc:
+                logging.error("Failed to post WTD VWBR plots to Discord: %s", exc)
 
         logging.info("Discord posting complete.")
 

@@ -235,3 +235,12 @@ def post_circos_plot(webhook_url: str, plot_path: Path, date_str: str) -> bool:
         plot_path,
         title=f"Circos Money Flow - {date_str}",
     )
+
+
+def post_wtd_vwbr_plot(webhook_url: str, plot_path: Path, ticker: str) -> bool:
+    """Post WTD VWBR plot to Discord."""
+    return post_image_to_discord(
+        webhook_url,
+        plot_path,
+        title=f"WTD VWBR - {ticker}",
+    )
