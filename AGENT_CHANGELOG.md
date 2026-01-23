@@ -425,3 +425,55 @@ Format:
 - [x] Updated documentation:
   - `AGENT_CONTEXT.md` - updated "Where Things Live" section.
   - `AGENT_INSTRUCTIONS.md` - updated "Outputs" section.
+
+## 2026-01-22 Session Summary (Claude Code) - Circos Renderer Integration
+- [x] Extracted `Special_tools/circos_v2.ipynb` into callable Python module:
+  - Created `darkpool_analysis/circos_renderer.py` (~700 lines)
+  - `CircosConfig` dataclass with 60+ configuration parameters and sensible defaults
+  - Core functions: database connection, ticker universe loading, edge computation, geometry/color utilities
+  - Main entry point: `render_circos(config, output_dir, db_path)` returns path to saved PNG
+- [x] Added `RENDER_CIRCOS` config flag:
+  - `DEFAULT_RENDER_CIRCOS = True` in `config.py`
+  - Respects `BYPASS_OUTPUT_SETTING` like other render flags
+  - Can be overridden via `RENDER_CIRCOS` env var
+- [x] Integrated circos rendering into `orchestrator.py`:
+  - Runs after all other renders when `config.render_circos` is True
+  - Output: `darkpool_analysis/output/circos_plot/{YYYY-MM-DD}/circos_{date}.png`
+  - Wrapped in try/except for graceful failure
+- [x] Updated documentation:
+  - `AGENT_CONTEXT.md` - added circos_renderer.py and output folder to "Where Things Live"
+  - `AGENT_CHANGELOG.md` - this entry
+
+## 2026-01-22 Session Summary (Claude Code) - Discord Webhook Integration
+- [x] Added Discord webhook posting for pipeline outputs:
+  - Created `darkpool_analysis/discord_poster.py` module
+  - Functions: `post_to_discord()`, `post_image_to_discord()`, `post_images_batch()`
+  - Convenience functions for each output type (tables, plots, charts, circos)
+- [x] Added Discord config flags to `config.py`:
+  - `POST_TO_DISCORD = True` - master toggle
+  - Individual toggles: `POST_DISCORD_TABLES`, `POST_DISCORD_METRICS_PLOTS`, `POST_DISCORD_PRICE_CHARTS`, `POST_DISCORD_SUMMARY_DASHBOARD`, `POST_DISCORD_COMBINATION_PLOT`, `POST_DISCORD_CIRCOS`
+  - Uses `DISCORD_FARM_DARKPOOL_WEBHOOK_URL` from .env
+- [x] Integrated Discord posting into `orchestrator.py`:
+  - Posts after all renders complete
+  - Respects master toggle and individual toggles
+  - Limits posts per type to avoid spam (e.g., 5 plots max)
+- [x] Updated documentation:
+  - `AGENT_CONTEXT.md` - added discord_poster.py to "Where Things Live"
+
+## 2026-01-22 Session Summary (Claude Code) - Separate All-Tickers Dashboard
+- [x] Separated all-tickers dashboard from sector summary dashboard:
+  - Previously both controlled by single `render_summary_dashboard` flag
+  - All-tickers dashboard: `output/tables/{date}/All_Tickers_Dashboard_*.png` (uses all config.tickers)
+  - Sector summary dashboard: `output/tables_summary/{date}/Sector_Summary_*.png` (uses SECTOR_CORE only)
+- [x] Added new config flags to `config.py`:
+  - `DEFAULT_RENDER_ALL_TICKERS_DASHBOARD = True`
+  - `POST_DISCORD_ALL_TICKERS_DASHBOARD = True`
+  - Added `render_all_tickers_dashboard` and `post_discord_all_tickers_dashboard` to Config dataclass
+- [x] Added `output_prefix` parameter to `summary_dashboard.py`:
+  - `render_sector_summary()` now accepts optional `output_prefix` for custom filenames
+  - Falls back to auto-generated name if not provided
+- [x] Updated `orchestrator.py`:
+  - Split dashboard renders into separate `if` blocks with independent config flags
+  - Added separate Discord posting for all-tickers dashboard
+  - Uses `post_all_tickers_dashboard()` function with distinct title
+- [x] Added `post_all_tickers_dashboard()` function to `discord_poster.py`

@@ -1005,6 +1005,7 @@ def render_sector_summary(
     tickers: Optional[list[str]] = None,
     title: str = "Sector Summary Dashboard",
     max_dates: int = 10,
+    output_prefix: Optional[str] = None,
 ) -> tuple[Path, Path]:
     """
     Main entry point - render sector summary dashboard as HTML and PNG.
@@ -1016,6 +1017,7 @@ def render_sector_summary(
         tickers: List of ticker symbols (defaults to SECTOR_SUMMARY_TICKERS)
         title: Page title
         max_dates: Maximum number of dates to show per ticker (default 10)
+        output_prefix: Custom prefix for output filenames (overrides auto-generated name)
 
     Returns:
         Tuple of (html_path, png_path)
@@ -1070,7 +1072,10 @@ def render_sector_summary(
         full_html = build_full_page_html(title, grid_html, palette)
 
         # Write output files
-        base_name = f"Summary_Dashboard_{TICKERS_TYPE}_{date_label}"
+        if output_prefix:
+            base_name = f"{output_prefix}_{date_label}"
+        else:
+            base_name = f"Summary_Dashboard_{TICKERS_TYPE}_{date_label}"
         html_path, png_path = _resolve_unique_output_paths(output_dir, base_name)
 
         html_path.write_text(full_html, encoding="utf-8")

@@ -156,9 +156,26 @@ DEFAULT_RENDER_METRICS_PLOTS = True  # Render metrics plots (plotter.py)
 DEFAULT_RENDER_PRICE_CHARTS = True # Render OHLC price charts
 DEFAULT_RENDER_SUMMARY_DASHBOARD = True  # Render sector summary dashboard
 DEFAULT_RENDER_TABLES = True  # Render daily metrics tables (HTML/PNG)
+DEFAULT_RENDER_ALL_TICKERS_DASHBOARD = True  # Render all-tickers dashboard in tables/
 DEFAULT_COMBINATION_PLOT = True  # Render combined multi-ticker plot
+DEFAULT_RENDER_CIRCOS = True  # Render circos chord diagram
 DEFAULT_PLOT_TRADING_GAPS = False  # Keep weekend/holiday gaps in plots
 DEFAULT_EXPORT_CSV = False  # Export tables to CSV files
+
+# -----------------------------------------------------------------------------
+# Discord Webhook Posting
+# -----------------------------------------------------------------------------
+# Master toggle: when False, nothing is posted to Discord
+POST_TO_DISCORD = True
+
+# Individual toggles (only apply when POST_TO_DISCORD = True)
+POST_DISCORD_TABLES = False              # Post daily metrics tables
+POST_DISCORD_ALL_TICKERS_DASHBOARD = True  # Post all-tickers dashboard
+POST_DISCORD_METRICS_PLOTS = False       # Post metrics plots (plotter.py)
+POST_DISCORD_PRICE_CHARTS = False        # Post OHLC price charts
+POST_DISCORD_SUMMARY_DASHBOARD = True   # Post sector summary dashboard
+POST_DISCORD_COMBINATION_PLOT = False    # Post combined multi-ticker plot
+POST_DISCORD_CIRCOS = True              # Post circos chord diagram
 
 
 # -----------------------------------------------------------------------------
@@ -362,8 +379,10 @@ class Config:
     render_tables: bool
     render_price_charts: bool
     render_summary_dashboard: bool
+    render_all_tickers_dashboard: bool
     price_bar_timeframe: str
     combination_plot: bool
+    render_circos: bool
     plot_trading_gaps: bool
     panel1_metric: str
     polygon_api_key: Optional[str]
@@ -413,6 +432,16 @@ class Config:
     fetch_options_premium: bool
     options_premium_display_mode: str  # "TOTAL", "WTD_STYLE", or "FULL_BREAKDOWN"
     itm_call_hedge_threshold: float  # Threshold for ITM call hedge warning
+    # Discord webhook posting
+    discord_webhook_url: Optional[str]
+    post_to_discord: bool  # Master toggle
+    post_discord_tables: bool
+    post_discord_all_tickers_dashboard: bool
+    post_discord_metrics_plots: bool
+    post_discord_price_charts: bool
+    post_discord_summary_dashboard: bool
+    post_discord_combination_plot: bool
+    post_discord_circos: bool
 
 
 def load_config() -> Config:
@@ -553,11 +582,17 @@ def load_config() -> Config:
         render_summary_dashboard=False if bypass_output_setting else os.getenv(
             "RENDER_SUMMARY_DASHBOARD", str(DEFAULT_RENDER_SUMMARY_DASHBOARD)
         ).lower() in ("true", "1", "yes"),
+        render_all_tickers_dashboard=False if bypass_output_setting else os.getenv(
+            "RENDER_ALL_TICKERS_DASHBOARD", str(DEFAULT_RENDER_ALL_TICKERS_DASHBOARD)
+        ).lower() in ("true", "1", "yes"),
         price_bar_timeframe=os.getenv(
             "PRICE_BAR_TIMEFRAME", DEFAULT_PRICE_BAR_TIMEFRAME
         ).lower(),
         combination_plot=False if bypass_output_setting else os.getenv(
             "COMBINATION_PLOT", str(DEFAULT_COMBINATION_PLOT)
+        ).lower() in ("true", "1", "yes"),
+        render_circos=False if bypass_output_setting else os.getenv(
+            "RENDER_CIRCOS", str(DEFAULT_RENDER_CIRCOS)
         ).lower() in ("true", "1", "yes"),
         plot_trading_gaps=os.getenv(
             "PLOT_TRADING_GAPS", str(DEFAULT_PLOT_TRADING_GAPS)
@@ -616,4 +651,14 @@ def load_config() -> Config:
         fetch_options_premium=os.getenv("FETCH_OPTIONS_PREMIUM", str(DEFAULT_FETCH_OPTIONS_PREMIUM)).lower() in ("true", "1", "yes"),
         options_premium_display_mode=os.getenv("OPTIONS_PREMIUM_DISPLAY_MODE", DEFAULT_OPTIONS_PREMIUM_DISPLAY_MODE).upper(),
         itm_call_hedge_threshold=float(os.getenv("ITM_CALL_HEDGE_THRESHOLD", str(DEFAULT_ITM_CALL_HEDGE_THRESHOLD))),
+        # Discord webhook posting
+        discord_webhook_url=os.getenv("DISCORD_FARM_DARKPOOL_WEBHOOK_URL"),
+        post_to_discord=os.getenv("POST_TO_DISCORD", str(POST_TO_DISCORD)).lower() in ("true", "1", "yes"),
+        post_discord_tables=os.getenv("POST_DISCORD_TABLES", str(POST_DISCORD_TABLES)).lower() in ("true", "1", "yes"),
+        post_discord_all_tickers_dashboard=os.getenv("POST_DISCORD_ALL_TICKERS_DASHBOARD", str(POST_DISCORD_ALL_TICKERS_DASHBOARD)).lower() in ("true", "1", "yes"),
+        post_discord_metrics_plots=os.getenv("POST_DISCORD_METRICS_PLOTS", str(POST_DISCORD_METRICS_PLOTS)).lower() in ("true", "1", "yes"),
+        post_discord_price_charts=os.getenv("POST_DISCORD_PRICE_CHARTS", str(POST_DISCORD_PRICE_CHARTS)).lower() in ("true", "1", "yes"),
+        post_discord_summary_dashboard=os.getenv("POST_DISCORD_SUMMARY_DASHBOARD", str(POST_DISCORD_SUMMARY_DASHBOARD)).lower() in ("true", "1", "yes"),
+        post_discord_combination_plot=os.getenv("POST_DISCORD_COMBINATION_PLOT", str(POST_DISCORD_COMBINATION_PLOT)).lower() in ("true", "1", "yes"),
+        post_discord_circos=os.getenv("POST_DISCORD_CIRCOS", str(POST_DISCORD_CIRCOS)).lower() in ("true", "1", "yes"),
     )

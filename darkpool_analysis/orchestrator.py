@@ -16,6 +16,11 @@ try:
     from .analytics import build_daily_metrics, build_index_constituent_short_agg
     from .config import load_config, get_output_date_subfolder
     from .db import get_connection, init_db, upsert_dataframe
+    from .discord_poster import (
+        post_metrics_table, post_metrics_plot, post_price_chart,
+        post_summary_dashboard, post_all_tickers_dashboard,
+        post_combination_plot, post_circos_plot, post_images_batch,
+    )
     from .fetch_finra_otc import fetch_finra_otc_weekly
     from .fetch_finra_short import fetch_finra_short_daily
     from .fetch_polygon_agg import fetch_polygon_daily_agg
@@ -31,6 +36,11 @@ except ImportError:
     from analytics import build_daily_metrics, build_index_constituent_short_agg
     from config import load_config, get_output_date_subfolder
     from db import get_connection, init_db, upsert_dataframe
+    from discord_poster import (
+        post_metrics_table, post_metrics_plot, post_price_chart,
+        post_summary_dashboard, post_all_tickers_dashboard,
+        post_combination_plot, post_circos_plot, post_images_batch,
+    )
     from fetch_finra_otc import fetch_finra_otc_weekly
     from fetch_finra_short import fetch_finra_short_daily
     from fetch_polygon_agg import fetch_polygon_daily_agg
@@ -170,7 +180,9 @@ def main() -> None:
         config.price_bar_timeframe,
     )
     logging.info("Render summary dashboard: %s", config.render_summary_dashboard)
+    logging.info("Render circos plot: %s", config.render_circos)
     logging.info("Options premium fetch: %s", config.fetch_options_premium)
+    logging.info("Post to Discord: %s", config.post_to_discord)
 
     max_date = max(config.target_dates)
     min_date = min(config.target_dates)
@@ -413,8 +425,8 @@ def main() -> None:
         except Exception as exc:
             logging.error("Failed to render last-3-days metrics table: %s", exc)
 
-    if config.render_summary_dashboard:
-        # Summary table 1: All configured tickers
+    # All-Tickers Dashboard (goes to tables/ folder)
+    if config.render_all_tickers_dashboard:
         try:
             render_sector_summary(
                 db_path=config.db_path,
@@ -422,12 +434,14 @@ def main() -> None:
                 dates=config.target_dates,
                 tickers=config.tickers,
                 max_dates=10,
-                title="Summary Dashboard - All Tickers",
+                title="All Tickers Dashboard",
+                output_prefix="All_Tickers_Dashboard",
             )
         except Exception as exc:
-            logging.error("Failed to render all-tickers summary dashboard: %s", exc)
+            logging.error("Failed to render all-tickers dashboard: %s", exc)
 
-        # Summary table 2: Sector ETFs only (same as runtablesummary.py)
+    # Sector Summary Dashboard (goes to tables_summary/ folder)
+    if config.render_summary_dashboard:
         try:
             render_sector_summary(
                 db_path=config.db_path,
@@ -436,6 +450,7 @@ def main() -> None:
                 # tickers=None defaults to SECTOR_SUMMARY_TICKERS
                 max_dates=10,
                 title="Sector Summary Dashboard",
+                output_prefix="Sector_Summary",
             )
         except Exception as exc:
             logging.error("Failed to render sector summary dashboard: %s", exc)
@@ -479,6 +494,95 @@ def main() -> None:
             )
         except Exception as exc:
             logging.error("Failed to render price charts: %s", exc)
+
+    if config.render_circos:
+        try:
+            from circos_renderer import render_circos
+            circos_output_dir = config.plot_dir.parent / "circos_plot" / date_subfolder
+            circos_output_dir.mkdir(parents=True, exist_ok=True)
+            render_circos(output_dir=circos_output_dir, db_path=config.db_path)
+        except Exception as exc:
+            logging.error("Failed to render circos plot: %s", exc)
+
+    # ---------------------------------------------------------------------------
+    # Discord Webhook Posting
+    # ---------------------------------------------------------------------------
+    if config.post_to_discord and config.discord_webhook_url:
+        logging.info("Posting outputs to Discord...")
+        date_str = date_subfolder
+
+        # Post daily metrics tables (excludes dashboards)
+        if config.post_discord_tables and config.render_tables:
+            try:
+                # Filter out dashboard PNGs, only post metrics tables
+                table_pngs = [p for p in table_output_dir.glob("*.png")
+                              if not p.name.startswith("All_Tickers_Dashboard")]
+                if table_pngs:
+                    # Post the main table (largest file typically)
+                    main_table = max(table_pngs, key=lambda p: p.stat().st_size)
+                    post_metrics_table(config.discord_webhook_url, main_table, date_str)
+            except Exception as exc:
+                logging.error("Failed to post tables to Discord: %s", exc)
+
+        # Post all-tickers dashboard
+        if config.post_discord_all_tickers_dashboard and config.render_all_tickers_dashboard:
+            try:
+                all_tickers_pngs = list(table_output_dir.glob("All_Tickers_Dashboard*.png"))
+                if all_tickers_pngs:
+                    post_all_tickers_dashboard(config.discord_webhook_url, all_tickers_pngs[0], date_str)
+            except Exception as exc:
+                logging.error("Failed to post all-tickers dashboard to Discord: %s", exc)
+
+        # Post sector summary dashboard
+        if config.post_discord_summary_dashboard and config.render_summary_dashboard:
+            try:
+                summary_pngs = list(summary_output_dir.glob("Sector_Summary*.png"))
+                if summary_pngs:
+                    post_summary_dashboard(config.discord_webhook_url, summary_pngs[0], date_str)
+            except Exception as exc:
+                logging.error("Failed to post summary dashboard to Discord: %s", exc)
+
+        # Post metrics plots
+        if config.post_discord_metrics_plots and config.render_metrics_plots:
+            try:
+                metrics_pngs = list(plot_output_dir.glob("*_layered.png"))
+                if metrics_pngs:
+                    for png in metrics_pngs[:5]:  # Post up to 5 metrics plots
+                        ticker = png.stem.replace("_layered", "")
+                        post_metrics_plot(config.discord_webhook_url, png, ticker)
+            except Exception as exc:
+                logging.error("Failed to post metrics plots to Discord: %s", exc)
+
+        # Post combination plot
+        if config.post_discord_combination_plot and config.combination_plot:
+            try:
+                combo_pngs = list(plot_output_dir.glob("combination_*.png"))
+                if combo_pngs:
+                    post_combination_plot(config.discord_webhook_url, combo_pngs[0], date_str)
+            except Exception as exc:
+                logging.error("Failed to post combination plot to Discord: %s", exc)
+
+        # Post price charts
+        if config.post_discord_price_charts and config.render_price_charts:
+            try:
+                price_pngs = list(price_chart_output_dir.glob("*.png"))
+                if price_pngs:
+                    for png in price_pngs[:5]:  # Post up to 5 price charts
+                        ticker = png.stem.replace("_price_chart", "")
+                        post_price_chart(config.discord_webhook_url, png, ticker)
+            except Exception as exc:
+                logging.error("Failed to post price charts to Discord: %s", exc)
+
+        # Post circos plot
+        if config.post_discord_circos and config.render_circos:
+            try:
+                circos_pngs = list(circos_output_dir.glob("circos_*.png"))
+                if circos_pngs:
+                    post_circos_plot(config.discord_webhook_url, circos_pngs[0], date_str)
+            except Exception as exc:
+                logging.error("Failed to post circos plot to Discord: %s", exc)
+
+        logging.info("Discord posting complete.")
 
     logging.info("Analysis complete. Processed %d dates.", len(config.target_dates))
 

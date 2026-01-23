@@ -40,6 +40,8 @@
 - darkpool_analysis/analytics.py - lit_direction_daily + daily_metrics + index aggregation
 - darkpool_analysis/table_renderer.py - daily table outputs (HTML/PNG)
 - darkpool_analysis/plotter.py - multi-panel metric plots (Phase C)
+- darkpool_analysis/circos_renderer.py - circos chord diagram renderer (extracted from notebook)
+- darkpool_analysis/discord_poster.py - Discord webhook posting for outputs
 - darkpool_analysis/db_path.py - centralized DB path helper (uses DATA_ROOT env var)
 - Database location: via `get_db_path()` - see AGENT_PROJECT_CONVENTION.md for resolved paths
 - darkpool_analysis/data/constituents/spx_sample.csv - sample constituent list (replace with full coverage)
@@ -48,6 +50,7 @@
 - darkpool_analysis/output/plots/{YYYY-MM-DD}/ - plots (date-based subfolders)
 - darkpool_analysis/output/price_charts/{YYYY-MM-DD}/ - price charts (date-based subfolders)
 - darkpool_analysis/output/tables_summary/{YYYY-MM-DD}/ - sector summary dashboards
+- darkpool_analysis/output/circos_plot/{YYYY-MM-DD}/ - circos chord diagrams (date-based subfolders)
 
 ## Execution Flow (per target date)
 1. Load config and env vars.
