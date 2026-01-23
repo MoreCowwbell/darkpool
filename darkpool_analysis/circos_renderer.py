@@ -202,15 +202,15 @@ CATEGORY_LABELS = {
 }
 
 CATEGORY_PALETTE = {
-    'GLOBAL_MACRO': "#0059FF",
+    'GLOBAL_MACRO': "#2D73FF",
     'MAG8': "#D38CFA",
-    'THEMATIC_SECTORS': "#00E4C5",
+    'THEMATIC_SECTORS': "#00E47D",
     'SECTOR_CORE': "#FAAF00F2",
     'COMMODITIES': "#FFFC2F",
     'RATES_CREDIT': "#FF9966",
     'SPECULATIVE': "#FF7A45",
-    'CRYPTO': "#4CC9F0",
-    'UNKNOWN': "#8F8E8E",
+    'CRYPTO': "#00D0FF",
+    'UNKNOWN': "#B9B9B9",
 }
 
 CHORD_METRIC_ORDER = ['accum', 'short', 'lit', 'finra_buy', 'vwbr_z']
@@ -2084,7 +2084,7 @@ def render_circos(
                              if grouped.get(cat)]
 
         if present_categories:
-            cat_leg = fig.add_axes([0.85, 0.75, 0.18, 0.18])
+            cat_leg = fig.add_axes([0.90, 0.75, 0.18, 0.18])
             cat_leg.axis('off')
             cat_leg.set_facecolor('none')
             cat_leg.set_xlim(0, 1)
@@ -2101,7 +2101,14 @@ def render_circos(
                 for i in range(10):
                     t = i / 9.0
                     color = blend_color(dark_color, base_color, t)
-                    rect = Rectangle((i * 0.008, y - 0.04), 0.008, 0.08, facecolor=color, edgecolor='none')
+                    rect = Rectangle(
+                        (i * 0.008, y - 0.04),
+                        0.008,
+                        0.08,
+                        facecolor=color,
+                        edgecolor='none',
+                        clip_on=False,
+                    )
                     cat_leg.add_patch(rect)
 
                 cat_leg.text(0.12, y, CATEGORY_LABELS.get(cat, cat), color='white', fontsize=config.legend_label_fontsize, va='center')
