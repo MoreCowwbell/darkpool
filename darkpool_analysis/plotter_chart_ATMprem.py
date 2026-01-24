@@ -261,55 +261,37 @@ def _draw_directional_gauge(ax, directional_score: float, max_range: float = 100
 
     # Gauge dimensions (in axes coordinates)
     gauge_left = 0.02
-    gauge_bottom = 0.82
+    gauge_bottom = 0.85
     gauge_width = 0.22
-    gauge_height = 0.10
+    gauge_y = gauge_bottom + 0.02
 
-    # Draw gauge background (gradient from red to green)
-    # Left half (bearish - red)
-    ax.add_patch(Rectangle(
-        (gauge_left, gauge_bottom), gauge_width / 2, gauge_height,
-        transform=ax.transAxes, facecolor="#FF4444", alpha=0.3,
-        edgecolor="none", zorder=10
-    ))
-    # Right half (bullish - green)
-    ax.add_patch(Rectangle(
-        (gauge_left + gauge_width / 2, gauge_bottom), gauge_width / 2, gauge_height,
-        transform=ax.transAxes, facecolor="#00FF88", alpha=0.3,
-        edgecolor="none", zorder=10
-    ))
+    # Draw horizontal grey line
+    ax.plot([gauge_left, gauge_left + gauge_width], [gauge_y, gauge_y],
+            transform=ax.transAxes, color="#6b6b6b", linewidth=2, zorder=10, solid_capstyle="round")
 
-    # Draw gauge border
-    ax.add_patch(Rectangle(
-        (gauge_left, gauge_bottom), gauge_width, gauge_height,
-        transform=ax.transAxes, facecolor="none",
-        edgecolor=COLORS.get("grid", "#2a2a2d"), linewidth=1, zorder=11
-    ))
-
-    # Draw center line
+    # Draw center tick mark
     center_x = gauge_left + gauge_width / 2
-    ax.plot([center_x, center_x], [gauge_bottom, gauge_bottom + gauge_height],
-            transform=ax.transAxes, color=COLORS.get("text", "#e6e6e6"),
-            linewidth=1, zorder=12)
+    ax.plot([center_x, center_x], [gauge_y - 0.015, gauge_y + 0.015],
+            transform=ax.transAxes, color="#6b6b6b", linewidth=1.5, zorder=11)
 
-    # Draw marker/needle position
+    # Draw colored dot at position
     marker_x = gauge_left + gauge_width / 2 + (normalized * gauge_width / 2)
     marker_color = "#00FF88" if directional_score >= 0 else "#FF4444"
-    ax.plot(marker_x, gauge_bottom + gauge_height / 2, "o",
+    ax.plot(marker_x, gauge_y, "o",
             transform=ax.transAxes, color=marker_color,
-            markersize=8, markeredgecolor="white", markeredgewidth=1, zorder=13)
+            markersize=10, markeredgecolor="white", markeredgewidth=1.5, zorder=13)
 
-    # Draw score label
+    # Draw score label below the dot
     label = f"{directional_score:+.1f}M"
-    ax.text(marker_x, gauge_bottom - 0.02, label,
-            transform=ax.transAxes, fontsize=8,
+    ax.text(marker_x, gauge_y - 0.04, label,
+            transform=ax.transAxes, fontsize=7,
             ha="center", va="top", color=marker_color, fontweight="bold", zorder=13)
 
     # Draw gauge labels
-    ax.text(gauge_left, gauge_bottom + gauge_height + 0.01, "Bearish",
+    ax.text(gauge_left, gauge_y + 0.025, "Bearish",
             transform=ax.transAxes, fontsize=6, ha="left", va="bottom",
             color="#FF4444", zorder=13)
-    ax.text(gauge_left + gauge_width, gauge_bottom + gauge_height + 0.01, "Bullish",
+    ax.text(gauge_left + gauge_width, gauge_y + 0.025, "Bullish",
             transform=ax.transAxes, fontsize=6, ha="right", va="bottom",
             color="#00FF88", zorder=13)
 
@@ -355,8 +337,8 @@ def _plot_options_premium_panel(
     if has_itm_otm:
         otm_call = prem_df["otm_call_premium"].fillna(0).values
         itm_call = prem_df["itm_call_premium"].fillna(0).values
-        otm_put = prem_df["otm_put_premium"].fillna(0).values
-        itm_put = prem_df["itm_put_premium"].fillna(0).values
+        otm_put = np.abs(prem_df["otm_put_premium"].fillna(0).values)
+        itm_put = np.abs(prem_df["itm_put_premium"].fillna(0).values)
     else:
         # Fallback to total if ITM/OTM not available
         otm_call = total_call
@@ -422,11 +404,11 @@ def _plot_options_premium_panel(
         ax.bar(dates, itm_call, width=bar_width_premium, color=COLORS["itm_call"],
                alpha=0.85, edgecolor="none", zorder=2, bottom=otm_call)
 
-        # Puts (downward): OTM on bottom, ITM stacked below
-        ax.bar(dates, -otm_put, width=bar_width_premium, color=COLORS["otm_put"],
-               alpha=0.85, edgecolor="none", zorder=2)
+        # Puts (downward): ITM closer to 0, OTM stacked below
         ax.bar(dates, -itm_put, width=bar_width_premium, color=COLORS["itm_put"],
-               alpha=0.85, edgecolor="none", zorder=2, bottom=-otm_put)
+               alpha=0.85, edgecolor="none", zorder=2)
+        ax.bar(dates, -otm_put, width=bar_width_premium, color=COLORS["otm_put"],
+               alpha=0.85, edgecolor="none", zorder=2, bottom=-itm_put)
 
         legend_handles = [
             Patch(facecolor=COLORS["otm_call"], edgecolor="none", alpha=0.85, label="OTM Calls (Bullish)"),
