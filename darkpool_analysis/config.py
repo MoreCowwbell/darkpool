@@ -167,7 +167,7 @@ DEFAULT_EXPORT_CSV = False  # Export tables to CSV files
 # Discord Webhook Posting
 # -----------------------------------------------------------------------------
 # Master toggle: when False, nothing is posted to Discord
-POST_TO_DISCORD = True
+POST_TO_DISCORD = False
 
 # Individual toggles (only apply when POST_TO_DISCORD = True)
 POST_DISCORD_TABLES = False              # Post daily metrics tables
@@ -221,7 +221,7 @@ DEFAULT_FETCH_OPTIONS_PREMIUM = True  # Enable/disable options premium fetching
 # - "TOTAL": Current behavior - total call/put premium (backwards compatible)
 # - "WTD_STYLE": OTM focus with ITM call hedge warning (WTD's recommended approach)
 # - "FULL_BREAKDOWN": Show all 4 categories (OTM/ITM x Call/Put)
-DEFAULT_OPTIONS_PREMIUM_DISPLAY_MODE = "TOTAL"
+DEFAULT_OPTIONS_PREMIUM_DISPLAY_MODE = "WTD_STYLE"
 
 # Threshold for ITM call hedge warning (% of total call premium)
 # When ITM calls exceed this ratio, shows warning marker in WTD_STYLE mode
