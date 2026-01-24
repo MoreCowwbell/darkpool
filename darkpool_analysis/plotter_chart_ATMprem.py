@@ -296,6 +296,34 @@ def _draw_directional_gauge(ax, directional_score: float, max_range: float = 100
             color="#00FF88", zorder=13)
 
 
+def _compute_itm_edge_style(itm_value: float, total_value: float) -> tuple[float, float]:
+    """
+    Compute edge width based on ITM proportion for WTD_STYLE visualization.
+
+    Args:
+        itm_value: ITM premium value
+        total_value: Total premium value (ITM + OTM)
+
+    Returns:
+        tuple: (edge_width, edge_alpha) - width 0 means no outline
+    """
+    if total_value <= 0 or itm_value <= 0:
+        return (0, 0)
+
+    itm_ratio = itm_value / total_value
+
+    # Below 5% visibility threshold - no outline
+    if itm_ratio < 0.05:
+        return (0, 0)
+
+    # Scale from 5% to 50% ITM ratio
+    # 5% = 0.5px, 50%+ = 3.5px
+    normalized = min(1.0, (itm_ratio - 0.05) / 0.45)
+    edge_width = 0.5 + normalized * 3.0
+
+    return (edge_width, 1.0)
+
+
 def _plot_options_premium_panel(
     ax,
     prem_df: pd.DataFrame,
@@ -363,28 +391,44 @@ def _plot_options_premium_panel(
                       total_put.max() if len(total_put) > 0 else 0)
 
     elif display_mode == "WTD_STYLE":
-        # WTD style: OTM only with ITM call hedge warning
-        # OTM Calls = Cyan (bullish), OTM Puts = Red (bearish)
-        ax.bar(dates, otm_call, width=bar_width_premium, color=COLORS["otm_call"],
-               alpha=0.85, edgecolor="none", zorder=2)
-        ax.bar(dates, -otm_put, width=bar_width_premium, color=COLORS["otm_put"],
-               alpha=0.85, edgecolor="none", zorder=2)
+        # WTD style: OTM focus with ITM influence shown via outline edges
+        # - Solid fill: OTM premium (primary signal)
+        # - Edge outline: ITM premium (secondary context)
+        # - Edge thickness: proportional to ITM magnitude
 
-        # Add ITM call hedge warning markers with size proportional to magnitude
+        # Plot OTM Call bars with ITM Call outline (orange = bearish hedge signal)
+        for i, (d, otm_c, itm_c, total_c) in enumerate(zip(dates, otm_call, itm_call, total_call)):
+            edge_width, _ = _compute_itm_edge_style(itm_c, total_c)
+            ax.bar(d, otm_c, width=bar_width_premium,
+                   color=COLORS["otm_call"], alpha=0.85,
+                   edgecolor=COLORS["itm_call"] if edge_width > 0 else "none",
+                   linewidth=edge_width, zorder=2)
+
+        # Plot OTM Put bars with ITM Put outline (teal = bullish confidence signal)
+        for i, (d, otm_p, itm_p, total_p) in enumerate(zip(dates, otm_put, itm_put, total_put)):
+            edge_width, _ = _compute_itm_edge_style(itm_p, total_p)
+            ax.bar(d, -otm_p, width=bar_width_premium,
+                   color=COLORS["otm_put"], alpha=0.85,
+                   edgecolor=COLORS["itm_put"] if edge_width > 0 else "none",
+                   linewidth=edge_width, zorder=2)
+
+        # Warning triangle only for extreme hedging (>50% ITM calls)
         for i, (d, itm_c, total_c) in enumerate(zip(dates, itm_call, total_call)):
-            if total_c > 0 and (itm_c / total_c) > itm_call_hedge_threshold:
-                # Scale marker size based on ITM magnitude (min 60, max 200)
-                itm_ratio = itm_c / total_c
-                marker_size = min(200, max(60, 60 + (itm_ratio - itm_call_hedge_threshold) * 400))
-                ax.scatter(d, otm_call[i] + 0.5, marker='^', s=marker_size,
+            if total_c > 0 and (itm_c / total_c) > 0.50:
+                ax.scatter(d, otm_call[i] + 0.3, marker='^', s=80,
                           color=COLORS["hedge_warning"], edgecolor="black",
                           linewidth=0.5, zorder=5)
 
+        # Updated legend with 4 entries showing outline styling
         legend_handles = [
-            Patch(facecolor=COLORS["otm_call"], edgecolor="none", alpha=0.85, label="OTM Calls (Bullish)"),
-            Patch(facecolor=COLORS["otm_put"], edgecolor="none", alpha=0.85, label="OTM Puts (Bearish)"),
-            Line2D([0], [0], marker='^', color='none', markerfacecolor=COLORS["hedge_warning"],
-                   markeredgecolor="black", markersize=8, label="ITM Hedge Warning"),
+            Patch(facecolor=COLORS["otm_call"], edgecolor="none", alpha=0.85,
+                  label="OTM Calls (Bullish)"),
+            Patch(facecolor=COLORS["otm_call"], edgecolor=COLORS["itm_call"],
+                  linewidth=2, alpha=0.85, label="+ ITM Hedge"),
+            Patch(facecolor=COLORS["otm_put"], edgecolor="none", alpha=0.85,
+                  label="OTM Puts (Bearish)"),
+            Patch(facecolor=COLORS["otm_put"], edgecolor=COLORS["itm_put"],
+                  linewidth=2, alpha=0.85, label="+ ITM Bullish"),
         ]
         max_val = max(otm_call.max() if len(otm_call) > 0 else 0,
                       otm_put.max() if len(otm_put) > 0 else 0)

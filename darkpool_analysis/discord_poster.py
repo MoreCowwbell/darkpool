@@ -211,11 +211,30 @@ def post_summary_dashboard(webhook_url: str, dashboard_path: Path, date_str: str
 
 
 def post_all_tickers_dashboard(webhook_url: str, dashboard_path: Path, date_str: str) -> bool:
-    """Post all-tickers dashboard to Discord."""
+    """Post all-tickers dashboard to Discord (deprecated, use post_category_table)."""
     return post_image_to_discord(
         webhook_url,
         dashboard_path,
         title=f"All Tickers Dashboard - {date_str}",
+    )
+
+
+def post_category_table(webhook_url: str, table_path: Path, category: str, date_str: str) -> bool:
+    """Post a category summary table to Discord.
+
+    Args:
+        webhook_url: Discord webhook URL
+        table_path: Path to the category table PNG
+        category: Category name (e.g., "SECTOR", "THEMATIC", "SINGLE")
+        date_str: Date string for the title
+
+    Returns:
+        True if successful, False otherwise
+    """
+    return post_image_to_discord(
+        webhook_url,
+        table_path,
+        title=f"{category} Summary - {date_str}",
     )
 
 

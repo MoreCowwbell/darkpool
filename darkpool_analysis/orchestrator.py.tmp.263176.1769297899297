@@ -515,10 +515,12 @@ def main() -> None:
         logging.info("Posting outputs to Discord...")
         date_str = date_subfolder
 
-        # Post daily metrics tables
+        # Post daily metrics tables (excludes dashboards)
         if config.post_discord_tables and config.render_tables:
             try:
-                table_pngs = list(table_output_dir.glob("*.png"))
+                # Filter out dashboard PNGs, only post metrics tables
+                table_pngs = [p for p in table_output_dir.glob("*.png")
+                              if not p.name.startswith("All_Tickers_Dashboard")]
                 if table_pngs:
                     # Post the main table (largest file typically)
                     main_table = max(table_pngs, key=lambda p: p.stat().st_size)

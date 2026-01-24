@@ -1006,7 +1006,8 @@ def render_sector_summary(
     title: str = "Sector Summary Dashboard",
     max_dates: int = 10,
     output_prefix: Optional[str] = None,
-) -> tuple[Path, Path]:
+    png_only: bool = False,
+) -> tuple[Optional[Path], Path]:
     """
     Main entry point - render sector summary dashboard as HTML and PNG.
 
@@ -1018,9 +1019,10 @@ def render_sector_summary(
         title: Page title
         max_dates: Maximum number of dates to show per ticker (default 10)
         output_prefix: Custom prefix for output filenames (overrides auto-generated name)
+        png_only: If True, skip HTML file creation and return (None, png_path)
 
     Returns:
-        Tuple of (html_path, png_path)
+        Tuple of (html_path, png_path). html_path is None if png_only=True.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1079,14 +1081,125 @@ def render_sector_summary(
         html_path, png_path = _resolve_unique_output_paths(output_dir, base_name)
 
         html_path.write_text(full_html, encoding="utf-8")
-        logger.info("Saved HTML: %s", html_path)
+        if not png_only:
+            logger.info("Saved HTML: %s", html_path)
 
         render_html_to_png(html_path, png_path)
+
+        # If png_only, delete the temporary HTML file
+        if png_only:
+            try:
+                html_path.unlink()
+            except Exception as exc:
+                logger.warning("Could not delete temp HTML: %s", exc)
+            return None, png_path
 
         return html_path, png_path
 
     finally:
         conn.close()
+
+
+# =============================================================================
+# Category Tables Rendering
+# =============================================================================
+
+
+def _get_single_tickers(all_tickers: list[str], category_map: dict[str, list[str]]) -> list[str]:
+    """Return tickers not belonging to any defined category.
+
+    These are user-specified tickers that don't fall into SECTOR, THEMATIC, etc.
+    """
+    categorized = set()
+    for tickers in category_map.values():
+        categorized.update(tickers)
+    return [t for t in all_tickers if t not in categorized]
+
+
+def render_category_tables(
+    db_path: Path,
+    output_dir: Path,
+    dates: list[date],
+    all_tickers: list[str],
+    max_dates: int = 10,
+    fetch_indices_constituents: bool = False,
+) -> dict[str, Optional[Path]]:
+    """
+    Render individual summary tables for each category (PNG only).
+
+    Args:
+        db_path: Path to DuckDB database
+        output_dir: Directory for output files (tables_summary/<date>/)
+        dates: List of dates to include
+        all_tickers: Full list of tickers being analyzed
+        max_dates: Maximum dates per ticker panel
+        fetch_indices_constituents: If True, include constituents in tables
+
+    Returns:
+        Dict mapping category name to png_path (None if category was empty/skipped).
+    """
+    try:
+        from .config import get_category_tickers, ALL_TICKER_MAPS, _expand_with_constituents
+    except ImportError:
+        from config import get_category_tickers, ALL_TICKER_MAPS, _expand_with_constituents
+
+    category_map = get_category_tickers()
+    results: dict[str, Optional[Path]] = {}
+
+    # Convert all_tickers to a set for fast lookup
+    all_tickers_set = set(all_tickers)
+
+    for category, category_tickers in category_map.items():
+        # Filter to tickers present in all_tickers
+        tickers = [t for t in category_tickers if t in all_tickers_set]
+
+        # Add constituents if enabled
+        if fetch_indices_constituents and tickers:
+            tickers = _expand_with_constituents(tickers, ALL_TICKER_MAPS)
+
+        if not tickers:
+            logger.warning("Category %s has no tickers in the current run, skipping", category)
+            results[category] = None
+            continue
+
+        try:
+            _, png_path = render_sector_summary(
+                db_path=db_path,
+                output_dir=output_dir,
+                dates=dates,
+                tickers=tickers,
+                max_dates=max_dates,
+                title=f"{category} Summary Dashboard",
+                output_prefix=f"{category}_Summary",
+                png_only=True,
+            )
+            results[category] = png_path
+            logger.info("Rendered %s category table: %s", category, png_path)
+        except Exception as exc:
+            logger.error("Failed to render %s category table: %s", category, exc)
+            results[category] = None
+
+    # Handle SINGLE category - tickers not in any defined category
+    single_tickers = _get_single_tickers(all_tickers, category_map)
+    if single_tickers:
+        try:
+            _, png_path = render_sector_summary(
+                db_path=db_path,
+                output_dir=output_dir,
+                dates=dates,
+                tickers=single_tickers,
+                max_dates=max_dates,
+                title="Single Tickers Dashboard",
+                output_prefix="SINGLE_Summary",
+                png_only=True,
+            )
+            results["SINGLE"] = png_path
+            logger.info("Rendered SINGLE category table: %s", png_path)
+        except Exception as exc:
+            logger.error("Failed to render SINGLE category table: %s", exc)
+            results["SINGLE"] = None
+
+    return results
 
 
 # =============================================================================
