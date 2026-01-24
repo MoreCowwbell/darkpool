@@ -114,13 +114,13 @@ EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 # User-facing defaults (most commonly edited)
 # -----------------------------------------------------------------------------
 
-TICKERS_TYPE =  ["ALL"]  # ["SECTOR", "THEMATIC", "GLOBAL", "COMMODITIES", "MAG8", "RATES", "CRYPTO", "SPECULATIVE"], ["SINGLE"], ["ALL"]
-DEFAULT_TICKERS = ["AMD" ]
+TICKERS_TYPE =  ["SINGLE"]  # ["SECTOR", "THEMATIC", "GLOBAL", "COMMODITIES", "MAG8", "RATES", "CRYPTO", "SPECULATIVE"], ["SINGLE"], ["ALL"]
+DEFAULT_TICKERS = ["META", "MSFT"]
 FETCH_INDICES_CONSTITUENTS = False  # When True, also fetch constituents of index/ETF tickers
 
 DEFAULT_TARGET_DATE = "TODAY"  # "TODAY" for current date, or specific date like "2026-01-08"
 DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
-DEFAULT_BACKFILL_COUNT = 30  # Number of periods to fetch (days for daily, weeks for weekly)
+DEFAULT_BACKFILL_COUNT = 280  # Number of periods to fetch (days for daily, weeks for weekly)
 
 DEFAULT_MARKET_TZ = "US/Eastern"
 DEFAULT_RTH_START = "09:30"
@@ -177,7 +177,7 @@ POST_DISCORD_PRICE_CHARTS = False        # Post OHLC price charts
 POST_DISCORD_SUMMARY_DASHBOARD = True   # Post sector summary dashboard
 POST_DISCORD_COMBINATION_PLOT = False    # Post combined multi-ticker plot
 POST_DISCORD_CIRCOS = True              # Post circos chord diagram
-POST_DISCORD_WTD_VWBR = True            # Post WTD VWBR plots
+POST_DISCORD_WTD_VWBR = False            # Post WTD VWBR plots
 
 
 # -----------------------------------------------------------------------------

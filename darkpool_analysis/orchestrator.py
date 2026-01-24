@@ -596,7 +596,7 @@ def main() -> None:
         # Post circos plot
         if config.post_discord_circos and config.render_circos:
             try:
-                circos_pngs = list(circos_output_dir.glob("circos_*.png"))
+                circos_pngs = list(circos_output_dir.glob("*/circos_*.png"))
                 if circos_pngs:
                     post_circos_plot(config.discord_webhook_url, circos_pngs[0], date_str)
             except Exception as exc:

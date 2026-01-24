@@ -47,6 +47,7 @@ GLOBAL_MACRO = {
         "USO": ["CL=F", "BZ=F", "XOM", "CVX", "COP", "OXY", "SLB", "MPC", "VLO", "PSX"],  # Oil
         "VGK": ["ASML", "SAP", "NVS", "AZN", "SHEL", "HSBC", "TTE", "SNY", "UL", "NOVN.SW"],  # Europe
         "VIXY": ["VX=F", "VIX", "SVXY", "UVXY", "VXX", "SPX", "ES=F", "SKEW", "MOVE", "VVIX"],  # VIX / Volatility
+        "I:SPX": [],  # S&P 500 Index
 }
 
 COMMODITIES = {

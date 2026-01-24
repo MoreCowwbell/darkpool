@@ -1,4 +1,5 @@
 # Agent Instructions for This Repository
+> This file serves as the project-specific CLAUDE.md equivalent. See also: AGENT_CONTEXT.md, AGENT_PROJECT_CONVENTION.md
 
 ## Mission and Starting Point
 - Always read AGENT_CONTEXT.md before coding.

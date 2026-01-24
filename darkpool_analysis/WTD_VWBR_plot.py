@@ -636,9 +636,9 @@ def run_wtd_vwbr(tickers: list[str] | None = None,
     failed_tickers = []
 
     for ticker in tickers:
-        print(f"\n{'─'*40}")
+        print(f"\n{'-'*40}")
         print(f"Processing: {ticker}")
-        print(f"{'─'*40}")
+        print(f"{'-'*40}")
 
         try:
             lookback = ROLLING_LOOKBACK_DAYS if BUY_SELL_SIGNAL == 'Rolling_Zscore' else 0
