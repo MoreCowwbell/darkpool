@@ -43,11 +43,12 @@ COLORS = {
     # Options premium colors (TOS style)
     "call_premium": "#6478c8",  # Steel blue (like TOS alternate)
     "put_premium": "#cc0000",   # Deep red
-    # ITM/OTM breakdown colors
-    "otm_call": "#6478c8",      # Bright steel blue (OTM calls - bullish signal)
-    "itm_call": "#3d4a7a",      # Muted steel blue (ITM calls - hedge signal)
-    "otm_put": "#cc0000",       # Bright red (OTM puts - directional)
-    "itm_put": "#7a3d3d",       # Muted red (ITM puts - ignored per WTD)
+    # ITM/OTM breakdown colors - Bullish/Bearish interpretation
+    # Cyan/Teal tones = Bullish pressure, Red/Orange tones = Bearish pressure
+    "otm_call": "#00BFFF",      # Cyan - OTM Calls (Bullish speculation)
+    "itm_call": "#FF6B35",      # Orange - ITM Calls (Bearish hedge signal)
+    "otm_put": "#FF4444",       # Red - OTM Puts (Bearish speculation)
+    "itm_put": "#00CED1",       # Teal - ITM Puts (Bullish - sold protective puts)
     "hedge_warning": "#ffd700", # Yellow for ITM call hedge warning
 }
 
@@ -243,6 +244,76 @@ def fetch_options_premium_data(
     return df
 
 
+def _draw_directional_gauge(ax, directional_score: float, max_range: float = 100.0) -> None:
+    """
+    Draw a horizontal bullish/bearish gauge in the top-left corner.
+
+    Args:
+        ax: matplotlib axis
+        directional_score: The computed score (positive=bullish, negative=bearish)
+        max_range: Maximum absolute value for the gauge scale
+    """
+    from matplotlib.patches import Rectangle
+
+    # Clamp score to range
+    clamped_score = max(-max_range, min(max_range, directional_score))
+    normalized = clamped_score / max_range  # -1 to +1
+
+    # Gauge dimensions (in axes coordinates)
+    gauge_left = 0.02
+    gauge_bottom = 0.82
+    gauge_width = 0.22
+    gauge_height = 0.10
+
+    # Draw gauge background (gradient from red to green)
+    # Left half (bearish - red)
+    ax.add_patch(Rectangle(
+        (gauge_left, gauge_bottom), gauge_width / 2, gauge_height,
+        transform=ax.transAxes, facecolor="#FF4444", alpha=0.3,
+        edgecolor="none", zorder=10
+    ))
+    # Right half (bullish - green)
+    ax.add_patch(Rectangle(
+        (gauge_left + gauge_width / 2, gauge_bottom), gauge_width / 2, gauge_height,
+        transform=ax.transAxes, facecolor="#00FF88", alpha=0.3,
+        edgecolor="none", zorder=10
+    ))
+
+    # Draw gauge border
+    ax.add_patch(Rectangle(
+        (gauge_left, gauge_bottom), gauge_width, gauge_height,
+        transform=ax.transAxes, facecolor="none",
+        edgecolor=COLORS.get("grid", "#2a2a2d"), linewidth=1, zorder=11
+    ))
+
+    # Draw center line
+    center_x = gauge_left + gauge_width / 2
+    ax.plot([center_x, center_x], [gauge_bottom, gauge_bottom + gauge_height],
+            transform=ax.transAxes, color=COLORS.get("text", "#e6e6e6"),
+            linewidth=1, zorder=12)
+
+    # Draw marker/needle position
+    marker_x = gauge_left + gauge_width / 2 + (normalized * gauge_width / 2)
+    marker_color = "#00FF88" if directional_score >= 0 else "#FF4444"
+    ax.plot(marker_x, gauge_bottom + gauge_height / 2, "o",
+            transform=ax.transAxes, color=marker_color,
+            markersize=8, markeredgecolor="white", markeredgewidth=1, zorder=13)
+
+    # Draw score label
+    label = f"{directional_score:+.1f}M"
+    ax.text(marker_x, gauge_bottom - 0.02, label,
+            transform=ax.transAxes, fontsize=8,
+            ha="center", va="top", color=marker_color, fontweight="bold", zorder=13)
+
+    # Draw gauge labels
+    ax.text(gauge_left, gauge_bottom + gauge_height + 0.01, "Bearish",
+            transform=ax.transAxes, fontsize=6, ha="left", va="bottom",
+            color="#FF4444", zorder=13)
+    ax.text(gauge_left + gauge_width, gauge_bottom + gauge_height + 0.01, "Bullish",
+            transform=ax.transAxes, fontsize=6, ha="right", va="bottom",
+            color="#00FF88", zorder=13)
+
+
 def _plot_options_premium_panel(
     ax,
     prem_df: pd.DataFrame,
@@ -311,27 +382,37 @@ def _plot_options_premium_panel(
 
     elif display_mode == "WTD_STYLE":
         # WTD style: OTM only with ITM call hedge warning
+        # OTM Calls = Cyan (bullish), OTM Puts = Red (bearish)
         ax.bar(dates, otm_call, width=bar_width_premium, color=COLORS["otm_call"],
                alpha=0.85, edgecolor="none", zorder=2)
         ax.bar(dates, -otm_put, width=bar_width_premium, color=COLORS["otm_put"],
                alpha=0.85, edgecolor="none", zorder=2)
 
-        # Add ITM call hedge warning markers where threshold exceeded
+        # Add ITM call hedge warning markers with size proportional to magnitude
         for i, (d, itm_c, total_c) in enumerate(zip(dates, itm_call, total_call)):
             if total_c > 0 and (itm_c / total_c) > itm_call_hedge_threshold:
-                # Plot warning triangle above the bar
-                ax.scatter(d, otm_call[i] + 0.5, marker='^', s=80,
+                # Scale marker size based on ITM magnitude (min 60, max 200)
+                itm_ratio = itm_c / total_c
+                marker_size = min(200, max(60, 60 + (itm_ratio - itm_call_hedge_threshold) * 400))
+                ax.scatter(d, otm_call[i] + 0.5, marker='^', s=marker_size,
                           color=COLORS["hedge_warning"], edgecolor="black",
                           linewidth=0.5, zorder=5)
 
         legend_handles = [
-            Patch(facecolor=COLORS["otm_call"], edgecolor="none", alpha=0.85, label="OTM Calls"),
-            Patch(facecolor=COLORS["otm_put"], edgecolor="none", alpha=0.85, label="OTM Puts"),
+            Patch(facecolor=COLORS["otm_call"], edgecolor="none", alpha=0.85, label="OTM Calls (Bullish)"),
+            Patch(facecolor=COLORS["otm_put"], edgecolor="none", alpha=0.85, label="OTM Puts (Bearish)"),
             Line2D([0], [0], marker='^', color='none', markerfacecolor=COLORS["hedge_warning"],
-                   markeredgecolor="black", markersize=8, label="ITM Call Hedge"),
+                   markeredgecolor="black", markersize=8, label="ITM Hedge Warning"),
         ]
         max_val = max(otm_call.max() if len(otm_call) > 0 else 0,
                       otm_put.max() if len(otm_put) > 0 else 0)
+
+        # Draw directional gauge if score available
+        if "directional_score" in prem_df.columns:
+            recent_scores = prem_df["directional_score"].dropna()
+            if len(recent_scores) > 0:
+                latest_score = recent_scores.iloc[-1]
+                _draw_directional_gauge(ax, latest_score)
 
     elif display_mode == "FULL_BREAKDOWN":
         # Full breakdown: stacked bars for all 4 categories
@@ -348,13 +429,20 @@ def _plot_options_premium_panel(
                alpha=0.85, edgecolor="none", zorder=2, bottom=-otm_put)
 
         legend_handles = [
-            Patch(facecolor=COLORS["otm_call"], edgecolor="none", alpha=0.85, label="OTM Calls"),
-            Patch(facecolor=COLORS["itm_call"], edgecolor="none", alpha=0.85, label="ITM Calls"),
-            Patch(facecolor=COLORS["otm_put"], edgecolor="none", alpha=0.85, label="OTM Puts"),
-            Patch(facecolor=COLORS["itm_put"], edgecolor="none", alpha=0.85, label="ITM Puts"),
+            Patch(facecolor=COLORS["otm_call"], edgecolor="none", alpha=0.85, label="OTM Calls (Bullish)"),
+            Patch(facecolor=COLORS["itm_call"], edgecolor="none", alpha=0.85, label="ITM Calls (Hedge)"),
+            Patch(facecolor=COLORS["otm_put"], edgecolor="none", alpha=0.85, label="OTM Puts (Bearish)"),
+            Patch(facecolor=COLORS["itm_put"], edgecolor="none", alpha=0.85, label="ITM Puts (Bullish)"),
         ]
         max_val = max((otm_call + itm_call).max() if len(otm_call) > 0 else 0,
                       (otm_put + itm_put).max() if len(otm_put) > 0 else 0)
+
+        # Draw directional gauge if score available
+        if "directional_score" in prem_df.columns:
+            recent_scores = prem_df["directional_score"].dropna()
+            if len(recent_scores) > 0:
+                latest_score = recent_scores.iloc[-1]
+                _draw_directional_gauge(ax, latest_score)
 
     else:
         # Default to TOTAL if unknown mode
