@@ -133,7 +133,7 @@ EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 # User-facing defaults (most commonly edited)
 # -----------------------------------------------------------------------------
 
-TICKERS_TYPE =  ["SINGLE"]  # ["SECTOR", "THEMATIC", "GLOBAL", "COMMODITIES", "MAG8", "RATES", "CRYPTO", "SPECULATIVE"], ["SINGLE"], ["ALL"]
+TICKERS_TYPE =  ["ALL"]  # ["SECTOR", "THEMATIC", "GLOBAL", "COMMODITIES", "MAG8", "RATES", "CRYPTO", "SPECULATIVE"], ["SINGLE"], ["ALL"]
 DEFAULT_TICKERS = ["META"]
 FETCH_INDICES_CONSTITUENTS = False  # When True, also fetch constituents of index/ETF tickers
 
@@ -238,7 +238,7 @@ DEFAULT_FETCH_OPTIONS_PREMIUM = True  # Enable/disable options premium fetching
 # - "TOTAL": Current behavior - total call/put premium (backwards compatible)
 # - "WTD_STYLE": OTM focus with ITM call hedge warning (WTD's recommended approach)
 # - "FULL_BREAKDOWN": Show all 4 categories (OTM/ITM x Call/Put)
-DEFAULT_OPTIONS_PREMIUM_DISPLAY_MODE = "WTD_STYLE"
+DEFAULT_OPTIONS_PREMIUM_DISPLAY_MODE = "FULL_BREAKDOWN"
 
 # Threshold for ITM call hedge warning (% of total call premium)
 # When ITM calls exceed this ratio, shows warning marker in WTD_STYLE mode
