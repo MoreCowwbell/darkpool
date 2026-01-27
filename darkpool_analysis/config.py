@@ -139,7 +139,7 @@ FETCH_INDICES_CONSTITUENTS = False  # When True, also fetch constituents of inde
 
 DEFAULT_TARGET_DATE = "TODAY"  # "TODAY" for current date, or specific date like "2026-01-08"
 DEFAULT_FETCH_MODE = "daily"  # "single", "daily", or "weekly"
-DEFAULT_BACKFILL_COUNT = 38  # Number of periods to fetch (days for daily, weeks for weekly)
+DEFAULT_BACKFILL_COUNT = 30  # Number of periods to fetch (days for daily, weeks for weekly)
 
 DEFAULT_MARKET_TZ = "US/Eastern"
 DEFAULT_RTH_START = "09:30"
@@ -185,17 +185,16 @@ DEFAULT_EXPORT_CSV = False  # Export tables to CSV files
 # Discord Webhook Posting
 # -----------------------------------------------------------------------------
 # Master toggle: when False, nothing is posted to Discord
-POST_TO_DISCORD = False
+POST_TO_DISCORD = True
 
 # Individual toggles (only apply when POST_TO_DISCORD = True)
-POST_DISCORD_TABLES = False              # Post daily metrics tables
 POST_DISCORD_CATEGORY_TABLES = True      # Post individual category tables
-POST_DISCORD_METRICS_PLOTS = False       # Post metrics plots (plotter.py)
-POST_DISCORD_PRICE_CHARTS = False        # Post OHLC price charts
-POST_DISCORD_COMBINATION_PLOT = False    # Post combined multi-ticker plot
+POST_DISCORD_TABLES = False              # Post daily metrics tables
 POST_DISCORD_CIRCOS = True              # Post circos chord diagram
+POST_DISCORD_PRICE_CHARTS = False        # Post OHLC price charts
 POST_DISCORD_WTD_VWBR = False            # Post WTD VWBR plots
-
+POST_DISCORD_METRICS_PLOTS = False       # Post metrics plots (plotter.py)
+POST_DISCORD_COMBINATION_PLOT = False    # Post combined multi-ticker plot
 
 # -----------------------------------------------------------------------------
 # Provenance and scoring controls
