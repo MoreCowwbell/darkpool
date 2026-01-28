@@ -511,6 +511,7 @@ def _plot_options_premium_panel(
     legend = ax.legend(
         handles=legend_handles,
         loc="upper right",
+        ncol=len(legend_handles),
         fontsize=7,
         frameon=True,
         facecolor=COLORS["background"],
