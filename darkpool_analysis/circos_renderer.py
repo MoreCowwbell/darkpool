@@ -2222,10 +2222,8 @@ def render_circos(
             except Exception as e:
                 logger.warning("Could not load watermark: %s", e)
 
-        # Save figure
-        date_tag = end_date_dt.strftime("%Y-%m-%d")
-        dated_output_dir = output_dir / date_tag
-        dated_output_dir.mkdir(parents=True, exist_ok=True)
+        # Save figure (output_dir already created at line 1313)
+        dated_output_dir = output_dir
         if window_dates_sorted:
             start_dt = str(window_dates_sorted[0]).replace('-', '')
             end_dt = str(window_dates_sorted[-1]).replace('-', '')
