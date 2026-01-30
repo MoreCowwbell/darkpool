@@ -96,6 +96,7 @@ SPECULATIVE_TICKERS = [
     "SPOT",
     "SHOP",
     "RDDT",
+    "SOX",
 ]
 
 RATES_CREDIT = {
