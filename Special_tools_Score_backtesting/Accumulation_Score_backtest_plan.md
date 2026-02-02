@@ -243,6 +243,68 @@ def classify_trend(close, sma_20, sma_20_prev):
 
 **Liquidity Filter**: Only use options metrics if ticker has avg daily options volume > 10,000 contracts
 
+### 3.2.1 Future Implementation: Abnormal Options Activity Detection (TODO)
+
+**Status**: Not yet implemented. Infrastructure exists in `options_context.py` but not wired into backtest.
+
+**Core Hypothesis to Test:**
+> Abnormal increase in ITM/OTM put and call activity in the 0-5 days preceding a significant accumulation or VWBR signal may amplify signal quality.
+
+**Metrics to Track:**
+
+| Metric | Definition | Why It Matters |
+|--------|------------|----------------|
+| `itm_call_volume_z` | Z-score of ITM call volume vs 20d avg | Unusual ITM call buying = bullish positioning |
+| `otm_call_volume_z` | Z-score of OTM call volume vs 20d avg | Speculative call buying = anticipation |
+| `itm_put_volume_z` | Z-score of ITM put volume vs 20d avg | Defensive put buying or hedging |
+| `otm_put_volume_z` | Z-score of OTM put volume vs 20d avg | Fear/protection buying |
+| `itm_otm_call_ratio` | ITM calls / OTM calls | Higher = more conviction (in-the-money) |
+| `itm_otm_put_ratio` | ITM puts / OTM puts | Higher = hedging vs speculation |
+| `call_put_ratio_5d_chg` | Change in put/call ratio over 5 days | Direction of sentiment shift |
+| `total_premium_5d_chg` | Change in total premium traded over 5 days | Size/conviction increasing? |
+
+**Lookback Windows:**
+- T-0: Day of signal
+- T-1 to T-5: 5 trading days preceding signal
+- Compare each day's activity to 20-day rolling average
+
+**Signal Quality Boost Logic (Proposed):**
+```python
+def options_activity_boost(signal_row, options_lookback_df):
+    """
+    Check for abnormal options activity in 0-5 days before signal.
+    Returns quality boost multiplier (1.0 = no boost, up to 1.5 for strong confirmation).
+    """
+    boost = 1.0
+
+    # Bullish: Abnormal ITM call buying (z > 2) in lookback window
+    if options_lookback_df['itm_call_volume_z'].max() > 2.0:
+        boost += 0.15
+
+    # Bullish: OTM call volume spike with declining put/call ratio
+    if (options_lookback_df['otm_call_volume_z'].max() > 1.5 and
+        options_lookback_df['call_put_ratio_5d_chg'].iloc[-1] > 0):
+        boost += 0.10
+
+    # Bullish: Premium size increasing (institutions scaling in)
+    if options_lookback_df['total_premium_5d_chg'].iloc[-1] > 0.20:  # 20% increase
+        boost += 0.10
+
+    # Contrarian: High OTM put activity BUT accumulation signal = squeeze setup
+    if (options_lookback_df['otm_put_volume_z'].max() > 2.0 and
+        signal_row['score_value'] >= 75):
+        boost += 0.15  # Potential short squeeze
+
+    return min(boost, 1.5)  # Cap at 1.5x
+```
+
+**Implementation Steps (When Ready):**
+1. Add ITM/OTM volume columns to `options_premium_daily` or create derived table
+2. Extend `options_context.py` with `get_options_lookback()` function
+3. Implement `add_options_context()` function (currently missing)
+4. Wire options loading into `parameter_sweep.py` and `walk_forward.py`
+5. Add options quality boost to signal classification logic
+
 ### 3.3 Market Regime Filter
 
 | Regime | Definition | When to Use |

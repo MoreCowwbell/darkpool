@@ -22,6 +22,7 @@ import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.patches import Patch, Rectangle
 from scipy.interpolate import PchipInterpolator
 
 # Add project root to path
@@ -29,7 +30,7 @@ project_root = Path(__file__).parent.parent
 if (project_root / 'darkpool_analysis').exists():
     sys.path.insert(0, str(project_root))
 
-from darkpool_analysis.config import load_config
+from darkpool_analysis.config import load_config, DAILY_EXPIRATION_TICKERS
 
 # =============================================================================
 # CONFIGURATION
@@ -77,6 +78,11 @@ FIG_HEIGHT_RATIO = 1.0
 FIG_DPI = 100
 FIGSIZE_PX = None
 
+# Options premium display settings
+OPTIONS_PREMIUM_DISPLAY_MODE = 'WTD_STYLE'  # 'TOTAL', 'WTD_STYLE', or 'FULL_BREAKDOWN'
+ITM_CALL_HEDGE_THRESHOLD = 0.30
+MIN_PREMIUM_HIGHLIGHT = 2.0
+
 # =============================================================================
 # STYLING CONSTANTS
 # =============================================================================
@@ -95,6 +101,15 @@ COLORS = {
     'purple': '#b026ff',
     'neutral': '#6b6b6b',
     'blue': '#4aa3ff',
+    # Options premium colors (TOS style)
+    'call_premium': '#6478c8',  # Steel blue (like TOS alternate)
+    'put_premium': '#cc0000',   # Deep red
+    # ITM/OTM breakdown colors - Bullish/Bearish interpretation
+    'otm_call': '#00BFFF',      # Cyan - OTM Calls (Bullish speculation)
+    'itm_call': '#FF6B35',      # Orange - ITM Calls (Bearish hedge signal)
+    'otm_put': '#FF4444',       # Red - OTM Puts (Bearish speculation)
+    'itm_put': '#00CED1',       # Teal - ITM Puts (Bullish - sold protective puts)
+    'hedge_warning': '#ffd700', # Yellow for ITM call hedge warning
 }
 GRID_ALPHA = 0.18
 OHLC_LINE_WIDTH = 1.2
@@ -227,10 +242,335 @@ def _plot_ohlc_bars(ax, df_ohlc, x_indices):
 
 
 # =============================================================================
+# OPTIONS PREMIUM HELPER FUNCTIONS
+# =============================================================================
+def _compute_itm_edge_style(itm_value: float, total_value: float) -> tuple[float, float]:
+    """
+    Compute edge width based on ITM proportion for WTD_STYLE visualization.
+
+    Args:
+        itm_value: ITM premium value
+        total_value: Total premium value (ITM + OTM)
+
+    Returns:
+        tuple: (edge_width, edge_alpha) - width 0 means no outline
+    """
+    if total_value <= 0 or itm_value <= 0:
+        return (0, 0)
+
+    itm_ratio = itm_value / total_value
+
+    # Below 5% visibility threshold - no outline
+    if itm_ratio < 0.05:
+        return (0, 0)
+
+    # Scale from 5% to 50% ITM ratio
+    # 5% = 0.5px, 50%+ = 3.5px
+    normalized = min(1.0, (itm_ratio - 0.05) / 0.45)
+    edge_width = 0.5 + normalized * 3.0
+
+    return (edge_width, 1.0)
+
+
+def _draw_directional_gauge(ax, directional_score: float, max_range: float = 100.0) -> None:
+    """
+    Draw a horizontal bullish/bearish gauge in the top-left corner.
+
+    Args:
+        ax: matplotlib axis
+        directional_score: The computed score (positive=bullish, negative=bearish)
+        max_range: Maximum absolute value for the gauge scale
+    """
+    # Clamp score to range
+    clamped_score = max(-max_range, min(max_range, directional_score))
+    normalized = clamped_score / max_range  # -1 to +1
+
+    # Gauge dimensions (in axes coordinates)
+    gauge_left = 0.02
+    gauge_bottom = 0.85
+    gauge_width = 0.22
+    gauge_y = gauge_bottom + 0.02
+
+    # Draw horizontal grey line
+    ax.plot([gauge_left, gauge_left + gauge_width], [gauge_y, gauge_y],
+            transform=ax.transAxes, color="#6b6b6b", linewidth=2, zorder=10, solid_capstyle="round")
+
+    # Draw center tick mark
+    center_x = gauge_left + gauge_width / 2
+    ax.plot([center_x, center_x], [gauge_y - 0.015, gauge_y + 0.015],
+            transform=ax.transAxes, color="#6b6b6b", linewidth=1.5, zorder=11)
+
+    # Draw colored dot at position
+    marker_x = gauge_left + gauge_width / 2 + (normalized * gauge_width / 2)
+    marker_color = "#00FF88" if directional_score >= 0 else "#FF4444"
+    ax.plot(marker_x, gauge_y, "o",
+            transform=ax.transAxes, color=marker_color,
+            markersize=10, markeredgecolor="white", markeredgewidth=1.5, zorder=13)
+
+    # Draw score label below the dot
+    label = f"{directional_score:+.1f}M"
+    ax.text(marker_x, gauge_y - 0.04, label,
+            transform=ax.transAxes, fontsize=7,
+            ha="center", va="top", color=marker_color, fontweight="bold", zorder=13)
+
+    # Draw gauge labels
+    ax.text(gauge_left, gauge_y + 0.025, "Bearish",
+            transform=ax.transAxes, fontsize=6, ha="left", va="bottom",
+            color="#FF4444", zorder=13)
+    ax.text(gauge_left + gauge_width, gauge_y + 0.025, "Bullish",
+            transform=ax.transAxes, fontsize=6, ha="right", va="bottom",
+            color="#00FF88", zorder=13)
+
+
+def _plot_options_premium_panel(
+    ax,
+    prem_df: pd.DataFrame,
+    price_df: pd.DataFrame,
+    bar_width: float,
+    expiration_type: str,
+    min_premium_highlight: float = 2.0,
+    display_mode: str = "WTD_STYLE",
+    itm_call_hedge_threshold: float = 0.30,
+) -> None:
+    """
+    Plot options premium as asymmetrical histogram with configurable display modes.
+
+    Display modes:
+    - TOTAL: Original behavior - total call/put premium (backwards compatible)
+    - WTD_STYLE: OTM focus with ITM call hedge warning (per WTD's methodology)
+    - FULL_BREAKDOWN: Show all 4 categories (OTM/ITM x Call/Put) as stacked bars
+    """
+    if prem_df.empty:
+        ax.text(
+            0.5, 0.5, f"No {expiration_type} options data",
+            ha="center", va="center", transform=ax.transAxes,
+            color=COLORS["neutral"], fontsize=10,
+        )
+        ax.set_ylabel("Premium ($M)", color=COLORS["white"], fontsize=10)
+        return
+
+    prem_df = prem_df.copy()
+    dates = mdates.date2num(prem_df["date"])
+    bar_width_premium = bar_width * 0.6
+
+    # Extract data based on display mode
+    total_call = prem_df["total_call_premium"].fillna(0).values
+    total_put = prem_df["total_put_premium"].fillna(0).values
+
+    # Check if ITM/OTM columns exist (for backwards compatibility with old data)
+    has_itm_otm = "otm_call_premium" in prem_df.columns and prem_df["otm_call_premium"].notna().any()
+
+    if has_itm_otm:
+        otm_call = prem_df["otm_call_premium"].fillna(0).values
+        itm_call = prem_df["itm_call_premium"].fillna(0).values
+        otm_put = np.abs(prem_df["otm_put_premium"].fillna(0).values)
+        itm_put = np.abs(prem_df["itm_put_premium"].fillna(0).values)
+    else:
+        # Fallback to total if ITM/OTM not available
+        otm_call = total_call
+        itm_call = np.zeros_like(total_call)
+        otm_put = total_put
+        itm_put = np.zeros_like(total_put)
+
+    legend_handles = []
+
+    if display_mode == "TOTAL" or not has_itm_otm:
+        # Original behavior: total call/put premium
+        ax.bar(dates, total_call, width=bar_width_premium, color=COLORS["call_premium"],
+               alpha=0.85, edgecolor="none", zorder=2)
+        ax.bar(dates, -total_put, width=bar_width_premium, color=COLORS["put_premium"],
+               alpha=0.85, edgecolor="none", zorder=2)
+
+        legend_handles = [
+            Patch(facecolor=COLORS["call_premium"], edgecolor="none", alpha=0.85, label="Calls"),
+            Patch(facecolor=COLORS["put_premium"], edgecolor="none", alpha=0.85, label="Puts"),
+        ]
+        max_val = max(total_call.max() if len(total_call) > 0 else 0,
+                      total_put.max() if len(total_put) > 0 else 0)
+
+    elif display_mode == "WTD_STYLE":
+        # WTD style: OTM focus with ITM influence shown via outline edges
+        # - Solid fill: OTM premium (primary signal)
+        # - Edge outline: ITM premium (secondary context)
+        # - Edge thickness: proportional to ITM magnitude
+
+        # Plot OTM Call bars with ITM Call outline (orange = bearish hedge signal)
+        for i, (d, otm_c, itm_c, total_c) in enumerate(zip(dates, otm_call, itm_call, total_call)):
+            edge_width, _ = _compute_itm_edge_style(itm_c, total_c)
+            ax.bar(d, otm_c, width=bar_width_premium,
+                   color=COLORS["otm_call"], alpha=0.85,
+                   edgecolor=COLORS["itm_call"] if edge_width > 0 else "none",
+                   linewidth=edge_width, zorder=2)
+
+        # Plot OTM Put bars with ITM Put outline (teal = bullish confidence signal)
+        for i, (d, otm_p, itm_p, total_p) in enumerate(zip(dates, otm_put, itm_put, total_put)):
+            edge_width, _ = _compute_itm_edge_style(itm_p, total_p)
+            ax.bar(d, -otm_p, width=bar_width_premium,
+                   color=COLORS["otm_put"], alpha=0.85,
+                   edgecolor=COLORS["itm_put"] if edge_width > 0 else "none",
+                   linewidth=edge_width, zorder=2)
+
+        # Warning triangle only for extreme hedging (>50% ITM calls)
+        for i, (d, itm_c, total_c) in enumerate(zip(dates, itm_call, total_call)):
+            if total_c > 0 and (itm_c / total_c) > 0.50:
+                ax.scatter(d, otm_call[i] + 0.3, marker='^', s=80,
+                          color=COLORS["hedge_warning"], edgecolor="black",
+                          linewidth=0.5, zorder=5)
+
+        # Updated legend with 4 entries showing outline styling
+        legend_handles = [
+            Patch(facecolor=COLORS["otm_call"], edgecolor="none", alpha=0.85,
+                  label="OTM Calls (Bullish)"),
+            Patch(facecolor=COLORS["otm_call"], edgecolor=COLORS["itm_call"],
+                  linewidth=2, alpha=0.85, label="+ ITM Hedge"),
+            Patch(facecolor=COLORS["otm_put"], edgecolor="none", alpha=0.85,
+                  label="OTM Puts (Bearish)"),
+            Patch(facecolor=COLORS["otm_put"], edgecolor=COLORS["itm_put"],
+                  linewidth=2, alpha=0.85, label="+ ITM Bullish"),
+        ]
+        max_val = max(otm_call.max() if len(otm_call) > 0 else 0,
+                      otm_put.max() if len(otm_put) > 0 else 0)
+
+        # Draw directional gauge if score available
+        if "directional_score" in prem_df.columns:
+            recent_scores = prem_df["directional_score"].dropna()
+            if len(recent_scores) > 0:
+                latest_score = recent_scores.iloc[-1]
+                _draw_directional_gauge(ax, latest_score)
+
+    elif display_mode == "FULL_BREAKDOWN":
+        # Full breakdown: stacked bars for all 4 categories
+        # Calls (upward): OTM on bottom, ITM stacked on top
+        ax.bar(dates, otm_call, width=bar_width_premium, color=COLORS["otm_call"],
+               alpha=0.85, edgecolor="none", zorder=2)
+        ax.bar(dates, itm_call, width=bar_width_premium, color=COLORS["itm_call"],
+               alpha=0.85, edgecolor="none", zorder=2, bottom=otm_call)
+
+        # Puts (downward): ITM closer to 0, OTM stacked below
+        ax.bar(dates, -itm_put, width=bar_width_premium, color=COLORS["itm_put"],
+               alpha=0.85, edgecolor="none", zorder=2)
+        ax.bar(dates, -otm_put, width=bar_width_premium, color=COLORS["otm_put"],
+               alpha=0.85, edgecolor="none", zorder=2, bottom=-itm_put)
+
+        legend_handles = [
+            Patch(facecolor=COLORS["otm_call"], edgecolor="none", alpha=0.85, label="OTM Calls (Bullish)"),
+            Patch(facecolor=COLORS["itm_call"], edgecolor="none", alpha=0.85, label="ITM Calls (Hedge)"),
+            Patch(facecolor=COLORS["otm_put"], edgecolor="none", alpha=0.85, label="OTM Puts (Bearish)"),
+            Patch(facecolor=COLORS["itm_put"], edgecolor="none", alpha=0.85, label="ITM Puts (Bullish)"),
+        ]
+        max_val = max((otm_call + itm_call).max() if len(otm_call) > 0 else 0,
+                      (otm_put + itm_put).max() if len(otm_put) > 0 else 0)
+
+        # Draw directional gauge if score available
+        if "directional_score" in prem_df.columns:
+            recent_scores = prem_df["directional_score"].dropna()
+            if len(recent_scores) > 0:
+                latest_score = recent_scores.iloc[-1]
+                _draw_directional_gauge(ax, latest_score)
+
+    else:
+        # Default to TOTAL if unknown mode
+        ax.bar(dates, total_call, width=bar_width_premium, color=COLORS["call_premium"],
+               alpha=0.85, edgecolor="none", zorder=2)
+        ax.bar(dates, -total_put, width=bar_width_premium, color=COLORS["put_premium"],
+               alpha=0.85, edgecolor="none", zorder=2)
+        legend_handles = [
+            Patch(facecolor=COLORS["call_premium"], edgecolor="none", alpha=0.85, label="Calls"),
+            Patch(facecolor=COLORS["put_premium"], edgecolor="none", alpha=0.85, label="Puts"),
+        ]
+        max_val = max(total_call.max() if len(total_call) > 0 else 0,
+                      total_put.max() if len(total_put) > 0 else 0)
+
+    # Zero line
+    ax.axhline(y=0, color=COLORS["neutral"], linestyle="--", linewidth=0.8, alpha=0.6, zorder=1)
+
+    # Auto-scale y-axis symmetrically
+    if max_val > 0:
+        margin = max_val * 0.20  # Slightly larger margin for warning markers
+        ax.set_ylim(-max_val - margin, max_val + margin)
+
+    ax.set_ylabel("Premium ($M)", color=COLORS["white"], fontsize=10)
+
+    # Title with expiration type and display mode
+    title_text = "0DTE Options Premium" if expiration_type == "0DTE" else "Weekly Options Premium"
+    if display_mode == "WTD_STYLE":
+        title_text += " (OTM)"
+    elif display_mode == "FULL_BREAKDOWN":
+        title_text += " (ITM/OTM)"
+    ax.set_title(
+        title_text,
+        color=COLORS["white"],
+        fontsize=9,
+        fontweight="bold",
+        loc="left",
+    )
+
+    # Legend
+    legend = ax.legend(
+        handles=legend_handles,
+        loc="upper right",
+        ncol=len(legend_handles),
+        fontsize=7,
+        frameon=True,
+        facecolor=COLORS["background"],
+        framealpha=0.7,
+        edgecolor=COLORS["grid"],
+    )
+    for text in legend.get_texts():
+        text.set_color(COLORS["text"])
+
+
+# =============================================================================
 # DATA LOADING FUNCTIONS
 # =============================================================================
+def fetch_options_premium_data(
+    conn,
+    symbol: str,
+    start_date: str,
+    end_date: str,
+    expiration_type: str,
+) -> pd.DataFrame:
+    """Fetch options premium summary data for plotting, including ITM/OTM breakdown."""
+    symbol = symbol.upper()
+
+    query = """
+        SELECT
+            trade_date AS date,
+            total_call_premium,
+            total_put_premium,
+            net_premium,
+            log_ratio,
+            strikes_count,
+            otm_call_premium,
+            itm_call_premium,
+            otm_put_premium,
+            itm_put_premium,
+            directional_score
+        FROM options_premium_summary
+        WHERE symbol = ? AND trade_date BETWEEN ? AND ? AND expiration_type = ?
+        ORDER BY trade_date
+    """
+    try:
+        df = conn.execute(query, [symbol, start_date, end_date, expiration_type]).df()
+    except Exception:
+        # Table may not exist or other error - return empty DataFrame
+        return pd.DataFrame()
+
+    if not df.empty:
+        df["date"] = pd.to_datetime(df["date"])
+        numeric_cols = [
+            "total_call_premium", "total_put_premium", "net_premium", "log_ratio",
+            "otm_call_premium", "itm_call_premium", "otm_put_premium", "itm_put_premium",
+            "directional_score"
+        ]
+        for col in numeric_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+    return df
+
+
 def load_ticker_data(ticker: str, start_date: str, end_date: str, db_path: Path,
-                     rolling_lookback_days: int = 0) -> tuple[pd.DataFrame, pd.DataFrame]:
+                     rolling_lookback_days: int = 0) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Load metrics and OHLC data for a single ticker."""
     query_start_date = start_date
     if rolling_lookback_days and int(rolling_lookback_days) > 0:
@@ -258,6 +598,10 @@ def load_ticker_data(ticker: str, start_date: str, end_date: str, db_path: Path,
         df = conn.execute(query, [ticker.upper(), query_start_date, end_date]).df()
         df_ohlc = conn.execute(ohlc_query, [ticker.upper(), query_start_date, end_date]).df()
 
+        # Fetch options premium data
+        options_0dte_df = fetch_options_premium_data(conn, ticker, start_date, end_date, '0DTE')
+        options_weekly_df = fetch_options_premium_data(conn, ticker, start_date, end_date, 'WEEKLY')
+
     if df.empty:
         raise ValueError(f'No data found for {ticker} between {start_date} and {end_date}.')
 
@@ -278,7 +622,7 @@ def load_ticker_data(ticker: str, start_date: str, end_date: str, db_path: Path,
         df['close'] = np.nan
         df['volume'] = np.nan
 
-    return df, df_ohlc
+    return df, df_ohlc, options_0dte_df, options_weekly_df
 
 
 def prepare_plot_data(df: pd.DataFrame, start_date: str, end_date: str) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -373,6 +717,8 @@ def _compute_signal_indices(accum_series, valid_mask_series, full_accum_series=N
 def plot_wtd_vwbr(ticker: str, full_df: pd.DataFrame, plot_df: pd.DataFrame,
                   start_date: str, end_date: str, output_dir: Path,
                   signal_config: dict = None, plot_config: dict = None,
+                  options_0dte_df: pd.DataFrame = None,
+                  options_weekly_df: pd.DataFrame = None,
                   show_plot: bool = True) -> tuple[plt.Figure, pd.DataFrame]:
     """Generate WTD VWBR plot for a single ticker."""
     global TEXT_SCALE
@@ -415,9 +761,35 @@ def plot_wtd_vwbr(ticker: str, full_df: pd.DataFrame, plot_df: pd.DataFrame,
     valid_mask = ~plot_df['vw_accum'].isna()
     accum = plot_df['vw_accum']
 
+    # Determine which options panels to show
+    has_0dte = options_0dte_df is not None and not options_0dte_df.empty
+    has_weekly = options_weekly_df is not None and not options_weekly_df.empty
+    is_index = ticker.upper() in DAILY_EXPIRATION_TICKERS
+
+    # Build panel configuration dynamically
+    # Base panels: Price (1.3), FINRA Buy Volume (2)
+    # Optional: 0DTE (indices only), Weekly
+    panel_count = 2
+    height_ratios = [1.3, 2]
+
+    if has_0dte and is_index:
+        panel_count += 1
+        height_ratios.append(1.2)
+
+    if has_weekly:
+        panel_count += 1
+        height_ratios.append(1.2)
+
     # Figure sizing
     fig_width = _compute_fig_width(len(plot_df))
     fig_height = fig_width * plot_config['fig_height_ratio']
+
+    # Adjust height for additional panels
+    if has_0dte and is_index:
+        fig_height *= 1.15
+    if has_weekly:
+        fig_height *= 1.15
+
     figsize = (fig_width, fig_height)
     if plot_config['figsize_px'] is not None:
         fig_width = plot_config['figsize_px'][0] / plot_config['fig_dpi']
@@ -436,11 +808,21 @@ def plot_wtd_vwbr(ticker: str, full_df: pd.DataFrame, plot_df: pd.DataFrame,
     fig = plt.figure(figsize=figsize)
     fig.patch.set_facecolor(COLORS['background'])
 
-    height_ratios = [1.3, 2]
-    fig_gs = fig.add_gridspec(2, 1, height_ratios=height_ratios, hspace=0.15, left=0.1, right=0.94, top=0.9, bottom=0.1)
+    fig_gs = fig.add_gridspec(panel_count, 1, height_ratios=height_ratios, hspace=0.15, left=0.1, right=0.94, top=0.9, bottom=0.1)
 
     ax_price = fig.add_subplot(fig_gs[0])
     ax_accum = fig.add_subplot(fig_gs[1], sharex=ax_price)
+
+    # Create options panel axes if needed
+    ax_0dte = None
+    ax_weekly = None
+    ax_idx = 2
+
+    if has_0dte and is_index:
+        ax_0dte = fig.add_subplot(fig_gs[ax_idx], sharex=ax_price)
+        ax_idx += 1
+    if has_weekly:
+        ax_weekly = fig.add_subplot(fig_gs[ax_idx], sharex=ax_price)
 
     # Panel 1: OHLC
     _apply_axis_style(ax_price)
@@ -517,7 +899,42 @@ def plot_wtd_vwbr(ticker: str, full_df: pd.DataFrame, plot_df: pd.DataFrame,
         for idx in neg_idx:
             ax_accum.vlines(x_vals[idx], y_min, accum.loc[idx], color="#ff0000", linestyle='--', linewidth=1.0, alpha=0.8, zorder=2)
 
-    # X-axis labels
+    # Plot options premium panels if data available
+    # Use a fixed bar width since we're using integer x-indices
+    options_bar_width = 0.6
+
+    if ax_0dte is not None and options_0dte_df is not None:
+        _apply_axis_style(ax_0dte)
+        _plot_options_premium_panel(
+            ax_0dte, options_0dte_df, plot_df, options_bar_width, '0DTE',
+            min_premium_highlight=MIN_PREMIUM_HIGHLIGHT,
+            display_mode=OPTIONS_PREMIUM_DISPLAY_MODE,
+            itm_call_hedge_threshold=ITM_CALL_HEDGE_THRESHOLD
+        )
+        ax_0dte.tick_params(axis='x', labelbottom=False)
+
+    if ax_weekly is not None and options_weekly_df is not None:
+        _apply_axis_style(ax_weekly)
+        _plot_options_premium_panel(
+            ax_weekly, options_weekly_df, plot_df, options_bar_width, 'WEEKLY',
+            min_premium_highlight=MIN_PREMIUM_HIGHLIGHT,
+            display_mode=OPTIONS_PREMIUM_DISPLAY_MODE,
+            itm_call_hedge_threshold=ITM_CALL_HEDGE_THRESHOLD
+        )
+        ax_weekly.tick_params(axis='x', labelbottom=False)
+
+    # X-axis labels - determine bottom panel
+    if ax_weekly is not None:
+        ax_bottom = ax_weekly
+        ax_accum.tick_params(axis='x', labelbottom=False)
+        if ax_0dte is not None:
+            ax_0dte.tick_params(axis='x', labelbottom=False)
+    elif ax_0dte is not None:
+        ax_bottom = ax_0dte
+        ax_accum.tick_params(axis='x', labelbottom=False)
+    else:
+        ax_bottom = ax_accum
+
     label_step = 1
     if len(x_vals) > plot_config['max_x_labels']:
         label_step = int(np.ceil(len(x_vals) / plot_config['max_x_labels']))
@@ -527,10 +944,10 @@ def plot_wtd_vwbr(ticker: str, full_df: pd.DataFrame, plot_df: pd.DataFrame,
         x_tick_positions = np.append(x_tick_positions, x_vals[-1])
         x_tick_labels.append(x_labels[-1])
 
-    ax_accum.set_xticks(x_tick_positions)
-    ax_accum.set_xticklabels(x_tick_labels, rotation=90, ha='center', fontsize=8 * text_scale, color=COLORS['text_muted'])
-    ax_accum.tick_params(axis='x', labelbottom=True, colors=COLORS['text_muted'])
-    ax_accum.set_xlabel('Date', color=COLORS['cyan'], fontsize=12 * text_scale)
+    ax_bottom.set_xticks(x_tick_positions)
+    ax_bottom.set_xticklabels(x_tick_labels, rotation=90, ha='center', fontsize=8 * text_scale, color=COLORS['text_muted'])
+    ax_bottom.tick_params(axis='x', labelbottom=True, colors=COLORS['text_muted'])
+    ax_bottom.set_xlabel('Date', color=COLORS['cyan'], fontsize=12 * text_scale)
 
     # Annotations
     last_update = plot_df['date'].max()
@@ -642,12 +1059,14 @@ def run_wtd_vwbr(tickers: list[str] | None = None,
 
         try:
             lookback = ROLLING_LOOKBACK_DAYS if BUY_SELL_SIGNAL == 'Rolling_Zscore' else 0
-            df, df_ohlc = load_ticker_data(ticker, start_date, end_date, db_path, lookback)
+            df, df_ohlc, options_0dte_df, options_weekly_df = load_ticker_data(ticker, start_date, end_date, db_path, lookback)
             full_df, plot_df = prepare_plot_data(df, start_date, end_date)
 
             fig, report_df = plot_wtd_vwbr(
                 ticker, full_df, plot_df, start_date, end_date, output_dir,
-                signal_config=signal_config, plot_config=plot_config, show_plot=show_plots
+                signal_config=signal_config, plot_config=plot_config,
+                options_0dte_df=options_0dte_df, options_weekly_df=options_weekly_df,
+                show_plot=show_plots
             )
 
             if not report_df.empty:
