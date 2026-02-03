@@ -477,3 +477,29 @@ Format:
   - Added separate Discord posting for all-tickers dashboard
   - Uses `post_all_tickers_dashboard()` function with distinct title
 - [x] Added `post_all_tickers_dashboard()` function to `discord_poster.py`
+
+## 2026-02-01 Session Summary (Claude Code) - Options Premium Panel in WTD_VWBR_plot.py
+- [x] Added options premium panel(s) to `WTD_VWBR_plot.py`:
+  - 3rd/4th panel shows 0DTE and/or Weekly ATM options premium
+  - Identical styling to `plotter_chart_ATMprem.py` options panels
+  - Dynamic panel configuration based on ticker type and data availability
+- [x] Added options premium colors to COLORS dict:
+  - `call_premium`, `put_premium`, `otm_call`, `itm_call`, `otm_put`, `itm_put`, `hedge_warning`
+- [x] Added configuration constants:
+  - `OPTIONS_PREMIUM_DISPLAY_MODE = 'WTD_STYLE'` (supports TOTAL, WTD_STYLE, FULL_BREAKDOWN)
+  - `ITM_CALL_HEDGE_THRESHOLD = 0.30`
+  - `MIN_PREMIUM_HIGHLIGHT = 2.0`
+- [x] Added helper functions from `plotter_chart_ATMprem.py`:
+  - `_compute_itm_edge_style()` - ITM edge width calculation
+  - `_draw_directional_gauge()` - bullish/bearish gauge visualization
+  - `_plot_options_premium_panel()` - main panel rendering with 3 display modes
+- [x] Added `fetch_options_premium_data()` function for database queries
+- [x] Modified `load_ticker_data()` to return 4 values: `(df, df_ohlc, options_0dte_df, options_weekly_df)`
+- [x] Modified `plot_wtd_vwbr()`:
+  - Accepts `options_0dte_df` and `options_weekly_df` parameters
+  - Dynamic panel count and height ratios based on available data
+  - X-axis labels applied to bottom-most panel
+- [x] Graceful handling when options data unavailable:
+  - Index tickers (SPY, QQQ, etc.) show 0DTE + Weekly panels when data exists
+  - Non-index tickers show only Weekly panel when data exists
+  - Falls back to original 2-panel layout when no options data
