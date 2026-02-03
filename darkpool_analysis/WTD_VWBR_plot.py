@@ -79,7 +79,7 @@ FIG_DPI = 100
 FIGSIZE_PX = None
 
 # Options premium display settings
-OPTIONS_PREMIUM_DISPLAY_MODE = 'WTD_STYLE'  # 'TOTAL', 'WTD_STYLE', or 'FULL_BREAKDOWN'
+OPTIONS_PREMIUM_DISPLAY_MODE = 'FULL_BREAKDOWN'  # 'TOTAL', 'WTD_STYLE', or 'FULL_BREAKDOWN'
 ITM_CALL_HEDGE_THRESHOLD = 0.30
 MIN_PREMIUM_HIGHLIGHT = 2.0
 
@@ -328,6 +328,7 @@ def _plot_options_premium_panel(
     price_df: pd.DataFrame,
     bar_width: float,
     expiration_type: str,
+    price_dates: pd.Series | None = None,
     min_premium_highlight: float = 2.0,
     display_mode: str = "WTD_STYLE",
     itm_call_hedge_threshold: float = 0.30,
@@ -350,8 +351,34 @@ def _plot_options_premium_panel(
         return
 
     prem_df = prem_df.copy()
-    dates = mdates.date2num(prem_df["date"])
-    bar_width_premium = bar_width * 0.6
+
+    # Map options dates to integer indices matching main plot x-axis
+    if price_dates is not None:
+        # Normalize price_dates to date objects for consistent matching
+        price_dates_normalized = pd.to_datetime(price_dates).dt.date
+        date_to_idx = {d: i for i, d in enumerate(price_dates_normalized)}
+        # Map each options date to its corresponding index
+        prem_df['x_idx'] = prem_df['date'].apply(
+            lambda d: date_to_idx.get(d.date() if hasattr(d, 'date') else d)
+        )
+        # Filter to only dates that exist in the price data
+        prem_df = prem_df.dropna(subset=['x_idx'])
+        if prem_df.empty:
+            ax.text(
+                0.5, 0.5, f"No {expiration_type} options data in date range",
+                ha="center", va="center", transform=ax.transAxes,
+                color=COLORS["neutral"], fontsize=10,
+            )
+            ax.set_ylabel("Premium ($M)", color=COLORS["white"], fontsize=10)
+            return
+        # Cast to int for proper bar positioning on integer x-axis
+        dates = prem_df['x_idx'].astype(int).values
+        # Match plotter_chart_ATMprem.py bar width scaling
+        bar_width_premium = bar_width * 0.6
+    else:
+        # Fallback to date numbers if no mapping provided
+        dates = mdates.date2num(prem_df["date"])
+        bar_width_premium = bar_width * 0.6
 
     # Extract data based on display mode
     total_call = prem_df["total_call_premium"].fillna(0).values
@@ -774,11 +801,11 @@ def plot_wtd_vwbr(ticker: str, full_df: pd.DataFrame, plot_df: pd.DataFrame,
 
     if has_0dte and is_index:
         panel_count += 1
-        height_ratios.append(1.2)
+        height_ratios.append(0.8)
 
     if has_weekly:
         panel_count += 1
-        height_ratios.append(1.2)
+        height_ratios.append(0.8)
 
     # Figure sizing
     fig_width = _compute_fig_width(len(plot_df))
@@ -907,6 +934,7 @@ def plot_wtd_vwbr(ticker: str, full_df: pd.DataFrame, plot_df: pd.DataFrame,
         _apply_axis_style(ax_0dte)
         _plot_options_premium_panel(
             ax_0dte, options_0dte_df, plot_df, options_bar_width, '0DTE',
+            price_dates=plot_df['date'],
             min_premium_highlight=MIN_PREMIUM_HIGHLIGHT,
             display_mode=OPTIONS_PREMIUM_DISPLAY_MODE,
             itm_call_hedge_threshold=ITM_CALL_HEDGE_THRESHOLD
@@ -917,6 +945,7 @@ def plot_wtd_vwbr(ticker: str, full_df: pd.DataFrame, plot_df: pd.DataFrame,
         _apply_axis_style(ax_weekly)
         _plot_options_premium_panel(
             ax_weekly, options_weekly_df, plot_df, options_bar_width, 'WEEKLY',
+            price_dates=plot_df['date'],
             min_premium_highlight=MIN_PREMIUM_HIGHLIGHT,
             display_mode=OPTIONS_PREMIUM_DISPLAY_MODE,
             itm_call_hedge_threshold=ITM_CALL_HEDGE_THRESHOLD
