@@ -134,7 +134,7 @@ EXCLUDED_FINRA_TICKERS = {"SPXW"}  # Options symbols, not equities
 # -----------------------------------------------------------------------------
 
 TICKERS_TYPE =  ["ALL"]  # ["SECTOR", "THEMATIC", "GLOBAL", "COMMODITIES", "MAG8", "RATES", "CRYPTO", "SPECULATIVE"], ["SINGLE"], ["ALL"]
-DEFAULT_TICKERS = ["SOX"]
+DEFAULT_TICKERS = ["UPS", "DOW"]
 FETCH_INDICES_CONSTITUENTS = False  # When True, also fetch constituents of index/ETF tickers
 
 DEFAULT_TARGET_DATE = "TODAY"  # "TODAY" for current date, or specific date like "2026-01-08"

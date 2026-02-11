@@ -96,8 +96,10 @@ SPECULATIVE_TICKERS = [
     "SPOT",
     "SHOP",
     "RDDT",
-    "SOX",
+    "LEU",
+    "GME",
 ]
+
 
 RATES_CREDIT = {
         "HYG": [
